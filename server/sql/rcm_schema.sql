@@ -1,0 +1,95 @@
+-- RCM Database Schema Documentation
+-- Based on existing tables used in the application
+
+-- Main billing table
+-- cpt_billing (
+--   id INT PRIMARY KEY,
+--   patient_id INT,
+--   cpt_code_id INT,
+--   code_units INT,
+--   status INT, -- 0=draft, 1=submitted, 2=paid, 3=denied, 4=appealed
+--   created DATETIME,
+--   billed_date DATETIME,
+--   updated_at DATETIME
+-- )
+
+-- CPT codes reference table
+-- cpt_codes (
+--   id INT PRIMARY KEY,
+--   code VARCHAR(10),
+--   price DECIMAL(10,2),
+--   description TEXT
+-- )
+
+-- User mappings for provider-patient relationships
+-- users_mappings (
+--   user_id INT, -- patient_id
+--   fk_physician_id INT -- provider_id
+-- )
+
+-- User profiles
+-- user_profiles (
+--   fk_userid INT,
+--   firstname VARCHAR(100),
+--   lastname VARCHAR(100),
+--   phone VARCHAR(20),
+--   email VARCHAR(100),
+--   dob DATE,
+--   gender VARCHAR(10),
+--   address_line VARCHAR(255),
+--   city VARCHAR(100),
+--   state VARCHAR(50),
+--   zip VARCHAR(10)
+-- )
+
+-- Patient claims for ClaimMD integration
+-- patient_claims (
+--   id INT PRIMARY KEY,
+--   patient_id INT,
+--   billing_ids TEXT, -- comma-separated billing IDs
+--   form_data JSON,
+--   claim_md_tracking_id VARCHAR(100),
+--   payer_name VARCHAR(100),
+--   status VARCHAR(50),
+--   created_at DATETIME,
+--   updated_at DATETIME
+-- )
+
+-- Patient insurances
+-- patient_insurances (
+--   id INT PRIMARY KEY,
+--   fk_userid INT,
+--   insurance_type VARCHAR(20), -- primary, secondary
+--   insurance_policy_number VARCHAR(100),
+--   insurance_group_number VARCHAR(100),
+--   payer_name VARCHAR(100)
+-- )
+
+-- Patient diagnoses
+-- patient_diagnoses (
+--   id INT PRIMARY KEY,
+--   patient_id INT,
+--   icd10 VARCHAR(10),
+--   description TEXT,
+--   created_at DATETIME
+-- )
+
+-- Notes table for time tracking
+-- notes (
+--   note_id INT PRIMARY KEY,
+--   patient_id INT,
+--   note TEXT,
+--   duration INT, -- in minutes
+--   type VARCHAR(50), -- rpm, ccm, pcm
+--   created DATETIME,
+--   created_by INT
+-- )
+
+-- Tasks table for time tracking
+-- tasks (
+--   id INT PRIMARY KEY,
+--   patient_id INT,
+--   duration INT, -- in minutes
+--   type VARCHAR(50), -- rpm, ccm, pcm
+--   created DATETIME
+-- )

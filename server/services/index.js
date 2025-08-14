@@ -22,6 +22,7 @@ const devicesRoutes = require("./devices/devicesRoutes");
 const { getConsentDetails, submitConsentForm,uploadConsentForms } = require("./patients/patientCtrl2");
 const thirdPartyApiRoutes = require("./third-party-apis/api-routes");
 const generalRoutes = require("./general-apis/generalRoutes");
+const rcmRoutes = require("./rcm/rcmRoutes");
 
 
 
@@ -52,6 +53,8 @@ router.post('/ehr/upload-consent-form', uploadConsentForms);
 router.use("/client",thirdPartyApiRoutes);
 //for Testing
 router.use("/general",generalRoutes);
+// RCM Routes
+router.use("/rcm", verifyToken, rcmRoutes);
 
 
 

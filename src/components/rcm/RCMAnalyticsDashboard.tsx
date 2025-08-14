@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
+import { getRCMDashboardDataAPI } from '@/services/operations/rcm';
 import {
   BarChart,
   Bar,
@@ -29,15 +32,39 @@ import {
 
 const RCMAnalyticsDashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState('30d');
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  // Mock analytics data
-  const revenueData = [
-    { month: 'Jan', revenue: 485000, collections: 460000 },
-    { month: 'Feb', revenue: 520000, collections: 495000 },
-    { month: 'Mar', revenue: 475000, collections: 465000 },
-    { month: 'Apr', revenue: 610000, collections: 580000 },
-    { month: 'May', revenue: 555000, collections: 540000 },
-    { month: 'Jun', revenue: 625000, collections: 605000 }
+  // Fetch analytics data
+  const fetchAnalyticsData = async (selectedTimeframe = '30d') => {
+    setLoading(true);
+    try {
+      const response = await getRCMDashboardDataAPI(token, selectedTimeframe);
+      if (response?.data) {
+        setAnalyticsData(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchAnalyticsData(timeframe);
+    }
+  }, [token, timeframe]);
+
+  // Use real data or fallback to mock data
+  const revenueData = analyticsData?.trends?.monthlyRevenue || [
+    { month: 'Jan', revenue: 0, collections: 0 },
+    { month: 'Feb', revenue: 0, collections: 0 },
+    { month: 'Mar', revenue: 0, collections: 0 },
+    { month: 'Apr', revenue: 0, collections: 0 },
+    { month: 'May', revenue: 0, collections: 0 },
+    { month: 'Jun', revenue: 0, collections: 0 }
   ];
 
   const denialTrendData = [
@@ -59,7 +86,7 @@ const RCMAnalyticsDashboard: React.FC = () => {
   const kpiMetrics = [
     {
       title: 'Net Collection Rate',
-      value: '94.7%',
+      value: `${analyticsData?.kpis?.collectionRate || 0}%`,
       change: '+2.3%',
       trend: 'up',
       target: '95%',
@@ -68,7 +95,7 @@ const RCMAnalyticsDashboard: React.FC = () => {
     },
     {
       title: 'Days in A/R',
-      value: '23',
+      value: `${analyticsData?.kpis?.daysInAR || 0}`,
       change: '-5.2%',
       trend: 'down',
       target: '25',
@@ -86,7 +113,7 @@ const RCMAnalyticsDashboard: React.FC = () => {
     },
     {
       title: 'Denial Rate',
-      value: '3.1%',
+      value: `${analyticsData?.kpis?.denialRate || 0}%`,
       change: '-0.8%',
       trend: 'down',
       target: '3%',

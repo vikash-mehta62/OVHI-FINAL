@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
+import { getARAgingReportAPI, initiateAutomatedFollowUpAPI, setupPaymentPlanAPI } from '@/services/operations/rcm';
 import {
   Clock,
   DollarSign,
@@ -44,97 +47,85 @@ interface ARAccount {
 const ARAgingIntelligence: React.FC = () => {
   const [selectedBucket, setSelectedBucket] = useState<string>('all');
   const [automationEnabled, setAutomationEnabled] = useState(true);
+  const [arData, setArData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  // Mock A/R aging data
-  const arBuckets: ARBucket[] = [
+  // Fetch A/R aging data
+  const fetchARData = async () => {
+    setLoading(true);
+    try {
+      const response = await getARAgingReportAPI(token);
+      if (response?.data) {
+        setArData(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching A/R data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchARData();
+    }
+  }, [token]);
+
+  // Use real data or fallback to mock data
+  const arBuckets: ARBucket[] = arData?.arBuckets || [
     {
       range: '0-30 days',
-      amount: 125000,
-      percentage: 45.2,
-      count: 250,
+      amount: 0,
+      percentage: 0,
+      count: 0,
       priority: 'low',
       collectability: 95
     },
     {
       range: '31-60 days',
-      amount: 85000,
-      percentage: 30.7,
-      count: 180,
+      amount: 0,
+      percentage: 0,
+      count: 0,
       priority: 'medium',
       collectability: 85
     },
     {
       range: '61-90 days',
-      amount: 45000,
-      percentage: 16.3,
-      count: 95,
+      amount: 0,
+      percentage: 0,
+      count: 0,
       priority: 'high',
       collectability: 70
     },
     {
       range: '91-120 days',
-      amount: 15000,
-      percentage: 5.4,
-      count: 35,
+      amount: 0,
+      percentage: 0,
+      count: 0,
       priority: 'high',
       collectability: 50
     },
     {
       range: '120+ days',
-      amount: 6500,
-      percentage: 2.4,
-      count: 18,
+      amount: 0,
+      percentage: 0,
+      count: 0,
       priority: 'high',
       collectability: 25
     }
   ];
 
-  const arAccounts: ARAccount[] = [
-    {
-      id: 'AR001',
-      patientName: 'John Smith',
-      payerName: 'Blue Cross',
-      balance: 1250.00,
-      lastPayment: '2023-12-15',
-      daysPastDue: 45,
-      collectabilityScore: 85,
-      recommendedAction: 'Send payment reminder via email',
-      contactMethod: 'email'
-    },
-    {
-      id: 'AR002',
-      patientName: 'Sarah Johnson',
-      payerName: 'Medicare',
-      balance: 850.00,
-      lastPayment: '2023-11-20',
-      daysPastDue: 75,
-      collectabilityScore: 70,
-      recommendedAction: 'Phone call required - potential payment plan',
-      contactMethod: 'phone',
-      paymentPlan: true
-    },
-    {
-      id: 'AR003',
-      patientName: 'Michael Brown',
-      payerName: 'Self-Pay',
-      balance: 2100.00,
-      lastPayment: 'Never',
-      daysPastDue: 95,
-      collectabilityScore: 45,
-      recommendedAction: 'Consider collections agency referral',
-      contactMethod: 'letter'
-    }
-  ];
-
-  const totalAR = arBuckets.reduce((sum, bucket) => sum + bucket.amount, 0);
+  const arAccounts: ARAccount[] = arData?.arAccounts || [];
+  const totalAR = arData?.totalAR || 0;
 
   const handleAutomatedFollowUp = async (accountId: string) => {
     try {
-      // Simulate automated follow-up
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      toast.success('Automated follow-up initiated');
+      await initiateAutomatedFollowUpAPI(token, accountId);
+      // Refresh data after follow-up
+      fetchARData();
     } catch (error) {
-      toast.error('Failed to initiate follow-up');
+      console.error('Failed to initiate follow-up:', error);
     }
   };
 

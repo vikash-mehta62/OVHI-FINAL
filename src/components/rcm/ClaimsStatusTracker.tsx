@@ -8,6 +8,9 @@ import { toast } from 'sonner';
 import { Search, RefreshCw, Eye, DollarSign, Calendar, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
+import { getClaimsStatusAPI, updateClaimStatusAPI, bulkUpdateClaimsAPI } from '@/services/operations/rcm';
 
 interface ClaimStatus {
   id: string;
@@ -73,6 +76,8 @@ const ClaimsStatusTracker: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const { token } = useSelector((state: RootState) => state.auth);
 
   // Mock data for demonstration
   const mockClaims: ClaimStatus[] = [
@@ -135,20 +140,29 @@ const ClaimsStatusTracker: React.FC = () => {
     }
   ];
 
-  // Fetch claims from Claim.MD
-  const fetchClaimsStatus = useCallback(async () => {
+  // Fetch claims from backend
+  const fetchClaimsStatus = useCallback(async (page = 1) => {
     setIsLoading(true);
     try {
-      // Mock API call - replace with actual Claim.MD API integration
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setClaims(mockClaims);
-      toast.success('Claims status updated');
+      const params = {
+        page,
+        limit: pagination.limit,
+        status: statusFilter,
+        search: searchTerm
+      };
+      
+      const response = await getClaimsStatusAPI(token, params);
+      if (response?.data) {
+        setClaims(response.data);
+        setPagination(response.pagination);
+        toast.success('Claims status updated');
+      }
     } catch (error) {
       toast.error('Failed to fetch claims status');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token, statusFilter, searchTerm, pagination.limit]);
 
   // Real-time status updates from Claim.MD
   const checkStatusUpdates = useCallback(async (trackingId: string) => {

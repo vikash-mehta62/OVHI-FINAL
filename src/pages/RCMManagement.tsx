@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 import {
   CreditCard,
   DollarSign,
@@ -32,6 +34,9 @@ import {
   Shield
 } from 'lucide-react';
 
+// Import RCM API functions
+import { getRCMDashboardDataAPI } from '@/services/operations/rcm';
+
 // Import RCM Components
 import ClaimMDConnector from '@/components/rcm/ClaimMDConnector';
 import EDITransactionManager from '@/components/rcm/EDITransactionManager';
@@ -51,24 +56,46 @@ import ERAProcessor from '@/components/rcm/ERAProcessor';
 const RCMManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [refreshing, setRefreshing] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  // Mock KPI data
-  const kpiData = {
-    totalRevenue: 485200,
-    collectionRate: 94.7,
-    denialRate: 3.2,
-    daysInAR: 23,
-    cleanClaimRate: 97.8,
-    costToCollect: 2.8,
-    firstPassRate: 89.5,
-    arOver90: 8.2
+  // Fetch dashboard data
+  const fetchDashboardData = async (timeframe = '30d') => {
+    setLoading(true);
+    try {
+      const response = await getRCMDashboardDataAPI(token, timeframe);
+      if (response?.data) {
+        setDashboardData(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchDashboardData();
+    }
+  }, [token]);
+
+  // Use real data or fallback to mock data
+  const kpiData = dashboardData?.kpis || {
+    totalRevenue: 0,
+    collectionRate: 0,
+    denialRate: 0,
+    daysInAR: 0,
+    totalClaims: 0,
+    paidClaims: 0,
+    deniedClaims: 0
   };
 
   const handleRefreshData = async () => {
     setRefreshing(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await fetchDashboardData();
       toast.success('RCM data refreshed successfully');
     } catch (error) {
       toast.error('Failed to refresh data');
@@ -205,15 +232,23 @@ const RCMManagement: React.FC = () => {
           </Card>
 
           {/* Main RCM Components */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ClaimMDConnector />
-            <RCMAnalyticsDashboard />
-          </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ClaimMDConnector />
+                <RCMAnalyticsDashboard />
+              </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ClaimsStatusTracker />
-            <ARAgingIntelligence />
-          </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ClaimsStatusTracker />
+                <ARAgingIntelligence />
+              </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="claims" className="space-y-6">

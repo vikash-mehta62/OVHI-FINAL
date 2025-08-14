@@ -99,6 +99,13 @@ export const settings = {
   GET_PDF_HEADER_API: BASE_URL + "/settings/get-pdf-header",
   ADD_SERVICE: BASE_URL + "/physician/addService",
   ADD_INSURANCE_NETWORK: BASE_URL + "/physician/addInsuranceNetwork",
+  
+  // Enhanced Settings APIs
+  NOTIFICATION_SETTINGS_API: BASE_URL + "/settings/enhanced/notifications",
+  PRIVACY_SETTINGS_API: BASE_URL + "/settings/enhanced/privacy",
+  APPEARANCE_SETTINGS_API: BASE_URL + "/settings/enhanced/appearance",
+  SECURITY_SETTINGS_API: BASE_URL + "/settings/enhanced/security",
+  EXPORT_SETTINGS_API: BASE_URL + "/settings/enhanced/export",
 }
 
 export const task = {
@@ -190,4 +197,16 @@ export const intake = {
   SEND_INTAKE: BASE_URL + "/intake/send",
   REGISTER_INTAKE_PATIENT: BASE_URL + "/intake/register/patient",
 
+}
+
+export const rcm = {
+  RCM_DASHBOARD_API: BASE_URL + "/rcm/dashboard",
+  RCM_CLAIMS_API: BASE_URL + "/rcm/claims",
+  RCM_AR_AGING_API: BASE_URL + "/rcm/ar-aging",
+  RCM_DENIALS_API: BASE_URL + "/rcm/denials",
+  RCM_PAYMENTS_API: BASE_URL + "/rcm/payments",
+  RCM_FORECASTING_API: BASE_URL + "/rcm/revenue-forecasting",
+  RCM_COLLECTIONS_API: BASE_URL + "/rcm/collections",
+  RCM_ANALYTICS_API: BASE_URL + "/rcm/analytics",
+  RCM_CLAIMMD_API: BASE_URL + "/rcm/claimmd",
 }

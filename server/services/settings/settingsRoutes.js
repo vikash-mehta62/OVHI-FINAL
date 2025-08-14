@@ -303,6 +303,7 @@ router.get('/get-all-user-modules', async (req, res) => {
 router.post("/pdf-header", settingsCtrl.pdfHeaders);
 router.get("/get-pdf-header", settingsCtrl.getPdfHeaderByProvider);
 
-
+// Enhanced Settings Routes
+router.use('/enhanced', require('./enhancedSettingsRoutes'));
 
 module.exports = router;
