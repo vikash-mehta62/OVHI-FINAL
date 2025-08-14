@@ -258,12 +258,12 @@ export const updateCollectionStatusAPI = async (token, accountId, status) => {
 };
 
 // Initiate Automated Follow-up
-export const initiateAutomatedFollowUpAPI = async (token, accountId) => {
+export const initiateAutomatedFollowUpAPI = async (token, accountId, followUpData = {}) => {
   try {
     const response = await apiConnector(
       "POST",
       `${RCM_AR_AGING_API}/${accountId}/follow-up`,
-      {},
+      followUpData,
       {
         Authorization: `Bearer ${token}`,
       }
@@ -330,4 +330,287 @@ export const generateRCMReportAPI = async (token, reportParams) => {
     toast.error(error?.response?.data?.message || "Failed to generate report");
     return null;
   }
+};
+
+// Additional RCM API Functions
+
+// Get Claim Details
+export const getClaimDetailsAPI = async (token, claimId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API}/${claimId}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch claim details");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Claim Details API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch claim details");
+    return null;
+  }
+};
+
+// Bulk Claim Status Update
+export const bulkClaimStatusUpdateAPI = async (token, updateData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/bulk-update`,
+      updateData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to bulk update claims");
+    }
+
+    toast.success(response.data.message);
+    return response.data;
+  } catch (error) {
+    console.error("Bulk Claim Status Update API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to bulk update claims");
+    return null;
+  }
+};
+
+// Get A/R Account Details
+export const getARAccountDetailsAPI = async (token, accountId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_AR_AGING_API}/${accountId}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch account details");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("A/R Account Details API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch account details");
+    return null;
+  }
+};
+
+// Process ERA File
+export const processERAFileAPI = async (token, eraData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_PAYMENTS_API}/era/process`,
+      eraData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to process ERA file");
+    }
+
+    toast.success("ERA file processed successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Process ERA File API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to process ERA file");
+    return null;
+  }
+};
+
+// Get RCM Analytics
+export const getRCMAnalyticsAPI = async (token, timeframe = '30d', compareWith = 'previous') => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_ANALYTICS_API}?timeframe=${timeframe}&compareWith=${compareWith}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch RCM analytics");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("RCM Analytics API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch RCM analytics");
+    return null;
+  }
+};
+
+// Get Payer Performance
+export const getPayerPerformanceAPI = async (token, timeframe = '90d') => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_ANALYTICS_API}/payer-performance?timeframe=${timeframe}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch payer performance");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Payer Performance API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch payer performance");
+    return null;
+  }
+};
+
+// Get Denial Trends
+export const getDenialTrendsAPI = async (token, timeframe = '6m') => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_DENIALS_API}/trends?timeframe=${timeframe}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch denial trends");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Denial Trends API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch denial trends");
+    return null;
+  }
+};
+
+// Get ClaimMD Status
+export const getClaimMDStatusAPI = async (token, trackingId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API}/claimmd/status/${trackingId}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch ClaimMD status");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("ClaimMD Status API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch ClaimMD status");
+    return null;
+  }
+};
+
+// Sync ClaimMD Data
+export const syncClaimMDDataAPI = async (token, syncConfig) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/claimmd/sync`,
+      syncConfig,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to sync ClaimMD data");
+    }
+
+    toast.success("ClaimMD data synced successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Sync ClaimMD Data API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to sync ClaimMD data");
+    return null;
+  }
+};
+
+// RCM Utility Functions
+export const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(amount || 0);
+};
+
+export const formatPercentage = (value, decimals = 1) => {
+  return `${(value || 0).toFixed(decimals)}%`;
+};
+
+export const calculatePercentageChange = (current, previous) => {
+  if (!previous || previous === 0) return 0;
+  return ((current - previous) / previous) * 100;
+};
+
+export const getStatusColor = (status) => {
+  const statusColors = {
+    0: 'gray',    // Draft
+    1: 'blue',    // Submitted
+    2: 'green',   // Paid
+    3: 'red',     // Denied
+    4: 'yellow'   // Appealed
+  };
+  return statusColors[status] || 'gray';
+};
+
+export const getPriorityColor = (days) => {
+  if (days > 30) return 'red';
+  if (days > 14) return 'yellow';
+  return 'green';
+};
+
+export const exportToCSV = (data, filename) => {
+  if (!data || data.length === 0) return;
+  
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',')
+    )
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${filename}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
