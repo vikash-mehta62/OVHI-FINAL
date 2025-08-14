@@ -12,19 +12,25 @@ const {
   exportSettings
 } = require('./enhancedSettingsCtrl');
 
-// Notification Settings
+// Import new enhanced route modules
+const notificationRoutes = require('./notificationRoutes');
+const privacyRoutes = require('./privacyRoutes');
+const appearanceRoutes = require('./appearanceRoutes');
+
+// Enhanced routes with full functionality
+router.use('/notifications-enhanced', notificationRoutes);
+router.use('/privacy-enhanced', privacyRoutes);
+router.use('/appearance-enhanced', appearanceRoutes);
+
+// Legacy routes for backward compatibility
 router.post('/notifications', updateNotificationSettings);
 router.get('/notifications', getNotificationSettings);
-
-// Privacy Settings
 router.post('/privacy', updatePrivacySettings);
 router.get('/privacy', getPrivacySettings);
-
-// Appearance Settings
 router.post('/appearance', updateAppearanceSettings);
 router.get('/appearance', getAppearanceSettings);
 
-// Security Settings
+// Security Settings (keep existing)
 router.post('/security', updateSecuritySettings);
 router.get('/security', getSecuritySettings);
 

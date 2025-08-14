@@ -56,6 +56,9 @@ router.use("/general",generalRoutes);
 // RCM Routes
 router.use("/rcm", verifyToken, rcmRoutes);
 
+// Smart Template Routes
+router.use("/encounters/smart-templates", verifyToken, require("./encounters/smartTemplateRoutes"));
+
 
 
 router.get('/proxy-image', async (req, res) => {
