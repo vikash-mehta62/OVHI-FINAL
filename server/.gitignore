@@ -1,0 +1,6 @@
+node_modules/
+.env
+/.env
+/demo.html
+/services/billings/claims
+/services/patients/private-consents
