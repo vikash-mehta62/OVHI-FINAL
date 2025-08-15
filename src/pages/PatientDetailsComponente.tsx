@@ -31,6 +31,17 @@ import {
   Share,
   MailCheck,
   HeartPulse,
+  DollarSign,
+  RefreshCw,
+  Eye,
+  MessageSquare,
+  Trash2,
+  Printer,
+  History,
+  Plus,
+  X,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import PatientNotFound from "@/components/patient/PatientNotFound";
 import HipaaNotice from "@/components/HipaaNotice";
@@ -59,6 +70,7 @@ import PatientEncounter from "./PatientEncounter";
 import generatePatientPdf from "./GenratePatientPdf";
 import { getPdfAPI } from "@/services/operations/settings";
 import GetSinglePatientAppointment from "./GetSinglePatientAppointment";
+import PatientAccountManager from "@/components/patient/PatientAccountManager";
 
 // Define the patient type based on the API response
 interface PatientData {
@@ -143,7 +155,7 @@ const PatientDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const { token , user} = useSelector((state: RootState) => state.auth);
+  const { token, user } = useSelector((state: RootState) => state.auth);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDiagonosesDialogOpen, setAddDiagonosesDialogOpen] = useState(false);
   const [addMedicationDialog, setAddMedicationDialog] = useState(false);
@@ -153,6 +165,21 @@ const PatientDetailsPage: React.FC = () => {
   const [enrolledPrograms, setEnrolledPrograms] = useState<string[]>([]);
   const [mount, setMount] = useState(true);
   const [notes, setNotes] = useState<Note[]>([]);
+
+  // Claim Management States
+  const [selectedClaim, setSelectedClaim] = useState<any>(null);
+  const [showClaimDetails, setShowClaimDetails] = useState(false);
+  const [showAddComment, setShowAddComment] = useState(false);
+  const [showVoidClaim, setShowVoidClaim] = useState(false);
+  const [showCorrectClaim, setShowCorrectClaim] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [voidReason, setVoidReason] = useState('');
+  const [correctionNote, setCorrectionNote] = useState('');
+  const [accountData, setAccountData] = useState<any>(null);
+  const [claimsData, setClaimsData] = useState<any[]>([]);
+  const [paymentsData, setPaymentsData] = useState<any[]>([]);
+  const [statementsData, setStatementsData] = useState<any[]>([]);
+  const [accountLoading, setAccountLoading] = useState(false);
 
   const serviceTypeMap: Record<number, string> = {
     1: "RPM",
@@ -195,7 +222,7 @@ const PatientDetailsPage: React.FC = () => {
 
   const handleDownlodPdf = async () => {
     if (patient) {
-      setIsDownloading(true); 
+      setIsDownloading(true);
       const pdfHeaderResponse = await getPdfAPI(user.id, token);
       const pdfHeader = pdfHeaderResponse?.data;
       try {
@@ -203,11 +230,11 @@ const PatientDetailsPage: React.FC = () => {
       } catch (error) {
         console.error("PDF generation failed:", error);
       } finally {
-        setIsDownloading(false); 
+        setIsDownloading(false);
       }
     }
   };
-  
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -315,9 +342,9 @@ const PatientDetailsPage: React.FC = () => {
               Export
             </Button> */}
             <div className="flex justify-end">
-             <Button onClick={handleDownlodPdf} disabled={isDownloading}>
-        {isDownloading ? 'Printing...' : 'Print'}
-      </Button>
+              <Button onClick={handleDownlodPdf} disabled={isDownloading}>
+                {isDownloading ? 'Printing...' : 'Print'}
+              </Button>
             </div>
             <div className="flex justify-end">
               <Button className="" onClick={() => setAddDialogOpen(true)}>
@@ -443,7 +470,7 @@ const PatientDetailsPage: React.FC = () => {
           {/* Main Content */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-9 mb-6">
+              <TabsList className="grid w-full grid-cols-10 mb-6">
                 <TabsTrigger value="overview" className="flex items-center gap-1">
                   <User className="h-4 w-4" />
                   Overview
@@ -460,10 +487,6 @@ const PatientDetailsPage: React.FC = () => {
                   <Stethoscope className="h-4 w-4" />
                   Allergies
                 </TabsTrigger>
-                {/* <TabsTrigger value="insurance" className="flex items-center gap-1">
-          <Shield className="h-4 w-4" />
-          Insurance
-        </TabsTrigger> */}
                 <TabsTrigger value="medications" className="flex items-center gap-1">
                   <Pill className="h-4 w-4" />
                   Medications
@@ -471,6 +494,10 @@ const PatientDetailsPage: React.FC = () => {
                 <TabsTrigger value="diagnosis" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
                   Diagnosis
+                </TabsTrigger>
+                <TabsTrigger value="account" className="flex items-center gap-1">
+                  <DollarSign className="h-4 w-4" />
+                  Account
                 </TabsTrigger>
                 <TabsTrigger value="summary" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
@@ -481,7 +508,7 @@ const PatientDetailsPage: React.FC = () => {
                   Encounters
                 </TabsTrigger>
                 <TabsTrigger value="appointments" className="flex items-center gap-1">
-                  <FileText className="h-4 w-4" />
+                  <Calendar className="h-4 w-4" />
                   Appointments
                 </TabsTrigger>
 
@@ -772,7 +799,7 @@ const PatientDetailsPage: React.FC = () => {
                   <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
                     <CardTitle className="flex items-center text-xl font-semibold">
                       <Video className="h-6 w-6 mr-3 text-blue-100" />
-                    Patient Appointments
+                      Patient Appointments
 
                       <div className="ml-auto">
                         <div className="h-2 w-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -780,7 +807,7 @@ const PatientDetailsPage: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0 bg-white rounded-b-lg">
-                    <GetSinglePatientAppointment id={id} token={token}/>
+                    <GetSinglePatientAppointment id={id} token={token} />
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -928,32 +955,1006 @@ const PatientDetailsPage: React.FC = () => {
                 </Card>
               </TabsContent>
 
-               <TabsContent value="diagnosis" className="space-y-6">
-                 <div className="min-h-[600px]">
-                   <UnifiedDiagnosisManager
-                     selectedDiagnoses={patient.diagnosis.map(d => ({
-                       id: d.id.toString(),
-                       code: d.icd10,
-                       description: d.diagnosis,
-                       category: 'General',
-                        status: (d.status?.toLowerCase() === 'active' ? 'active' : 
-                                d.status?.toLowerCase() === 'chronic' ? 'chronic' :
-                                d.status?.toLowerCase() === 'resolved' ? 'resolved' : 'active') as 'active' | 'resolved' | 'rule-out' | 'chronic',
-                       dateAdded: d.date,
-                       isActive: d.status === 'Active',
-                       isFavorite: false,
-                       confidence: 95
-                     }))}
-                     patientId={id}
-                     encounterId=""
-                     mode="profile"
-                     specialty="General"
-                     onDiagnosisChange={(diagnoses) => {
-                       console.log('Diagnoses updated:', diagnoses);
-                       // Handle diagnosis updates
-                     }}
-                   />
-                 </div>
+              <TabsContent value="diagnosis" className="space-y-6">
+                <div className="min-h-[600px]">
+                  <UnifiedDiagnosisManager
+                    selectedDiagnoses={patient.diagnosis.map(d => ({
+                      id: d.id.toString(),
+                      code: d.icd10,
+                      description: d.diagnosis,
+                      category: 'General',
+                      status: (d.status?.toLowerCase() === 'active' ? 'active' :
+                        d.status?.toLowerCase() === 'chronic' ? 'chronic' :
+                          d.status?.toLowerCase() === 'resolved' ? 'resolved' : 'active') as 'active' | 'resolved' | 'rule-out' | 'chronic',
+                      dateAdded: d.date,
+                      isActive: d.status === 'Active',
+                      isFavorite: false,
+                      confidence: 95
+                    }))}
+                    patientId={id}
+                    encounterId=""
+                    mode="profile"
+                    specialty="General"
+                    onDiagnosisChange={(diagnoses) => {
+                      console.log('Diagnoses updated:', diagnoses);
+                      // Handle diagnosis updates
+                    }}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="account" className="space-y-6">
+                <Tabs defaultValue="summary" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="summary">Account Summary</TabsTrigger>
+                    <TabsTrigger value="claims">Claims Management</TabsTrigger>
+                    <TabsTrigger value="payments">Payments & Adjustments</TabsTrigger>
+                    <TabsTrigger value="statements">Patient Statements</TabsTrigger>
+                  </TabsList>
+
+                  {/* Account Summary Tab */}
+                  <TabsContent value="summary" className="space-y-6">
+                    {/* Financial Overview */}
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">$3,250.00</div>
+                            <div className="text-sm text-gray-600">Total Charges</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-green-600">$2,100.00</div>
+                            <div className="text-sm text-gray-600">Insurance Paid</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-orange-600">$450.00</div>
+                            <div className="text-sm text-gray-600">Adjustments</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-red-600">$700.00</div>
+                            <div className="text-sm text-gray-600">Patient Responsibility</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Detailed Service Breakdown */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Service Details & CPT Breakdown</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {/* Service 1 */}
+                          <div className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-semibold">Service Date: 2024-01-15</div>
+                                <div className="text-sm text-gray-600">Provider: Dr. Smith</div>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800">Processed</Badge>
+                            </div>
+
+                            <div className="space-y-3">
+                              {/* CPT Code 1 */}
+                              <div className="bg-gray-50 rounded p-3">
+                                <div className="grid grid-cols-6 gap-4 text-sm">
+                                  <div>
+                                    <div className="font-medium">CPT: 99213</div>
+                                    <div className="text-gray-600">Office Visit</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Charges</div>
+                                    <div className="text-blue-600">$250.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Insurance Paid</div>
+                                    <div className="text-green-600">$180.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Adjustment</div>
+                                    <div className="text-orange-600">$20.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Patient Resp.</div>
+                                    <div className="text-red-600">$50.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Status</div>
+                                    <Badge className="bg-yellow-100 text-yellow-800">PR Pending</Badge>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* CPT Code 2 */}
+                              <div className="bg-gray-50 rounded p-3">
+                                <div className="grid grid-cols-6 gap-4 text-sm">
+                                  <div>
+                                    <div className="font-medium">CPT: 93000</div>
+                                    <div className="text-gray-600">EKG</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Charges</div>
+                                    <div className="text-blue-600">$150.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Insurance Paid</div>
+                                    <div className="text-green-600">$120.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Adjustment</div>
+                                    <div className="text-orange-600">$10.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Patient Resp.</div>
+                                    <div className="text-red-600">$20.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Status</div>
+                                    <Badge className="bg-green-100 text-green-800">Paid</Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Biller Comments */}
+                            <div className="mt-4 p-3 bg-blue-50 rounded">
+                              <div className="font-medium text-blue-800 mb-2">Biller Comments & Remarks:</div>
+                              <div className="text-sm text-blue-700">
+                                • Insurance processed with standard contractual adjustment<br />
+                                • Patient copay of $50 collected at time of service<br />
+                                • EKG fully covered under preventive care benefit
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Service 2 */}
+                          <div className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-semibold">Service Date: 2024-02-10</div>
+                                <div className="text-sm text-gray-600">Provider: Dr. Johnson</div>
+                              </div>
+                              <Badge className="bg-red-100 text-red-800">Denied</Badge>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 rounded p-3">
+                                <div className="grid grid-cols-6 gap-4 text-sm">
+                                  <div>
+                                    <div className="font-medium">CPT: 99214</div>
+                                    <div className="text-gray-600">Complex Visit</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Charges</div>
+                                    <div className="text-blue-600">$350.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Insurance Paid</div>
+                                    <div className="text-red-600">$0.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Adjustment</div>
+                                    <div className="text-orange-600">$0.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Patient Resp.</div>
+                                    <div className="text-red-600">$350.00</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">Status</div>
+                                    <Badge className="bg-red-100 text-red-800">Denied</Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Denial Information */}
+                            <div className="mt-4 p-3 bg-red-50 rounded">
+                              <div className="font-medium text-red-800 mb-2">Denial Reason & Action Required:</div>
+                              <div className="text-sm text-red-700">
+                                • Denial Code: CO-97 - Benefit for this service not provided<br />
+                                • Action: Verify patient eligibility and benefits<br />
+                                • Recommended: Appeal with additional documentation
+                              </div>
+                              <div className="mt-3 flex gap-2">
+                                <Button size="sm" variant="outline" className="text-red-600 border-red-300">
+                                  <RefreshCw className="h-4 w-4 mr-1" />
+                                  Resubmit Claim
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-blue-600 border-blue-300">
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Correct & Resubmit
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  {/* Claims Management Tab */}
+                  <TabsContent value="claims" className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Claims Management & Actions</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {/* Claim 1 */}
+                          <div className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <Button
+                                  variant="link"
+                                  className="p-0 h-auto font-semibold text-blue-600 hover:text-blue-800"
+                                  onClick={() => {
+                                    setSelectedClaim({
+                                      id: 'CLM-2024-001',
+                                      serviceDate: '2024-01-15',
+                                      submittedDate: '2024-01-16',
+                                      insurance: 'Blue Cross Blue Shield',
+                                      status: 'Paid',
+                                      billedAmount: 400.00,
+                                      allowedAmount: 320.00,
+                                      paidAmount: 300.00,
+                                      patientResp: 70.00,
+                                      cptCodes: ['99213', '93000'],
+                                      provider: 'Dr. Smith'
+                                    });
+                                    setShowClaimDetails(true);
+                                  }}
+                                >
+                                  Claim #CLM-2024-001
+                                </Button>
+                                <div className="text-sm text-gray-600">Submitted: 2024-01-16</div>
+                                <Button
+                                  variant="link"
+                                  className="p-0 h-auto text-sm text-blue-600 hover:text-blue-800"
+                                  onClick={() => {
+                                    setSelectedClaim({
+                                      id: 'CLM-2024-001',
+                                      serviceDate: '2024-01-15',
+                                      submittedDate: '2024-01-16',
+                                      insurance: 'Blue Cross Blue Shield',
+                                      status: 'Paid',
+                                      billedAmount: 400.00,
+                                      allowedAmount: 320.00,
+                                      paidAmount: 300.00,
+                                      patientResp: 70.00,
+                                      cptCodes: ['99213', '93000'],
+                                      provider: 'Dr. Smith'
+                                    });
+                                    setShowClaimDetails(true);
+                                  }}
+                                >
+                                  Service: 2024-01-15
+                                </Button>
+                                <div className="text-sm text-gray-600">Insurance: Blue Cross Blue Shield</div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Badge className="bg-green-100 text-green-800">Paid</Badge>
+                                <Button size="sm" variant="outline">
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View EOB
+                                </Button>
+                                <Button size="sm" variant="outline">
+                                  <Printer className="h-4 w-4 mr-1" />
+                                  Print CMS-1500
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-4 text-sm mb-3">
+                              <div>
+                                <div className="text-gray-600">Billed Amount</div>
+                                <div className="font-medium">$400.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Allowed Amount</div>
+                                <div className="font-medium">$320.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Paid Amount</div>
+                                <div className="font-medium text-green-600">$300.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Patient Responsibility</div>
+                                <div className="font-medium text-red-600">$70.00</div>
+                              </div>
+                            </div>
+
+                            <div className="bg-green-50 p-3 rounded mb-3">
+                              <div className="font-medium text-green-800 mb-1">Latest Biller Notes:</div>
+                              <div className="text-sm text-green-700">
+                                Claim processed successfully. Standard contractual adjustment applied. Patient copay collected.
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedClaim({
+                                    id: 'CLM-2024-001',
+                                    serviceDate: '2024-01-15',
+                                    submittedDate: '2024-01-16',
+                                    insurance: 'Blue Cross Blue Shield',
+                                    status: 'Paid'
+                                  });
+                                  setShowAddComment(true);
+                                }}
+                              >
+                                <MessageSquare className="h-4 w-4 mr-1" />
+                                Add Comment
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <History className="h-4 w-4 mr-1" />
+                                View Log
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Claim 2 - Needs Action */}
+                          <div className="border-2 border-red-200 rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <Button
+                                  variant="link"
+                                  className="p-0 h-auto font-semibold text-blue-600 hover:text-blue-800"
+                                  onClick={() => {
+                                    setSelectedClaim({
+                                      id: 'CLM-2024-002',
+                                      serviceDate: '2024-02-10',
+                                      submittedDate: '2024-02-11',
+                                      insurance: 'Aetna',
+                                      status: 'Denied',
+                                      billedAmount: 350.00,
+                                      allowedAmount: 0.00,
+                                      paidAmount: 0.00,
+                                      patientResp: 350.00,
+                                      denialCode: 'CO-97',
+                                      denialReason: 'Benefit for this service not provided',
+                                      cptCodes: ['99214'],
+                                      provider: 'Dr. Johnson'
+                                    });
+                                    setShowClaimDetails(true);
+                                  }}
+                                >
+                                  Claim #CLM-2024-002
+                                </Button>
+                                <div className="text-sm text-gray-600">Submitted: 2024-02-11</div>
+                                <Button
+                                  variant="link"
+                                  className="p-0 h-auto text-sm text-blue-600 hover:text-blue-800"
+                                  onClick={() => {
+                                    setSelectedClaim({
+                                      id: 'CLM-2024-002',
+                                      serviceDate: '2024-02-10',
+                                      submittedDate: '2024-02-11',
+                                      insurance: 'Aetna',
+                                      status: 'Denied',
+                                      billedAmount: 350.00,
+                                      allowedAmount: 0.00,
+                                      paidAmount: 0.00,
+                                      patientResp: 350.00,
+                                      denialCode: 'CO-97',
+                                      denialReason: 'Benefit for this service not provided',
+                                      cptCodes: ['99214'],
+                                      provider: 'Dr. Johnson'
+                                    });
+                                    setShowClaimDetails(true);
+                                  }}
+                                >
+                                  Service: 2024-02-10
+                                </Button>
+                                <div className="text-sm text-gray-600">Insurance: Aetna</div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Badge className="bg-red-100 text-red-800">Denied</Badge>
+                                <Button size="sm" variant="outline">
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View Denial
+                                </Button>
+                                <Button size="sm" variant="outline">
+                                  <Printer className="h-4 w-4 mr-1" />
+                                  Print CMS-1500
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-4 text-sm mb-3">
+                              <div>
+                                <div className="text-gray-600">Billed Amount</div>
+                                <div className="font-medium">$350.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Denial Code</div>
+                                <div className="font-medium text-red-600">CO-97</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Days Since Denial</div>
+                                <div className="font-medium text-orange-600">15 days</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Appeal Deadline</div>
+                                <div className="font-medium text-red-600">45 days</div>
+                              </div>
+                            </div>
+
+                            <div className="bg-red-50 p-3 rounded mb-3">
+                              <div className="font-medium text-red-800 mb-1">Action Required:</div>
+                              <div className="text-sm text-red-700">
+                                Claim denied for lack of medical necessity. Review documentation and consider appeal with additional clinical notes.
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 flex-wrap">
+                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Resubmit Claim
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedClaim({
+                                    id: 'CLM-2024-002',
+                                    serviceDate: '2024-02-10',
+                                    insurance: 'Aetna',
+                                    status: 'Denied'
+                                  });
+                                  setShowCorrectClaim(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4 mr-1" />
+                                Correct & Resubmit
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <FileText className="h-4 w-4 mr-1" />
+                                File Appeal
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <User className="h-4 w-4 mr-1" />
+                                Transfer to Patient
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedClaim({
+                                    id: 'CLM-2024-002',
+                                    serviceDate: '2024-02-10',
+                                    insurance: 'Aetna',
+                                    status: 'Denied'
+                                  });
+                                  setShowAddComment(true);
+                                }}
+                              >
+                                <MessageSquare className="h-4 w-4 mr-1" />
+                                Add Comment
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={() => {
+                                  setSelectedClaim({
+                                    id: 'CLM-2024-002',
+                                    serviceDate: '2024-02-10',
+                                    insurance: 'Aetna',
+                                    status: 'Denied'
+                                  });
+                                  setShowVoidClaim(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Void Claim
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Claim Details Dialog */}
+                    {showClaimDetails && selectedClaim && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                          <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">Claim Details - {selectedClaim.id}</h2>
+                            <Button variant="outline" onClick={() => setShowClaimDetails(false)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-6 mb-6">
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Claim Information</CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Claim Number:</span>
+                                  <span className="font-medium">{selectedClaim.id}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Service Date:</span>
+                                  <span className="font-medium">{selectedClaim.serviceDate}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Submitted Date:</span>
+                                  <span className="font-medium">{selectedClaim.submittedDate}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Insurance:</span>
+                                  <span className="font-medium">{selectedClaim.insurance}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Provider:</span>
+                                  <span className="font-medium">{selectedClaim.provider}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Status:</span>
+                                  <Badge className={selectedClaim.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                                    {selectedClaim.status}
+                                  </Badge>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Financial Summary</CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Billed Amount:</span>
+                                  <span className="font-medium">${selectedClaim.billedAmount?.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Allowed Amount:</span>
+                                  <span className="font-medium">${selectedClaim.allowedAmount?.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Paid Amount:</span>
+                                  <span className="font-medium text-green-600">${selectedClaim.paidAmount?.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Patient Responsibility:</span>
+                                  <span className="font-medium text-red-600">${selectedClaim.patientResp?.toFixed(2)}</span>
+                                </div>
+                                {selectedClaim.denialCode && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Denial Code:</span>
+                                    <span className="font-medium text-red-600">{selectedClaim.denialCode}</span>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </div>
+
+                          {/* Claim Log */}
+                          <Card className="mb-6">
+                            <CardHeader>
+                              <CardTitle className="flex items-center gap-2">
+                                <History className="h-5 w-5" />
+                                Claim Activity Log
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                <div className="border-l-4 border-green-500 pl-4">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <div className="font-medium">Claim Paid</div>
+                                      <div className="text-sm text-gray-600">Payment received from insurance</div>
+                                    </div>
+                                    <div className="text-sm text-gray-500">2024-01-25 10:30 AM</div>
+                                  </div>
+                                </div>
+                                <div className="border-l-4 border-blue-500 pl-4">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <div className="font-medium">Claim Processed</div>
+                                      <div className="text-sm text-gray-600">Insurance processed claim with adjustments</div>
+                                    </div>
+                                    <div className="text-sm text-gray-500">2024-01-20 2:15 PM</div>
+                                  </div>
+                                </div>
+                                <div className="border-l-4 border-yellow-500 pl-4">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <div className="font-medium">Claim Submitted</div>
+                                      <div className="text-sm text-gray-600">Electronic submission to {selectedClaim.insurance}</div>
+                                    </div>
+                                    <div className="text-sm text-gray-500">2024-01-16 9:00 AM</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Comments Section */}
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="flex items-center gap-2">
+                                <MessageSquare className="h-5 w-5" />
+                                Biller Comments & Notes
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                <div className="bg-blue-50 p-3 rounded">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="font-medium text-blue-800">John Smith (Biller)</div>
+                                    <div className="text-sm text-blue-600">2024-01-25 10:35 AM</div>
+                                  </div>
+                                  <div className="text-sm text-blue-700">
+                                    Payment received and posted. Standard contractual adjustment applied as per contract terms. Patient copay collected at time of service.
+                                  </div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="font-medium text-gray-800">Sarah Johnson (Biller)</div>
+                                    <div className="text-sm text-gray-600">2024-01-16 9:05 AM</div>
+                                  </div>
+                                  <div className="text-sm text-gray-700">
+                                    Claim submitted electronically. All required fields completed. Expecting processing within 14 business days.
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-4 border-t">
+                                <Button
+                                  onClick={() => {
+                                    setShowClaimDetails(false);
+                                    setShowAddComment(true);
+                                  }}
+                                  className="w-full"
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add New Comment
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add Comment Dialog */}
+                    {showAddComment && selectedClaim && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Add Comment - {selectedClaim.id}</h3>
+                            <Button variant="outline" onClick={() => setShowAddComment(false)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Comment</label>
+                              <textarea
+                                className="w-full p-3 border rounded-lg resize-none"
+                                rows={4}
+                                value={newComment}
+                                onChange={(e) => setNewComment(e.target.value)}
+                                placeholder="Enter your comment or notes about this claim..."
+                              />
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => {
+                                  // Handle comment submission
+                                  setNewComment('');
+                                  setShowAddComment(false);
+                                }}
+                                className="flex-1"
+                              >
+                                <Check className="h-4 w-4 mr-2" />
+                                Add Comment
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setShowAddComment(false)}
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Void Claim Dialog */}
+                    {showVoidClaim && selectedClaim && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-red-600">Void Claim - {selectedClaim.id}</h3>
+                            <Button variant="outline" onClick={() => setShowVoidClaim(false)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="bg-red-50 p-3 rounded">
+                              <div className="flex items-center gap-2 text-red-800 mb-2">
+                                <AlertCircle className="h-4 w-4" />
+                                <span className="font-medium">Warning</span>
+                              </div>
+                              <div className="text-sm text-red-700">
+                                Voiding this claim will permanently mark it as cancelled. This action cannot be undone.
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Reason for Voiding</label>
+                              <textarea
+                                className="w-full p-3 border rounded-lg resize-none"
+                                rows={3}
+                                value={voidReason}
+                                onChange={(e) => setVoidReason(e.target.value)}
+                                placeholder="Enter reason for voiding this claim..."
+                              />
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => {
+                                  // Handle void submission
+                                  setVoidReason('');
+                                  setShowVoidClaim(false);
+                                }}
+                                className="flex-1 bg-red-600 hover:bg-red-700"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Void Claim
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setShowVoidClaim(false)}
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Correct Claim Dialog */}
+                    {showCorrectClaim && selectedClaim && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Correct Claim - {selectedClaim.id}</h3>
+                            <Button variant="outline" onClick={() => setShowCorrectClaim(false)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Correction Notes</label>
+                              <textarea
+                                className="w-full p-3 border rounded-lg resize-none"
+                                rows={4}
+                                value={correctionNote}
+                                onChange={(e) => setCorrectionNote(e.target.value)}
+                                placeholder="Describe the corrections being made to this claim..."
+                              />
+                            </div>
+
+                            <div className="bg-blue-50 p-3 rounded">
+                              <div className="text-sm text-blue-700">
+                                This will create a corrected claim with your notes and mark the original claim as corrected.
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => {
+                                  // Handle correction submission
+                                  setCorrectionNote('');
+                                  setShowCorrectClaim(false);
+                                }}
+                                className="flex-1"
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Submit Correction
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setShowCorrectClaim(false)}
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Payments & Adjustments Tab */}
+                  <TabsContent value="payments" className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Payment History & Adjustments</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {/* Insurance Payment */}
+                          <div className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-semibold">Insurance Payment</div>
+                                <div className="text-sm text-gray-600">Date: 2024-01-25 | Check #: 123456</div>
+                                <div className="text-sm text-gray-600">Payer: Blue Cross Blue Shield</div>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800">Posted</Badge>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <div className="text-gray-600">Payment Amount</div>
+                                <div className="font-medium text-green-600">$300.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Contractual Adj.</div>
+                                <div className="font-medium text-orange-600">$80.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Applied to Claim</div>
+                                <div className="font-medium">CLM-2024-001</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Remaining Balance</div>
+                                <div className="font-medium text-red-600">$70.00</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Patient Payment */}
+                          <div className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-semibold">Patient Payment</div>
+                                <div className="text-sm text-gray-600">Date: 2024-01-15 | Method: Credit Card</div>
+                                <div className="text-sm text-gray-600">Transaction: ****1234</div>
+                              </div>
+                              <Badge className="bg-blue-100 text-blue-800">Patient Paid</Badge>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <div className="text-gray-600">Payment Amount</div>
+                                <div className="font-medium text-green-600">$50.00</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Payment Type</div>
+                                <div className="font-medium">Copay</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Applied to Service</div>
+                                <div className="font-medium">2024-01-15 Visit</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-600">Outstanding PR</div>
+                                <div className="font-medium text-red-600">$20.00</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Outstanding Patient Responsibility */}
+                          <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-semibold text-orange-800">Outstanding Patient Responsibility</div>
+                                <div className="text-sm text-orange-700">Requires Collection Action</div>
+                              </div>
+                              <Badge className="bg-orange-100 text-orange-800">Action Required</Badge>
+                            </div>
+
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Service 2024-01-15 (Deductible):</span>
+                                <span className="font-medium text-red-600">$20.00</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Service 2024-02-10 (Patient Responsibility):</span>
+                                <span className="font-medium text-red-600">$350.00</span>
+                              </div>
+                              <div className="border-t pt-2 flex justify-between font-semibold">
+                                <span>Total Patient Balance:</span>
+                                <span className="text-red-600">$370.00</span>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 flex gap-2">
+                              <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                                <DollarSign className="h-4 w-4 mr-1" />
+                                Record Payment
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <MailCheck className="h-4 w-4 mr-1" />
+                                Send Statement
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <Phone className="h-4 w-4 mr-1" />
+                                Schedule Call
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  {/* Patient Statements Tab */}
+                  <TabsContent value="statements" className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Patient Statement Management</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center p-4 border rounded-lg">
+                            <div>
+                              <div className="font-semibold">Statement #STMT-2024-001</div>
+                              <div className="text-sm text-gray-600">Generated: 2024-02-01 | Due: 2024-03-01</div>
+                              <div className="text-sm text-gray-600">Balance: $370.00</div>
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <Badge className="bg-yellow-100 text-yellow-800">Sent</Badge>
+                              <Button size="sm" variant="outline">
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                              <Button size="sm" variant="outline">
+                                <MailCheck className="h-4 w-4 mr-1" />
+                                Resend
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                            <h4 className="font-semibold mb-2">Generate New Statement</h4>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Create and send a comprehensive patient statement with all outstanding balances and recent activity.
+                            </p>
+                            <Button className="w-full">
+                              <MailCheck className="h-4 w-4 mr-2" />
+                              Generate & Send Statement
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
 
               <TabsContent value="vitals" className="space-y-6">

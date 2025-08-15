@@ -40,7 +40,7 @@ export interface Patient {
   state?: string;
   country?: string;
   zipCode?: string;
-  service_type?: any;
+  service_type?: number[] | string | number;
   patientService?: string | number[];
   enrollDate?: string;
   preferredLanguage?: string;

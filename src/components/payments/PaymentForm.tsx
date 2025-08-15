@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +30,7 @@ const PaymentFormContent: React.FC<PaymentFormProps> = ({
   onSuccess,
   onCancel
 }) => {
+  const { token } = useSelector((state: any) => state.auth);
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -42,7 +44,7 @@ const PaymentFormContent: React.FC<PaymentFormProps> = ({
 
   const createPaymentIntent = async () => {
     try {
-      const response = await paymentAPI.createPaymentIntent({
+      const response = await paymentAPI.createPaymentIntent(token, {
         patient_id: patientId,
         billing_id: billingId,
         amount,
@@ -93,7 +95,7 @@ const PaymentFormContent: React.FC<PaymentFormProps> = ({
     } else if (paymentIntent && paymentIntent.status === 'succeeded') {
       // Confirm payment on your backend
       try {
-        const response = await paymentAPI.confirmPayment(paymentId!, {
+        const response = await paymentAPI.confirmPayment(token, paymentId!, {
           payment_intent_id: paymentIntent.id,
           payment_method_id: paymentIntent.payment_method
         });

@@ -253,14 +253,17 @@ const Patients: React.FC = () => {
                         <TableCell>{formatDate(patient.lastVisit)}</TableCell>
                         <TableCell>{patient.enrollDate}</TableCell>
                         <TableCell>
-                          {patient?.service_type
-                            ?.map((type: number) => {
-                              if (type === 1) return "RPM";
-                              if (type === 2) return "CCM";
-                              if (type === 3) return "PCM";
-                              return "";
-                            })
-                            .join(", ")}
+                          {Array.isArray(patient?.service_type)
+                            ? patient.service_type
+                                .map((type: number) => {
+                                  if (type === 1) return "RPM";
+                                  if (type === 2) return "CCM";
+                                  if (type === 3) return "PCM";
+                                  return "";
+                                })
+                                .filter(Boolean)
+                                .join(", ")
+                            : patient?.service_type || "N/A"}
                         </TableCell>
                         <TableCell>
                           <div className="flex space-x-2">

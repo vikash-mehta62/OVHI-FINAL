@@ -8,7 +8,7 @@ const getRCMDashboardData = async (req, res) => {
   try {
     const { user_id } = req.user;
     const { timeframe = '30d' } = req.query;
-    
+
     let dateFilter = '';
     switch (timeframe) {
       case '7d':
@@ -59,7 +59,7 @@ const getRCMDashboardData = async (req, res) => {
     `, [user_id]);
 
     // Denial Rate
-    const denialRate = revenueData[0].total_claims > 0 
+    const denialRate = revenueData[0].total_claims > 0
       ? (revenueData[0].denied_claims / revenueData[0].total_claims * 100).toFixed(1)
       : 0;
 
@@ -104,7 +104,7 @@ const getRCMDashboardData = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: dashboardData
+      data: dashboardData || []
     });
 
   } catch (error) {
@@ -120,10 +120,10 @@ const getRCMDashboardData = async (req, res) => {
 const getClaimsStatus = async (req, res) => {
   try {
     const { user_id } = req.user;
-    const { 
-      page = 1, 
-      limit = 10, 
-      status = 'all', 
+    const {
+      page = 1,
+      limit = 10,
+      status = 'all',
       search = '',
       priority = 'all'
     } = req.query;
@@ -292,18 +292,18 @@ const getARAgingReport = async (req, res) => {
 
     const arBuckets = agingData.map(bucket => ({
       range: bucket.age_bucket === '0-30' ? '0-30 days' :
-             bucket.age_bucket === '31-60' ? '31-60 days' :
-             bucket.age_bucket === '61-90' ? '61-90 days' :
-             bucket.age_bucket === '91-120' ? '91-120 days' : '120+ days',
+        bucket.age_bucket === '31-60' ? '31-60 days' :
+          bucket.age_bucket === '61-90' ? '61-90 days' :
+            bucket.age_bucket === '91-120' ? '91-120 days' : '120+ days',
       amount: parseFloat(bucket.amount),
       count: bucket.count,
       percentage: totalAR > 0 ? ((parseFloat(bucket.amount) / totalAR) * 100).toFixed(1) : 0,
-      priority: bucket.age_bucket === '0-30' ? 'low' : 
-                bucket.age_bucket === '31-60' ? 'medium' : 'high',
+      priority: bucket.age_bucket === '0-30' ? 'low' :
+        bucket.age_bucket === '31-60' ? 'medium' : 'high',
       collectability: bucket.age_bucket === '0-30' ? 95 :
-                     bucket.age_bucket === '31-60' ? 85 :
-                     bucket.age_bucket === '61-90' ? 70 :
-                     bucket.age_bucket === '91-120' ? 50 : 25
+        bucket.age_bucket === '31-60' ? 85 :
+          bucket.age_bucket === '61-90' ? 70 :
+            bucket.age_bucket === '91-120' ? 50 : 25
     }));
 
     res.status(200).json({
@@ -479,7 +479,7 @@ const getRevenueForecasting = async (req, res) => {
     // Simple forecasting based on average growth
     const revenues = historicalRevenue.map(r => parseFloat(r.revenue));
     const avgRevenue = revenues.reduce((sum, rev) => sum + rev, 0) / revenues.length;
-    const growthRate = revenues.length > 1 ? 
+    const growthRate = revenues.length > 1 ?
       ((revenues[revenues.length - 1] - revenues[0]) / revenues[0]) / revenues.length : 0.05;
 
     // Generate next 6 months forecast
@@ -582,7 +582,7 @@ const updateClaimStatus = async (req, res) => {
     `, [status, claimId]);
 
     // Log the status change
-    await logAudit(req, 'UPDATE', 'CLAIM_STATUS', claimId, 
+    await logAudit(req, 'UPDATE', 'CLAIM_STATUS', claimId,
       `Claim status updated to ${status}${notes ? ': ' + notes : ''}`);
 
     res.status(200).json({
@@ -619,7 +619,7 @@ const bulkClaimStatusUpdate = async (req, res) => {
       WHERE id IN (${placeholders})
     `, [status, ...claimIds]);
 
-    await logAudit(req, 'BULK_UPDATE', 'CLAIM_STATUS', 0, 
+    await logAudit(req, 'BULK_UPDATE', 'CLAIM_STATUS', 0,
       `Bulk status update to ${status} for ${claimIds.length} claims`);
 
     res.status(200).json({
@@ -769,14 +769,14 @@ const processERAFile = async (req, res) => {
         status: Math.random() > 0.8 ? 'denied' : 'paid',
         reason_codes: ['CO-45', 'PR-1']
       };
-      
+
       processedPayments.push(payment);
       totalProcessed++;
       totalAmount += payment.paid_amount;
     }
 
     // Log ERA processing
-    await logAudit(req, 'PROCESS', 'ERA_FILE', 0, 
+    await logAudit(req, 'PROCESS', 'ERA_FILE', 0,
       `Processed ERA file: ${fileName}, ${totalProcessed} payments, $${totalAmount}`);
 
     res.status(200).json({
@@ -820,7 +820,7 @@ const updateCollectionStatus = async (req, res) => {
     `, [accountId]);
 
     // Log collection activity
-    await logAudit(req, 'UPDATE', 'COLLECTION_STATUS', accountId, 
+    await logAudit(req, 'UPDATE', 'COLLECTION_STATUS', accountId,
       `Collection status updated: ${status}. Notes: ${notes || 'None'}`);
 
     res.status(200).json({
@@ -852,7 +852,7 @@ const getRCMAnalytics = async (req, res) => {
 
     let dateFilter = '';
     let compareDateFilter = '';
-    
+
     switch (timeframe) {
       case '7d':
         dateFilter = "AND DATE(cb.created) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
@@ -901,14 +901,14 @@ const getRCMAnalytics = async (req, res) => {
     const current = currentMetrics[0];
     const previous = previousMetrics[0];
 
-    const collectionRate = current.total_billed > 0 ? 
+    const collectionRate = current.total_billed > 0 ?
       (current.total_collected / current.total_billed * 100) : 0;
-    const denialRate = current.total_claims > 0 ? 
+    const denialRate = current.total_claims > 0 ?
       (current.denied_claims / current.total_claims * 100) : 0;
-    
-    const prevCollectionRate = previous.total_billed > 0 ? 
+
+    const prevCollectionRate = previous.total_billed > 0 ?
       (previous.total_collected / previous.total_billed * 100) : 0;
-    const prevDenialRate = previous.total_claims > 0 ? 
+    const prevDenialRate = previous.total_claims > 0 ?
       (previous.denied_claims / previous.total_claims * 100) : 0;
 
     // Top performing procedures
@@ -983,7 +983,7 @@ const getRCMAnalytics = async (req, res) => {
 const generateRCMReport = async (req, res) => {
   try {
     const { user_id } = req.user;
-    const { 
+    const {
       reportType = 'comprehensive',
       dateRange,
       format = 'json',
@@ -1009,7 +1009,7 @@ const generateRCMReport = async (req, res) => {
     }
 
     // Log report generation
-    await logAudit(req, 'GENERATE', 'RCM_REPORT', 0, 
+    await logAudit(req, 'GENERATE', 'RCM_REPORT', 0,
       `Generated ${reportType} report for ${startDate} to ${endDate}`);
 
     res.status(200).json({
@@ -1173,7 +1173,7 @@ const getDenialTrends = async (req, res) => {
         topReasons: denialReasons,
         recommendations,
         summary: {
-          avgDenialRate: denialTrends.length > 0 ? 
+          avgDenialRate: denialTrends.length > 0 ?
             (denialTrends.reduce((sum, t) => sum + parseFloat(t.denial_rate), 0) / denialTrends.length).toFixed(1) : 0,
           totalDeniedAmount: denialTrends.reduce((sum, t) => sum + parseFloat(t.denied_amount), 0),
           improvementOpportunity: 'High - Focus on documentation and coding accuracy'
@@ -1271,7 +1271,7 @@ const getARAccountDetails = async (req, res) => {
 
     const account = accountData[0];
     const collectabilityScore = calculateCollectabilityScore(account.days_outstanding, account.total_balance);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -1344,10 +1344,10 @@ const initiateAutomatedFollowUp = async (req, res) => {
     }
 
     const account = accountData[0];
-    
+
     // Create follow-up record (would need follow_up_tasks table)
     const followUpId = Math.floor(Math.random() * 10000); // Mock ID
-    
+
     // Schedule the follow-up based on type
     let followUpResult = {};
     switch (followUpType) {
@@ -1366,7 +1366,7 @@ const initiateAutomatedFollowUp = async (req, res) => {
     }
 
     // Log the follow-up initiation
-    await logAudit(req, 'CREATE', 'FOLLOW_UP', accountId, 
+    await logAudit(req, 'CREATE', 'FOLLOW_UP', accountId,
       `Automated ${followUpType} follow-up scheduled for ${scheduledDate}`);
 
     res.status(200).json({
@@ -1395,13 +1395,13 @@ const initiateAutomatedFollowUp = async (req, res) => {
 const setupPaymentPlan = async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { 
-      totalAmount, 
-      monthlyPayment, 
-      numberOfPayments, 
-      startDate, 
+    const {
+      totalAmount,
+      monthlyPayment,
+      numberOfPayments,
+      startDate,
       interestRate = 0,
-      notes 
+      notes
     } = req.body;
     const { user_id } = req.user;
 
@@ -1445,18 +1445,18 @@ const setupPaymentPlan = async (req, res) => {
 
     // Create payment plan (would need payment_plans table)
     const paymentPlanId = Math.floor(Math.random() * 10000); // Mock ID
-    
+
     // Generate payment schedule
     const paymentSchedule = [];
     const start = moment(startDate);
-    
+
     for (let i = 0; i < numberOfPayments; i++) {
       const dueDate = start.clone().add(i, 'month');
       const isLastPayment = i === numberOfPayments - 1;
-      const amount = isLastPayment ? 
-        totalAmount - (monthlyPayment * (numberOfPayments - 1)) : 
+      const amount = isLastPayment ?
+        totalAmount - (monthlyPayment * (numberOfPayments - 1)) :
         monthlyPayment;
-      
+
       paymentSchedule.push({
         paymentNumber: i + 1,
         dueDate: dueDate.format('YYYY-MM-DD'),
@@ -1468,7 +1468,7 @@ const setupPaymentPlan = async (req, res) => {
     }
 
     // Log payment plan creation
-    await logAudit(req, 'CREATE', 'PAYMENT_PLAN', accountId, 
+    await logAudit(req, 'CREATE', 'PAYMENT_PLAN', accountId,
       `Payment plan created: ${numberOfPayments} payments of $${monthlyPayment}`);
 
     res.status(200).json({
@@ -1607,7 +1607,7 @@ const syncClaimMDData = async (req, res) => {
     };
 
     // Log sync activity
-    await logAudit(req, 'SYNC', 'CLAIMMD_DATA', 0, 
+    await logAudit(req, 'SYNC', 'CLAIMMD_DATA', 0,
       `ClaimMD sync completed: ${syncResults.results.claimsProcessed} claims processed`);
 
     res.status(200).json({
@@ -1637,7 +1637,7 @@ const calculatePercentageChange = (current, previous) => {
 
 const getClaimRecommendations = (claim) => {
   const recommendations = [];
-  
+
   if (claim.processing_days > 30) {
     recommendations.push({
       type: 'follow_up',
@@ -1645,7 +1645,7 @@ const getClaimRecommendations = (claim) => {
       message: 'Claim is overdue - contact payer immediately'
     });
   }
-  
+
   if (claim.status === 3) { // Denied
     recommendations.push({
       type: 'appeal',
@@ -1653,7 +1653,7 @@ const getClaimRecommendations = (claim) => {
       message: 'Consider appealing this denial with additional documentation'
     });
   }
-  
+
   return recommendations;
 };
 
@@ -1661,31 +1661,31 @@ const calculatePayerScore = (payer) => {
   const approvalWeight = 0.4;
   const speedWeight = 0.3;
   const volumeWeight = 0.3;
-  
+
   const approvalScore = payer.approval_rate;
   const speedScore = Math.max(0, 100 - (payer.avg_payment_days - 14) * 2);
   const volumeScore = Math.min(100, payer.total_claims * 2);
-  
+
   return Math.round(
-    (approvalScore * approvalWeight) + 
-    (speedScore * speedWeight) + 
+    (approvalScore * approvalWeight) +
+    (speedScore * speedWeight) +
     (volumeScore * volumeWeight)
   );
 };
 
 const calculateCollectabilityScore = (daysOutstanding, balance) => {
   let score = 100;
-  
+
   // Reduce score based on age
   if (daysOutstanding > 120) score -= 50;
   else if (daysOutstanding > 90) score -= 30;
   else if (daysOutstanding > 60) score -= 20;
   else if (daysOutstanding > 30) score -= 10;
-  
+
   // Adjust based on balance
   if (balance < 100) score -= 10;
   else if (balance > 1000) score += 10;
-  
+
   return Math.max(0, Math.min(100, score));
 };
 

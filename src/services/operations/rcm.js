@@ -528,6 +528,282 @@ export const getClaimMDStatusAPI = async (token, trackingId) => {
   }
 };
 
+// Enhanced RCM Features
+
+// Validate Claim
+export const validateClaimAPI = async (token, claimId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API}/${claimId}/validate`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to validate claim");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Validate Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to validate claim");
+    return null;
+  }
+};
+
+// Get Claim Suggestions
+export const getClaimSuggestionsAPI = async (token, patientId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/patients/${patientId}/claim-suggestions`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to get claim suggestions");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Claim Suggestions API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to get claim suggestions");
+    return null;
+  }
+};
+
+// Get Auto Corrections
+export const getAutoCorrectionAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/auto-corrections`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to get auto corrections");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Auto Corrections API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to get auto corrections");
+    return null;
+  }
+};
+
+// Generate Patient Statement
+export const generatePatientStatementAPI = async (token, patientId, statementData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/patients/${patientId}/statements/generate`,
+      statementData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to generate patient statement");
+    }
+
+    toast.success("Patient statement generated successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Generate Patient Statement API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to generate patient statement");
+    return null;
+  }
+};
+
+// Get Patient Statements
+export const getPatientStatementsAPI = async (token, params = {}) => {
+  try {
+    const queryParams = new URLSearchParams(params).toString();
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/statements?${queryParams}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch patient statements");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Patient Statements API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch patient statements");
+    return null;
+  }
+};
+
+// Send Patient Statement
+export const sendPatientStatementAPI = async (token, statementId, sendData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/statements/${statementId}/send`,
+      sendData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to send patient statement");
+    }
+
+    toast.success("Patient statement sent successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Send Patient Statement API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to send patient statement");
+    return null;
+  }
+};
+
+// ERA Processing APIs
+
+// Get Office Payments
+export const getOfficePaymentsAPI = async (token, params = {}) => {
+  try {
+    const queryParams = new URLSearchParams(params).toString();
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/payments/office?${queryParams}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch office payments");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Office Payments API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch office payments");
+    return null;
+  }
+};
+
+// Record Office Payment
+export const recordOfficePaymentAPI = async (token, paymentData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/payments/office/record`,
+      paymentData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to record office payment");
+    }
+
+    toast.success("Office payment recorded successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Record Office Payment API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to record office payment");
+    return null;
+  }
+};
+
+// Get ERA Files
+export const getERAFilesAPI = async (token, params = {}) => {
+  try {
+    const queryParams = new URLSearchParams(params).toString();
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/era/files?${queryParams}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch ERA files");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("ERA Files API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch ERA files");
+    return null;
+  }
+};
+
+
+// Get ERA Payment Details
+export const getERAPaymentDetailsAPI = async (token, eraId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/era/${eraId}/details`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch ERA payment details");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("ERA Payment Details API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch ERA payment details");
+    return null;
+  }
+};
+
+// Manual Post ERA Payment
+export const manualPostERAPaymentAPI = async (token, eraDetailId) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API.replace('/claims', '')}/era/payments/${eraDetailId}/post`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to post ERA payment");
+    }
+
+    toast.success("ERA payment posted successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Manual Post ERA API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to post ERA payment");
+    return null;
+  }
+};
+
 // Sync ClaimMD Data
 export const syncClaimMDDataAPI = async (token, syncConfig) => {
   try {

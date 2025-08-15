@@ -118,7 +118,7 @@ const RCMDashboard: React.FC = () => {
       setLoading(true);
       const [rcmResponse, paymentResponse] = await Promise.all([
         getRCMDashboardDataAPI(token, timeframe),
-        paymentAPI.getPaymentAnalytics({ timeframe })
+        paymentAPI.getPaymentAnalytics(token, { timeframe })
       ]);
       
       if (rcmResponse.success) {

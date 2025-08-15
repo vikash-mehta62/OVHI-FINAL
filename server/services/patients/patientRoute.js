@@ -51,4 +51,8 @@ router.post("/unassignBedFromPatient", unassignBedFromPatient);
 router.get("/getAllConsents", getAllConsents);
 
 router.get("/get-medical-history", getMedicalHistoryByPatientId);
+
+// Patient Account Management Routes
+router.use("/account", require("./patientAccountRoutes"));
+
 module.exports = router

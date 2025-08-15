@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ interface PaymentGateway {
 }
 
 const PaymentGatewaySettings: React.FC = () => {
+  const { token } = useSelector((state: any) => state.auth);
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ const PaymentGatewaySettings: React.FC = () => {
 
   const loadGateways = async () => {
     try {
-      const response = await paymentAPI.getGateways();
+      const response = await paymentAPI.getGateways(token);
       if (response.success) {
         setGateways(response.data);
       }
@@ -59,7 +61,7 @@ const PaymentGatewaySettings: React.FC = () => {
     setTestResult(null);
 
     try {
-      const response = await paymentAPI.configureGateway(formData);
+      const response = await paymentAPI.configureGateway(token, formData);
       if (response.success) {
         setTestResult(response.data.test_result);
         await loadGateways();

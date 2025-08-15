@@ -25,6 +25,28 @@ const {
   syncClaimMDData
 } = require('./rcmCtrl');
 
+// Import enhanced controllers
+const {
+  validateClaim,
+  getClaimSuggestions,
+  getAutoCorrections
+} = require('./claimValidationCtrl');
+
+const {
+  generatePatientStatement,
+  getPatientStatements,
+  sendPatientStatement
+} = require('./patientStatementCtrl');
+
+const {
+  processERAFile2,
+  getERAFiles,
+  getERAPaymentDetails,
+  manualPostERAPayment,
+  getOfficePayments,
+  recordOfficePayment
+} = require('./eraProcessingCtrl');
+
 // Dashboard and Analytics
 router.get('/dashboard', getRCMDashboardData);
 router.get('/analytics', getRCMAnalytics);
@@ -61,5 +83,25 @@ router.post('/payments/era/process', processERAFile);
 
 // Reports
 router.post('/reports/generate', generateRCMReport);
+
+// Enhanced Features - Claim Validation and Suggestions
+router.get('/claims/:claimId/validate', validateClaim);
+router.get('/patients/:patientId/claim-suggestions', getClaimSuggestions);
+router.get('/auto-corrections', getAutoCorrections);
+
+// Patient Statements
+router.post('/patients/:patientId/statements/generate', generatePatientStatement);
+router.get('/statements', getPatientStatements);
+router.post('/statements/:statementId/send', sendPatientStatement);
+
+// ERA Processing
+router.post('/era/process', processERAFile2);
+router.get('/era/files', getERAFiles);
+router.get('/era/:era_id/details', getERAPaymentDetails);
+router.post('/era/payments/:era_detail_id/post', manualPostERAPayment);
+
+// Office Payments
+router.get('/payments/office', getOfficePayments);
+router.post('/payments/office/record', recordOfficePayment);
 
 module.exports = router;

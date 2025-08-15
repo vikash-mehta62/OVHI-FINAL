@@ -15,7 +15,10 @@ import {
   Download,
   RefreshCw,
   CreditCard,
-  Calendar
+  Calendar,
+  Shield,
+  Zap,
+  FileText as FileTextIcon
 } from 'lucide-react';
 
 // Import RCM components
@@ -23,6 +26,9 @@ import RCMDashboard from '@/components/rcm/RCMDashboard';
 import ClaimsManagement from '@/components/rcm/ClaimsManagement';
 import PaymentHistory from '@/components/payments/PaymentHistory';
 import PaymentGatewaySettings from '@/components/payments/PaymentGatewaySettings';
+import ClaimValidation from '@/components/rcm/ClaimValidation';
+import AutoCorrections from '@/components/rcm/AutoCorrections';
+import PatientStatements from '@/components/rcm/PatientStatements';
 import ARAgingManagement from '../components/rcm/ARAgingManagement';
 
 const RCMManagement: React.FC = () => {
@@ -58,18 +64,32 @@ const RCMManagement: React.FC = () => {
       component: <ARAgingManagement />
     },
     {
+      value: 'validation',
+      label: 'Validation',
+      icon: <Shield className="h-4 w-4" />,
+      description: 'Claim validation and scoring',
+      component: <ClaimValidation claimId={1} />
+    },
+    {
+      value: 'corrections',
+      label: 'Auto-Fix',
+      icon: <Zap className="h-4 w-4" />,
+      description: 'Auto-correction suggestions',
+      component: <AutoCorrections />
+    },
+    {
+      value: 'statements',
+      label: 'Statements',
+      icon: <FileTextIcon className="h-4 w-4" />,
+      description: 'Patient billing statements',
+      component: <PatientStatements />
+    },
+    {
       value: 'settings',
       label: 'Settings',
       icon: <Settings className="h-4 w-4" />,
       description: 'Payment gateway configuration',
       component: <PaymentGatewaySettings />
-    },
-    {
-      value: 'analytics',
-      label: 'Analytics',
-      icon: <TrendingUp className="h-4 w-4" />,
-      description: 'Advanced reporting',
-      component: <AnalyticsReporting />
     }
   ];
 
@@ -156,7 +176,7 @@ const RCMManagement: React.FC = () => {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-8">
           {tabConfig.map((tab) => (
             <TabsTrigger
               key={tab.value}

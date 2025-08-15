@@ -66,7 +66,7 @@ INSERT INTO patient_claims (patient_id, claim_md_tracking_id, payer_name, policy
 (110, 'CMD-2024-010', 'UnitedHealthcare', 'UHC456789', 'GRP003', '10,20,25', 'paid', DATE_SUB(NOW(), INTERVAL 28 DAY));
 
 -- Sample Patient Diagnoses
-INSERT INTO patient_diagnoses (patient_id, diagnosis_code, diagnosis_description, created_at) VALUES
+INSERT INTO patient_diagnoses (patient_id, icd10, diagnosis_description, created_at) VALUES
 (101, 'F32.9', 'Major depressive disorder, single episode, unspecified', DATE_SUB(NOW(), INTERVAL 10 DAY)),
 (102, 'F41.1', 'Generalized anxiety disorder', DATE_SUB(NOW(), INTERVAL 15 DAY)),
 (103, 'F43.10', 'Post-traumatic stress disorder, unspecified', DATE_SUB(NOW(), INTERVAL 20 DAY)),
@@ -80,37 +80,38 @@ INSERT INTO patient_diagnoses (patient_id, diagnosis_code, diagnosis_description
 
 -- Update users_mappings to link patients to a provider (assuming provider user_id = 1)
 -- Note: This assumes the users_mappings table exists and provider has user_id = 1
-INSERT INTO users_mappings (user_id, fk_physician_id, created_at) VALUES
-(101, 1, DATE_SUB(NOW(), INTERVAL 60 DAY)),
-(102, 1, DATE_SUB(NOW(), INTERVAL 55 DAY)),
-(103, 1, DATE_SUB(NOW(), INTERVAL 50 DAY)),
-(104, 1, DATE_SUB(NOW(), INTERVAL 45 DAY)),
-(105, 1, DATE_SUB(NOW(), INTERVAL 40 DAY)),
-(106, 1, DATE_SUB(NOW(), INTERVAL 35 DAY)),
-(107, 1, DATE_SUB(NOW(), INTERVAL 30 DAY)),
-(108, 1, DATE_SUB(NOW(), INTERVAL 25 DAY)),
-(109, 1, DATE_SUB(NOW(), INTERVAL 20 DAY)),
-(110, 1, DATE_SUB(NOW(), INTERVAL 15 DAY))
+INSERT INTO users_mappings (user_id, fk_physician_id) VALUES
+(101, 1),
+(102, 1),
+(103, 1),
+(104, 1),
+(105, 1),
+(106, 1),
+(107, 1),
+(108, 1),
+(109, 1),
+(110, 1)
 ON DUPLICATE KEY UPDATE fk_physician_id = 1;
 
 -- Sample user profiles for patients (if they don't exist)
-INSERT INTO user_profiles (fk_userid, firstname, lastname, dob, phone, email, created_at) VALUES
-(101, 'John', 'Smith', '1985-03-15', '555-0101', 'john.smith@email.com', DATE_SUB(NOW(), INTERVAL 60 DAY)),
-(102, 'Sarah', 'Johnson', '1990-07-22', '555-0102', 'sarah.johnson@email.com', DATE_SUB(NOW(), INTERVAL 55 DAY)),
-(103, 'Michael', 'Brown', '1978-11-08', '555-0103', 'michael.brown@email.com', DATE_SUB(NOW(), INTERVAL 50 DAY)),
-(104, 'Emily', 'Davis', '1995-01-30', '555-0104', 'emily.davis@email.com', DATE_SUB(NOW(), INTERVAL 45 DAY)),
-(105, 'David', 'Wilson', '1982-09-12', '555-0105', 'david.wilson@email.com', DATE_SUB(NOW(), INTERVAL 40 DAY)),
-(106, 'Lisa', 'Anderson', '1988-05-18', '555-0106', 'lisa.anderson@email.com', DATE_SUB(NOW(), INTERVAL 35 DAY)),
-(107, 'Robert', 'Taylor', '1975-12-03', '555-0107', 'robert.taylor@email.com', DATE_SUB(NOW(), INTERVAL 30 DAY)),
-(108, 'Jennifer', 'Martinez', '1992-08-25', '555-0108', 'jennifer.martinez@email.com', DATE_SUB(NOW(), INTERVAL 25 DAY)),
-(109, 'Christopher', 'Garcia', '1987-04-14', '555-0109', 'christopher.garcia@email.com', DATE_SUB(NOW(), INTERVAL 20 DAY)),
-(110, 'Amanda', 'Rodriguez', '1993-10-07', '555-0110', 'amanda.rodriguez@email.com', DATE_SUB(NOW(), INTERVAL 15 DAY))
+-- Sample user profiles for patients (if they don't exist)
+INSERT INTO user_profiles (fk_userid, firstname, lastname, dob, phone, work_email,service_type) VALUES
+(101, 'John', 'Smith', '1985-03-15', '555-0101', 'john.smith@email.com','[1,2]'),
+(102, 'Sarah', 'Johnson', '1990-07-22', '555-0102', 'sarah.johnson@email.com','[1,2]'),
+(103, 'Michael', 'Brown', '1978-11-08', '555-0103', 'michael.brown@email.com','[1,2]'),
+(104, 'Emily', 'Davis', '1995-01-30', '555-0104', 'emily.davis@email.com','[1,2]'),
+(105, 'David', 'Wilson', '1982-09-12', '555-0105', 'david.wilson@email.com','[1,2]'),
+(106, 'Lisa', 'Anderson', '1988-05-18', '555-0106', 'lisa.anderson@email.com','[1,2]'),
+(107, 'Robert', 'Taylor', '1975-12-03', '555-0107', 'robert.taylor@email.com','[1,2]'),
+(108, 'Jennifer', 'Martinez', '1992-08-25', '555-0108', 'jennifer.martinez@email.com','[1,2]'),
+(109, 'Christopher', 'Garcia', '1987-04-14', '555-0109', 'christopher.garcia@email.com','[1,2]'),
+(110, 'Amanda', 'Rodriguez', '1993-10-07', '555-0110', 'amanda.rodriguez@email.com','[1,2]')
 ON DUPLICATE KEY UPDATE 
   firstname = VALUES(firstname),
   lastname = VALUES(lastname),
   dob = VALUES(dob),
   phone = VALUES(phone),
-  email = VALUES(email);
+  work_email = VALUES(work_email);
 
 -- Create payment gateway configuration table
 CREATE TABLE IF NOT EXISTS payment_gateways (
@@ -155,8 +156,7 @@ CREATE TABLE IF NOT EXISTS patient_payments (
   INDEX idx_patient_payment (patient_id, payment_date),
   INDEX idx_provider_payment (provider_id, payment_date),
   INDEX idx_billing_payment (billing_id),
-  INDEX idx_transaction (transaction_id),
-  FOREIGN KEY (billing_id) REFERENCES cpt_billing(id) ON DELETE SET NULL
+  INDEX idx_transaction (transaction_id)
 );
 
 -- Create payment plans table
