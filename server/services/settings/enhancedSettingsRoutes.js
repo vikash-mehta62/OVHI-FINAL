@@ -16,11 +16,13 @@ const {
 const notificationRoutes = require('./notificationRoutes');
 const privacyRoutes = require('./privacyRoutes');
 const appearanceRoutes = require('./appearanceRoutes');
+const autoSpecialtyRoutes = require('./autoSpecialtyRoutes');
 
 // Enhanced routes with full functionality
 router.use('/notifications-enhanced', notificationRoutes);
 router.use('/privacy-enhanced', privacyRoutes);
 router.use('/appearance-enhanced', appearanceRoutes);
+router.use('/auto-specialty', autoSpecialtyRoutes);
 
 // Legacy routes for backward compatibility
 router.post('/notifications', updateNotificationSettings);
