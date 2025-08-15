@@ -13,13 +13,16 @@ import {
   AlertTriangle,
   Settings,
   Download,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  Calendar
 } from 'lucide-react';
 
 // Import RCM components
 import RCMDashboard from '@/components/rcm/RCMDashboard';
 import ClaimsManagement from '@/components/rcm/ClaimsManagement';
-import ARAgingManagement from '@/components/rcm/ARAgingManagement';
+import PaymentHistory from '@/components/payments/PaymentHistory';
+import PaymentGatewaySettings from '@/components/payments/PaymentGatewaySettings';
 
 const RCMManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -40,32 +43,25 @@ const RCMManagement: React.FC = () => {
       component: <ClaimsManagement />
     },
     {
+      value: 'payments',
+      label: 'Payments',
+      icon: <CreditCard className="h-4 w-4" />,
+      description: 'Payment processing and history',
+      component: <PaymentHistory />
+    },
+    {
       value: 'ar-aging',
       label: 'A/R Aging',
       icon: <Clock className="h-4 w-4" />,
-      description: 'Accounts receivable management',
+      description: 'Accounts receivable aging',
       component: <ARAgingManagement />
     },
     {
-      value: 'denials',
-      label: 'Denials',
-      icon: <AlertTriangle className="h-4 w-4" />,
-      description: 'Denial management and appeals',
-      component: <DenialManagement />
-    },
-    {
-      value: 'payments',
-      label: 'Payments',
-      icon: <DollarSign className="h-4 w-4" />,
-      description: 'Payment posting and ERA',
-      component: <PaymentManagement />
-    },
-    {
-      value: 'collections',
-      label: 'Collections',
-      icon: <Users className="h-4 w-4" />,
-      description: 'Collection workflows',
-      component: <CollectionsManagement />
+      value: 'settings',
+      label: 'Settings',
+      icon: <Settings className="h-4 w-4" />,
+      description: 'Payment gateway configuration',
+      component: <PaymentGatewaySettings />
     },
     {
       value: 'analytics',
@@ -159,7 +155,7 @@ const RCMManagement: React.FC = () => {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-6">
           {tabConfig.map((tab) => (
             <TabsTrigger
               key={tab.value}

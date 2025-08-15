@@ -5,9 +5,9 @@ import { Provider } from "react-redux";
 import store from "./redux/store";
 import { ToastContainer } from "react-toastify";
 // main.tsx
-import { registerSW } from 'virtual:pwa-register';
+// import { registerSW } from 'virtual:pwa-register';
 
-registerSW(); // Auto update PWA
+// registerSW(); // Auto update PWA - Disabled for now
 
 // Your usual React code
 

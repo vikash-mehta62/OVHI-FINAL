@@ -45,9 +45,12 @@ import {
   XCircle,
   RefreshCw,
   Download,
-  Filter
+  Filter,
+  CreditCard,
+  Settings
 } from 'lucide-react';
 import { getRCMDashboardDataAPI } from '@/services/operations/rcm';
+import { paymentAPI } from '@/services/operations/payments';
 
 interface KPICardProps {
   title: string;
@@ -105,6 +108,7 @@ const KPICard: React.FC<KPICardProps> = ({
 const RCMDashboard: React.FC = () => {
   const { token } = useSelector((state: any) => state.auth);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [paymentData, setPaymentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState('30d');
   const [refreshing, setRefreshing] = useState(false);
@@ -112,9 +116,17 @@ const RCMDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await getRCMDashboardDataAPI(token, timeframe);
-      if (response.success) {
-        setDashboardData(response.data);
+      const [rcmResponse, paymentResponse] = await Promise.all([
+        getRCMDashboardDataAPI(token, timeframe),
+        paymentAPI.getPaymentAnalytics({ timeframe })
+      ]);
+      
+      if (rcmResponse.success) {
+        setDashboardData(rcmResponse.data);
+      }
+      
+      if (paymentResponse.success) {
+        setPaymentData(paymentResponse.data);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -260,6 +272,7 @@ const RCMDashboard: React.FC = () => {
         <TabsList>
           <TabsTrigger value="revenue">Revenue Trends</TabsTrigger>
           <TabsTrigger value="claims">Claims Analysis</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="aging">A/R Aging</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
         </TabsList>
@@ -424,6 +437,145 @@ const RCMDashboard: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="payments" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Payment Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Processing Summary</CardTitle>
+                <CardDescription>
+                  Payment transactions and processing metrics
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {paymentData ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {paymentData.summary.successful_payments}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Successful Payments</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">
+                          {paymentData.summary.failed_payments}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Failed Payments</div>
+                      </div>
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm">Success Rate</span>
+                        <span className="font-semibold">{paymentData.summary.success_rate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-green-600 h-2 rounded-full"
+                          style={{ width: `${paymentData.summary.success_rate}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Gross Revenue:</span>
+                        <span className="font-semibold">{formatCurrency(paymentData.summary.total_revenue)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Processing Fees:</span>
+                        <span className="font-semibold text-red-600">-{formatCurrency(paymentData.summary.total_fees)}</span>
+                      </div>
+                      <div className="flex justify-between border-t pt-2">
+                        <span>Net Revenue:</span>
+                        <span className="font-bold text-green-600">{formatCurrency(paymentData.summary.net_revenue)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-muted-foreground">No payment data available</p>
+                    <Button variant="outline" size="sm" className="mt-2">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configure Payment Gateway
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment Methods Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Methods</CardTitle>
+                <CardDescription>
+                  Revenue breakdown by payment method
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {paymentData && paymentData.payment_methods.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={paymentData.payment_methods}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ payment_method, total_amount }) => 
+                          `${payment_method}: ${formatCurrency(total_amount)}`
+                        }
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="total_amount"
+                      >
+                        {paymentData.payment_methods.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No payment method data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Daily Payment Trends */}
+          {paymentData && paymentData.daily_trends.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Payment Trends</CardTitle>
+                <CardDescription>
+                  Payment volume and revenue by day
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={paymentData.daily_trends}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="payment_date" />
+                    <YAxis yAxisId="left" tickFormatter={(value) => `${value / 1000}K`} />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        name === 'daily_revenue' ? formatCurrency(value as number) : value,
+                        name === 'daily_revenue' ? 'Revenue' : 'Count'
+                      ]}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="daily_revenue" fill="#3B82F6" name="Daily Revenue" />
+                    <Line yAxisId="right" type="monotone" dataKey="payment_count" stroke="#10B981" name="Payment Count" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="aging" className="space-y-4">

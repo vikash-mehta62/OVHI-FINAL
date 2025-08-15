@@ -7,6 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -22,10 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -34,35 +33,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Search,
   Filter,
-  MoreHorizontal,
   Eye,
   Edit,
+  CreditCard,
+  FileText,
+  Calendar,
+  DollarSign,
+  User,
+  Building,
   RefreshCw,
   Download,
-  Upload,
   CheckCircle,
   XCircle,
   Clock,
-  AlertTriangle,
-  FileText,
-  Phone,
-  Mail
+  AlertTriangle
 } from 'lucide-react';
-import { getClaimsStatusAPI, updateClaimStatusAPI, bulkClaimStatusUpdateAPI, getClaimDetailsAPI } from '@/services/operations/rcm';
+import { getClaimsStatusAPI, getClaimDetailsAPI, updateClaimStatusAPI } from '@/services/operations/rcm';
+import PaymentForm from '@/components/payments/PaymentForm';
 
 interface Claim {
-  claim_id: string;
+  claim_id: number;
+  patient_id: number;
   patient_name: string;
   service_date: string;
   submission_date: string;
@@ -71,46 +66,37 @@ interface Claim {
   procedure_code: string;
   total_amount: number;
   paid_amount: number;
-  claim_md_tracking_id?: string;
-  payer_name?: string;
+  claim_md_tracking_id: string;
+  payer_name: string;
   processing_days: number;
   priority: string;
-}
-
-interface ClaimDetails {
-  claim: any;
-  history: any[];
-  diagnoses: any[];
-  recommendations: any[];
 }
 
 const ClaimsManagement: React.FC = () => {
   const { token } = useSelector((state: any) => state.auth);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedClaims, setSelectedClaims] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [selectedClaim, setSelectedClaim] = useState<ClaimDetails | null>(null);
-  const [showClaimDetails, setShowClaimDetails] = useState(false);
+  const [selectedClaim, setSelectedClaim] = useState<any>(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    search: '',
+    priority: 'all',
+    page: 1,
+    limit: 10
+  });
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0
+  });
 
   const fetchClaims = async () => {
     try {
       setLoading(true);
-      const response = await getClaimsStatusAPI(token, {
-        page: currentPage,
-        limit: 20,
-        status: statusFilter,
-        search: searchTerm,
-        priority: priorityFilter
-      });
-      
+      const response = await getClaimsStatusAPI(token, filters);
       if (response.success) {
         setClaims(response.data);
-        setTotalPages(response.pagination.totalPages);
+        setPagination(response.pagination);
       }
     } catch (error) {
       console.error('Error fetching claims:', error);
@@ -119,104 +105,57 @@ const ClaimsManagement: React.FC = () => {
     }
   };
 
-  const handleClaimSelection = (claimId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedClaims([...selectedClaims, claimId]);
-    } else {
-      setSelectedClaims(selectedClaims.filter(id => id !== claimId));
-    }
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedClaims(claims.map(claim => claim.claim_id));
-    } else {
-      setSelectedClaims([]);
-    }
-  };
-
-  const handleStatusUpdate = async (claimId: string, newStatus: number) => {
-    try {
-      const response = await updateClaimStatusAPI(token, claimId, {
-        status: newStatus,
-        notes: `Status updated to ${getStatusText(newStatus)}`
-      });
-      
-      if (response.success) {
-        fetchClaims();
-      }
-    } catch (error) {
-      console.error('Error updating claim status:', error);
-    }
-  };
-
-  const handleBulkStatusUpdate = async (newStatus: number) => {
-    if (selectedClaims.length === 0) return;
-    
-    try {
-      const response = await bulkClaimStatusUpdateAPI(token, {
-        claimIds: selectedClaims,
-        status: newStatus
-      });
-      
-      if (response.success) {
-        setSelectedClaims([]);
-        fetchClaims();
-      }
-    } catch (error) {
-      console.error('Error bulk updating claims:', error);
-    }
-  };
-
-  const handleViewClaimDetails = async (claimId: string) => {
+  const fetchClaimDetails = async (claimId: number) => {
     try {
       const response = await getClaimDetailsAPI(token, claimId);
       if (response.success) {
         setSelectedClaim(response.data);
-        setShowClaimDetails(true);
       }
     } catch (error) {
       console.error('Error fetching claim details:', error);
     }
   };
 
+  const handleStatusUpdate = async (claimId: number, newStatus: number) => {
+    try {
+      const response = await updateClaimStatusAPI(token, claimId, { status: newStatus });
+      if (response.success) {
+        fetchClaims(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error updating claim status:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchClaims();
+  }, [filters]);
+
   const getStatusBadge = (status: number, statusText: string) => {
     const statusConfig = {
-      0: { color: 'bg-gray-100 text-gray-800', icon: <FileText className="h-3 w-3" /> },
-      1: { color: 'bg-blue-100 text-blue-800', icon: <Clock className="h-3 w-3" /> },
-      2: { color: 'bg-green-100 text-green-800', icon: <CheckCircle className="h-3 w-3" /> },
-      3: { color: 'bg-red-100 text-red-800', icon: <XCircle className="h-3 w-3" /> },
-      4: { color: 'bg-yellow-100 text-yellow-800', icon: <RefreshCw className="h-3 w-3" /> }
+      0: { color: 'bg-gray-500', text: 'Draft' },
+      1: { color: 'bg-yellow-500', text: 'Submitted' },
+      2: { color: 'bg-green-500', text: 'Paid' },
+      3: { color: 'bg-red-500', text: 'Denied' },
+      4: { color: 'bg-blue-500', text: 'Appealed' }
     };
-
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig[0];
+    
+    const config = statusConfig[status as keyof typeof statusConfig] || { color: 'bg-gray-500', text: statusText };
     
     return (
-      <Badge className={`${config.color} flex items-center gap-1`}>
-        {config.icon}
-        {statusText}
+      <Badge className={`${config.color} text-white`}>
+        {config.text}
       </Badge>
     );
   };
 
-  const getPriorityBadge = (priority: string, processingDays: number) => {
-    if (processingDays > 30) {
-      return <Badge className="bg-red-100 text-red-800">Urgent</Badge>;
-    } else if (processingDays > 14) {
-      return <Badge className="bg-yellow-100 text-yellow-800">High</Badge>;
+  const getPriorityBadge = (priority: string, days: number) => {
+    if (days > 30) {
+      return <Badge className="bg-red-500 text-white">Urgent</Badge>;
+    } else if (days > 14) {
+      return <Badge className="bg-yellow-500 text-white">Normal</Badge>;
     }
-    return <Badge className="bg-green-100 text-green-800">Normal</Badge>;
-  };
-
-  const getStatusText = (status: number) => {
-    const statusMap = {
-      0: 'Draft',
-      1: 'Submitted',
-      2: 'Paid',
-      3: 'Denied',
-      4: 'Appealed'
-    };
-    return statusMap[status as keyof typeof statusMap] || 'Unknown';
+    return <Badge className="bg-green-500 text-white">Recent</Badge>;
   };
 
   const formatCurrency = (amount: number) => {
@@ -230,24 +169,27 @@ const ClaimsManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  useEffect(() => {
-    fetchClaims();
-  }, [currentPage, statusFilter, searchTerm, priorityFilter]);
+  const handlePaymentSuccess = (paymentData: any) => {
+    setShowPaymentForm(false);
+    setSelectedClaim(null);
+    fetchClaims(); // Refresh claims list
+    // Show success message
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Claims Management</h1>
+          <h2 className="text-2xl font-bold">Claims Management</h2>
           <p className="text-muted-foreground">
-            Track and manage claim submissions and status updates
+            Track and manage insurance claims and patient payments
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Upload className="h-4 w-4 mr-2" />
-            Import Claims
+          <Button variant="outline" size="sm" onClick={fetchClaims}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
@@ -256,22 +198,25 @@ const ClaimsManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters and Search */}
+      {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-64">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search by patient name, claim ID, or tracking ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
                   className="pl-10"
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select
+              value={filters.status}
+              onValueChange={(value) => setFilters({ ...filters, status: value, page: 1 })}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -284,132 +229,87 @@ const ClaimsManagement: React.FC = () => {
                 <SelectItem value="4">Appealed</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <Select
+              value={filters.priority}
+              onValueChange={(value) => setFilters({ ...filters, priority: value, page: 1 })}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Priority" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Priority</SelectItem>
                 <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
                 <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="recent">Recent</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={fetchClaims}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
           </div>
         </CardContent>
       </Card>
-
-      {/* Bulk Actions */}
-      {selectedClaims.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {selectedClaims.length} claim(s) selected
-              </span>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate(1)}
-                >
-                  Mark as Submitted
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate(2)}
-                >
-                  Mark as Paid
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleBulkStatusUpdate(3)}
-                >
-                  Mark as Denied
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Claims Table */}
       <Card>
         <CardHeader>
           <CardTitle>Claims List</CardTitle>
           <CardDescription>
-            Manage and track all claim submissions
+            {pagination.total} total claims found
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <RefreshCw className="h-6 w-6 animate-spin" />
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading claims...</span>
             </div>
           ) : (
-            <>
+            <div className="space-y-4">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedClaims.length === claims.length && claims.length > 0}
-                        onCheckedChange={handleSelectAll}
-                      />
-                    </TableHead>
                     <TableHead>Patient</TableHead>
                     <TableHead>Service Date</TableHead>
                     <TableHead>Procedure</TableHead>
+                    <TableHead>Payer</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Priority</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Payer</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {claims.map((claim) => (
                     <TableRow key={claim.claim_id}>
                       <TableCell>
-                        <Checkbox
-                          checked={selectedClaims.includes(claim.claim_id)}
-                          onCheckedChange={(checked) => 
-                            handleClaimSelection(claim.claim_id, checked as boolean)
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
                         <div>
                           <div className="font-medium">{claim.patient_name}</div>
                           <div className="text-sm text-muted-foreground">
-                            ID: {claim.claim_id}
+                            ID: {claim.patient_id}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{formatDate(claim.service_date)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                          {formatDate(claim.service_date)}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{claim.procedure_code}</div>
-                          {claim.claim_md_tracking_id && (
-                            <div className="text-sm text-muted-foreground">
-                              {claim.claim_md_tracking_id}
-                            </div>
-                          )}
+                          <div className="text-sm text-muted-foreground">
+                            {claim.processing_days} days
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Building className="h-4 w-4 mr-2 text-gray-400" />
+                          {claim.payer_name || 'Self Pay'}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">
-                            {formatCurrency(claim.total_amount)}
-                          </div>
+                          <div className="font-medium">{formatCurrency(claim.total_amount)}</div>
                           {claim.paid_amount > 0 && (
                             <div className="text-sm text-green-600">
                               Paid: {formatCurrency(claim.paid_amount)}
@@ -424,51 +324,49 @@ const ClaimsManagement: React.FC = () => {
                         {getPriorityBadge(claim.priority, claim.processing_days)}
                       </TableCell>
                       <TableCell>
-                        <span className={claim.processing_days > 30 ? 'text-red-600 font-medium' : ''}>
-                          {claim.processing_days}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{claim.payer_name || 'Self Pay'}</span>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
+                        <div className="flex items-center space-x-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchClaimDetails(claim.claim_id)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl">
+                              <DialogHeader>
+                                <DialogTitle>Claim Details</DialogTitle>
+                                <DialogDescription>
+                                  Detailed information for claim #{claim.claim_id}
+                                </DialogDescription>
+                              </DialogHeader>
+                              {selectedClaim && (
+                                <ClaimDetailsView 
+                                  claim={selectedClaim} 
+                                  onStatusUpdate={handleStatusUpdate}
+                                  onPaymentRequest={() => {
+                                    setShowPaymentForm(true);
+                                  }}
+                                />
+                              )}
+                            </DialogContent>
+                          </Dialog>
+                          
+                          {(claim.status === 1 || claim.status === 3) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedClaim(claim);
+                                setShowPaymentForm(true);
+                              }}
+                            >
+                              <CreditCard className="h-4 w-4" />
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => handleViewClaimDetails(claim.claim_id)}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(claim.claim_id, 1)}
-                            >
-                              Mark as Submitted
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(claim.claim_id, 2)}
-                            >
-                              Mark as Paid
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(claim.claim_id, 3)}
-                            >
-                              Mark as Denied
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusUpdate(claim.claim_id, 4)}
-                            >
-                              Mark as Appealed
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -476,184 +374,323 @@ const ClaimsManagement: React.FC = () => {
               </Table>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Showing {claims.length} of {totalPages * 20} claims
+                  Showing {((filters.page - 1) * filters.limit) + 1} to {Math.min(filters.page * filters.limit, pagination.total)} of {pagination.total} claims
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
+                    disabled={filters.page === 1}
+                    onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
                   >
                     Previous
                   </Button>
                   <span className="text-sm">
-                    Page {currentPage} of {totalPages}
+                    Page {filters.page} of {pagination.totalPages}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
+                    disabled={filters.page === pagination.totalPages}
+                    onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
                   >
                     Next
                   </Button>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Claim Details Dialog */}
-      <Dialog open={showClaimDetails} onOpenChange={setShowClaimDetails}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      {/* Payment Form Dialog */}
+      <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Claim Details</DialogTitle>
+            <DialogTitle>Process Payment</DialogTitle>
             <DialogDescription>
-              Detailed information about the selected claim
+              Process payment for {selectedClaim?.patient_name}
             </DialogDescription>
           </DialogHeader>
-          
           {selectedClaim && (
-            <div className="space-y-6">
-              {/* Claim Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Claim Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Claim ID:</span>
-                      <span className="font-medium">{selectedClaim.claim.claim_id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Patient:</span>
-                      <span className="font-medium">{selectedClaim.claim.patient_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Service Date:</span>
-                      <span>{formatDate(selectedClaim.claim.service_date)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Procedure:</span>
-                      <span>{selectedClaim.claim.procedure_code}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Amount:</span>
-                      <span className="font-medium">
-                        {formatCurrency(selectedClaim.claim.total_amount)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status:</span>
-                      {getStatusBadge(selectedClaim.claim.status, selectedClaim.claim.status_text)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Patient Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">DOB:</span>
-                      <span>{formatDate(selectedClaim.claim.dob)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Phone:</span>
-                      <span>{selectedClaim.claim.phone}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Email:</span>
-                      <span>{selectedClaim.claim.email}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Payer:</span>
-                      <span>{selectedClaim.claim.payer_name || 'Self Pay'}</span>
-                    </div>
-                    {selectedClaim.claim.policy_number && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Policy #:</span>
-                        <span>{selectedClaim.claim.policy_number}</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Claim History */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Claim History</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {selectedClaim.history.map((event, index) => (
-                      <div key={index} className="flex items-start space-x-3 pb-3 border-b last:border-b-0">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="font-medium">{event.action}</p>
-                              <p className="text-sm text-muted-foreground">{event.notes}</p>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {formatDate(event.date)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Recommendations */}
-              {selectedClaim.recommendations.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Recommendations</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {selectedClaim.recommendations.map((rec, index) => (
-                        <div key={index} className="flex items-start space-x-3">
-                          <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
-                          <div>
-                            <p className="font-medium">{rec.type}</p>
-                            <p className="text-sm text-muted-foreground">{rec.message}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline">
-                  <Phone className="h-4 w-4 mr-2" />
-                  Contact Patient
-                </Button>
-                <Button variant="outline">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Send Statement
-                </Button>
-                <Button>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Update Status
-                </Button>
-              </div>
-            </div>
+            <PaymentForm
+              patientId={selectedClaim.patient_id}
+              billingId={selectedClaim.claim_id}
+              amount={selectedClaim.total_amount - (selectedClaim.paid_amount || 0)}
+              description={`Payment for ${selectedClaim.procedure_code} - ${selectedClaim.patient_name}`}
+              onSuccess={handlePaymentSuccess}
+              onCancel={() => setShowPaymentForm(false)}
+            />
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};// ClaiPaymentGatewaySettingsm Details View Component
+interface ClaimDetailsViewProps {
+  claim: any;
+  onStatusUpdate: (claimId: number, status: number) => void;
+  onPaymentRequest: () => void;
+}
+
+const ClaimDetailsView: React.FC<ClaimDetailsViewProps> = ({ 
+  claim, 
+  onStatusUpdate, 
+  onPaymentRequest 
+}) => {
+  const [newStatus, setNewStatus] = useState(claim.claim.status);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Claim Summary */}
+      <div className="grid grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Claim Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Claim ID:</span>
+              <span className="font-medium">{claim.claim.claim_id}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tracking ID:</span>
+              <span className="font-medium">{claim.claim.claim_md_tracking_id || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Service Date:</span>
+              <span className="font-medium">{formatDate(claim.claim.service_date)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Submission Date:</span>
+              <span className="font-medium">{formatDate(claim.claim.submission_date)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Processing Days:</span>
+              <span className="font-medium">{claim.claim.processing_days} days</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Patient Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Name:</span>
+              <span className="font-medium">{claim.claim.patient_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Patient ID:</span>
+              <span className="font-medium">{claim.claim.patient_id}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">DOB:</span>
+              <span className="font-medium">{claim.claim.dob ? formatDate(claim.claim.dob) : 'N/A'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Phone:</span>
+              <span className="font-medium">{claim.claim.phone || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Email:</span>
+              <span className="font-medium">{claim.claim.email || 'N/A'}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Financial Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Financial Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {formatCurrency(claim.claim.total_amount)}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Amount</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {formatCurrency(claim.claim.paid_amount || 0)}
+              </div>
+              <div className="text-sm text-muted-foreground">Paid Amount</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {formatCurrency(claim.claim.total_amount - (claim.claim.paid_amount || 0))}
+              </div>
+              <div className="text-sm text-muted-foreground">Outstanding</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Procedure and Insurance */}
+      <div className="grid grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Procedure Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">CPT Code:</span>
+              <span className="font-medium">{claim.claim.procedure_code}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Description:</span>
+              <span className="font-medium">{claim.claim.procedure_description}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Units:</span>
+              <span className="font-medium">{claim.claim.code_units}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Unit Price:</span>
+              <span className="font-medium">{formatCurrency(claim.claim.unit_price)}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Insurance Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payer:</span>
+              <span className="font-medium">{claim.claim.payer_name || 'Self Pay'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Policy Number:</span>
+              <span className="font-medium">{claim.claim.policy_number || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Group Number:</span>
+              <span className="font-medium">{claim.claim.group_number || 'N/A'}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Diagnoses */}
+      {claim.diagnoses && claim.diagnoses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Diagnoses</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {claim.diagnoses.map((diagnosis: any, index: number) => (
+                <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="font-medium">{diagnosis.diagnosis_code}</span>
+                  <span className="text-sm text-muted-foreground">{diagnosis.diagnosis_description}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Claim History */}
+      {claim.history && claim.history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Claim History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {claim.history.map((entry: any, index: number) => (
+                <div key={index} className="flex items-start space-x-3 p-3 border rounded">
+                  <div className="flex-shrink-0">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium">{entry.action}</div>
+                        <div className="text-sm text-muted-foreground">{entry.notes}</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatDate(entry.date)} - {entry.user}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Actions */}
+      <div className="flex justify-between items-center pt-4 border-t">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium">Update Status:</span>
+            <Select value={newStatus.toString()} onValueChange={(value) => setNewStatus(parseInt(value))}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Draft</SelectItem>
+                <SelectItem value="1">Submitted</SelectItem>
+                <SelectItem value="2">Paid</SelectItem>
+                <SelectItem value="3">Denied</SelectItem>
+                <SelectItem value="4">Appealed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              onClick={() => onStatusUpdate(claim.claim.claim_id, newStatus)}
+              disabled={newStatus === claim.claim.status}
+            >
+              Update
+            </Button>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          {claim.claim.total_amount > (claim.claim.paid_amount || 0) && (
+            <Button onClick={onPaymentRequest}>
+              <CreditCard className="h-4 w-4 mr-2" />
+              Process Payment
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Recommendations */}
+      {claim.recommendations && claim.recommendations.length > 0 && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-1">
+              <div className="font-medium">Recommendations:</div>
+              {claim.recommendations.map((rec: string, index: number) => (
+                <div key={index} className="text-sm">• {rec}</div>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 };
