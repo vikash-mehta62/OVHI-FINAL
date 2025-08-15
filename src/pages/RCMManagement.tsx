@@ -23,6 +23,7 @@ import RCMDashboard from '@/components/rcm/RCMDashboard';
 import ClaimsManagement from '@/components/rcm/ClaimsManagement';
 import PaymentHistory from '@/components/payments/PaymentHistory';
 import PaymentGatewaySettings from '@/components/payments/PaymentGatewaySettings';
+import ARAgingManagement from '../components/rcm/ARAgingManagement';
 
 const RCMManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
