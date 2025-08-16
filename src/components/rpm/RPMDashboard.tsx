@@ -44,13 +44,15 @@ const RPMDashboard: React.FC<RPMDashboardProps> = ({ patientId, patientName }) =
   const loadRPMData = async () => {
     setLoading(true);
     try {
-      const patientDevices = rpmService.getPatientDevices(patientId);
-      const readings = rpmService.getPatientReadings(patientId).slice(-50);
-      const patientAlerts = rpmService.getPatientAlerts(patientId, true);
-      const analyticsData = rpmService.generateAnalytics(patientId);
+      const [patientDevices, readings, patientAlerts, analyticsData] = await Promise.all([
+        rpmService.getPatientDevices(patientId),
+        rpmService.getPatientReadings(patientId),
+        rpmService.getPatientAlerts(patientId, true),
+        rpmService.generateAnalytics(patientId)
+      ]);
 
       setDevices(patientDevices);
-      setRecentReadings(readings);
+      setRecentReadings(readings.slice(-50));
       setAlerts(patientAlerts);
       setAnalytics(analyticsData);
     } catch (error) {
@@ -61,10 +63,15 @@ const RPMDashboard: React.FC<RPMDashboardProps> = ({ patientId, patientName }) =
     }
   };
 
-  const acknowledgeAlert = (alertId: string) => {
-    if (rpmService.acknowledgeAlert(patientId, alertId, 'current-provider')) {
-      toast.success('Alert acknowledged');
-      loadRPMData();
+  const acknowledgeAlert = async (alertId: string) => {
+    try {
+      const success = await rpmService.acknowledgeAlert(patientId, alertId, 'current-provider');
+      if (success) {
+        toast.success('Alert acknowledged');
+        loadRPMData();
+      }
+    } catch (error) {
+      toast.error('Failed to acknowledge alert');
     }
   };
 

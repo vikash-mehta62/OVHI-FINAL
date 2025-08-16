@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
+// Import collections routes
+const collectionsRoutes = require('./collectionsRoutes');
+
 const {
   getRCMDashboardData,
   getClaimsStatus,
@@ -103,5 +106,8 @@ router.post('/era/payments/:era_detail_id/post', manualPostERAPayment);
 // Office Payments
 router.get('/payments/office', getOfficePayments);
 router.post('/payments/office/record', recordOfficePayment);
+
+// Collections Management
+router.use('/collections', collectionsRoutes);
 
 module.exports = router;

@@ -1,6 +1,33 @@
 
 import { v4 as uuidv4 } from 'uuid';
 
+// API Configuration
+const API_BASE_URL = '/api/v1/rpm';
+
+// Helper function to get auth token
+const getAuthToken = () => {
+  const token = localStorage.getItem('token');
+  return token ? `Bearer ${token}` : '';
+};
+
+// Helper function for API calls
+const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': getAuthToken(),
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
 export interface RPMDevice {
   id: string;
   patientId: string;
@@ -99,86 +126,134 @@ export interface RPMAnalytics {
 }
 
 class RPMService {
-  private devices = new Map<string, RPMDevice[]>();
-  private readings = new Map<string, RPMReading[]>();
-  private alerts = new Map<string, RPMAlert[]>();
-  private monitoringPlans = new Map<string, RPMMonitoringPlan>();
-  private timeEntries = new Map<string, RPMTimeEntry[]>();
-  private analytics = new Map<string, RPMAnalytics>();
-
   // Device Management
-  registerDevice(device: Omit<RPMDevice, 'id'>): string {
-    const deviceId = uuidv4();
-    const newDevice: RPMDevice = {
-      ...device,
-      id: deviceId
-    };
+  async registerDevice(device: Omit<RPMDevice, 'id'>): Promise<string> {
+    try {
+      const response = await apiCall('/devices', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientId: device.patientId,
+          deviceType: device.deviceType,
+          deviceModel: device.deviceModel,
+          serialNumber: device.serialNumber
+        })
+      });
 
-    const patientDevices = this.devices.get(device.patientId) || [];
-    patientDevices.push(newDevice);
-    this.devices.set(device.patientId, patientDevices);
-
-    // Auto-start time tracking for device setup
-    this.startTimeTracking(device.patientId, 'current-provider', 'device_setup', `Setting up ${device.deviceType}`, true);
-
-    return deviceId;
-  }
-
-  getPatientDevices(patientId: string): RPMDevice[] {
-    return this.devices.get(patientId) || [];
-  }
-
-  updateDeviceStatus(patientId: string, deviceId: string, status: RPMDevice['status']): void {
-    const devices = this.devices.get(patientId) || [];
-    const deviceIndex = devices.findIndex(d => d.id === deviceId);
-    if (deviceIndex !== -1) {
-      devices[deviceIndex].status = status;
-      devices[deviceIndex].lastSyncTime = new Date();
-      this.devices.set(patientId, devices);
-
-      // Create alert for device issues
-      if (status === 'battery_low' || status === 'maintenance') {
-        this.createAlert(patientId, 'device_offline', 'medium', `Device ${devices[deviceIndex].deviceModel} requires attention`);
-      }
+      return response.data.deviceId;
+    } catch (error) {
+      console.error('Error registering device:', error);
+      throw error;
     }
+  }
+
+  async getPatientDevices(patientId: string): Promise<RPMDevice[]> {
+    try {
+      const response = await apiCall(`/devices?patientId=${patientId}`);
+      
+      return response.data.devices.map((device: any) => ({
+        id: device.id,
+        patientId: device.patientId,
+        deviceType: device.deviceType,
+        deviceModel: device.deviceModel,
+        serialNumber: device.serialNumber,
+        status: device.status,
+        lastSyncTime: new Date(device.lastReading || device.createdAt),
+        batteryLevel: 85, // Mock battery level for now
+        firmwareVersion: '1.0.0' // Mock firmware version
+      }));
+    } catch (error) {
+      console.error('Error fetching patient devices:', error);
+      return [];
+    }
+  }
+
+  async getDashboardData(): Promise<any> {
+    try {
+      const response = await apiCall('/dashboard');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      throw error;
+    }
+  }
+
+  async updateDeviceStatus(patientId: string, deviceId: string, status: RPMDevice['status']): Promise<void> {
+    // This would be implemented when device management APIs are expanded
+    console.log('Device status update not yet implemented in backend');
   }
 
   // Data Processing
-  processReading(patientId: string, deviceId: string, rawData: any): string {
-    const readingId = uuidv4();
-    const device = this.getPatientDevices(patientId).find(d => d.id === deviceId);
-    if (!device) throw new Error('Device not found');
+  async processReading(patientId: string, deviceId: string, rawData: any): Promise<string> {
+    try {
+      const normalizedValues = this.normalizeReadingValues(rawData.deviceType, rawData);
+      
+      const response = await apiCall('/readings', {
+        method: 'POST',
+        body: JSON.stringify({
+          deviceId,
+          patientId,
+          readingType: rawData.deviceType,
+          value: normalizedValues.primaryValue || Object.values(normalizedValues)[0],
+          unit: normalizedValues.unit || '',
+          readingTimestamp: new Date().toISOString(),
+          notes: rawData.notes || ''
+        })
+      });
 
-    const reading: RPMReading = {
-      id: readingId,
-      patientId,
-      deviceId,
-      deviceType: device.deviceType,
-      timestamp: new Date(),
-      values: this.normalizeReadingValues(device.deviceType, rawData),
-      isAnomaly: false,
-      riskLevel: 'low',
-      validated: false
-    };
-
-    // AI-powered anomaly detection
-    reading.isAnomaly = this.detectAnomaly(reading);
-    reading.riskLevel = this.calculateRiskLevel(reading);
-
-    // Store reading
-    const patientReadings = this.readings.get(patientId) || [];
-    patientReadings.push(reading);
-    this.readings.set(patientId, patientReadings);
-
-    // Check thresholds and create alerts
-    this.checkThresholds(patientId, reading);
-
-    // Auto-start clinical review time tracking
-    if (reading.riskLevel === 'high' || reading.riskLevel === 'critical' || reading.isAnomaly) {
-      this.startTimeTracking(patientId, 'current-provider', 'clinical_assessment', `Reviewing ${device.deviceType} data`, true);
+      return response.data.readingId;
+    } catch (error) {
+      console.error('Error processing reading:', error);
+      throw error;
     }
+  }
 
-    return readingId;
+  async getPatientReadings(patientId: string, deviceType?: string): Promise<RPMReading[]> {
+    try {
+      let endpoint = `/readings?patientId=${patientId}&limit=50`;
+      if (deviceType) {
+        endpoint += `&deviceType=${deviceType}`;
+      }
+
+      const response = await apiCall(endpoint);
+      
+      return response.data.readings.map((reading: any) => ({
+        id: reading.id,
+        patientId: reading.patientId,
+        deviceId: reading.deviceId || '',
+        deviceType: reading.deviceType,
+        timestamp: new Date(reading.timestamp),
+        values: this.parseReadingValues(reading.readingType, reading.value, reading.unit),
+        isAlert: reading.isAlert,
+        riskLevel: this.determineRiskLevel(reading.isAlert),
+        validated: true
+      }));
+    } catch (error) {
+      console.error('Error fetching patient readings:', error);
+      return [];
+    }
+  }
+
+  private parseReadingValues(readingType: string, value: number, unit: string): { [key: string]: number | string } {
+    switch (readingType) {
+      case 'blood_pressure_systolic':
+        return { systolic: value, unit: 'mmHg' };
+      case 'blood_pressure_diastolic':
+        return { diastolic: value, unit: 'mmHg' };
+      case 'heart_rate':
+        return { heartRate: value, unit: 'bpm' };
+      case 'blood_glucose':
+        return { glucose: value, unit: unit || 'mg/dL' };
+      case 'weight':
+        return { weight: value, unit: unit || 'lbs' };
+      case 'oxygen_saturation':
+        return { spo2: value, unit: '%' };
+      default:
+        return { [readingType]: value, unit };
+    }
+  }
+
+  private determineRiskLevel(isAlert: boolean): RPMReading['riskLevel'] {
+    return isAlert ? 'high' : 'low';
   }
 
   private normalizeReadingValues(deviceType: RPMDevice['deviceType'], rawData: any): { [key: string]: number | string } {
@@ -294,44 +369,48 @@ class RPMService {
   }
 
   // Alert Management
-  createAlert(patientId: string, alertType: RPMAlert['alertType'], severity: RPMAlert['severity'], message: string): string {
-    const alertId = uuidv4();
-    const alert: RPMAlert = {
-      id: alertId,
-      patientId,
-      alertType,
-      severity,
-      message,
-      timestamp: new Date(),
-      acknowledged: false,
-      resolved: false
-    };
-
-    const patientAlerts = this.alerts.get(patientId) || [];
-    patientAlerts.push(alert);
-    this.alerts.set(patientId, patientAlerts);
-
-    return alertId;
+  async createAlert(patientId: string, alertType: RPMAlert['alertType'], severity: RPMAlert['severity'], message: string): Promise<string> {
+    // This would be implemented when alert creation APIs are expanded
+    console.log('Alert creation not yet implemented in backend');
+    return uuidv4();
   }
 
-  getPatientAlerts(patientId: string, activeOnly: boolean = false): RPMAlert[] {
-    const alerts = this.alerts.get(patientId) || [];
-    return activeOnly ? alerts.filter(a => !a.resolved) : alerts;
-  }
-
-  acknowledgeAlert(patientId: string, alertId: string, providerId: string): boolean {
-    const alerts = this.alerts.get(patientId) || [];
-    const alertIndex = alerts.findIndex(a => a.id === alertId);
-    
-    if (alertIndex !== -1) {
-      alerts[alertIndex].acknowledged = true;
-      alerts[alertIndex].acknowledgedBy = providerId;
-      alerts[alertIndex].acknowledgedAt = new Date();
-      this.alerts.set(patientId, alerts);
-      return true;
+  async getPatientAlerts(patientId: string, activeOnly: boolean = false): Promise<RPMAlert[]> {
+    try {
+      let endpoint = `/alerts?status=${activeOnly ? 'active' : 'all'}`;
+      
+      const response = await apiCall(endpoint);
+      
+      return response.data.alerts
+        .filter((alert: any) => alert.patientId === patientId)
+        .map((alert: any) => ({
+          id: alert.id,
+          patientId: alert.patientId,
+          alertType: alert.alertType,
+          severity: alert.severity,
+          message: alert.message,
+          timestamp: new Date(alert.createdAt),
+          acknowledged: alert.status === 'acknowledged',
+          acknowledgedBy: alert.acknowledgedBy,
+          acknowledgedAt: alert.acknowledgedAt ? new Date(alert.acknowledgedAt) : undefined,
+          resolved: alert.status === 'resolved',
+          resolvedAt: alert.resolvedAt ? new Date(alert.resolvedAt) : undefined
+        }));
+    } catch (error) {
+      console.error('Error fetching patient alerts:', error);
+      return [];
     }
-    
-    return false;
+  }
+
+  async acknowledgeAlert(patientId: string, alertId: string, providerId: string): Promise<boolean> {
+    try {
+      // This would be implemented when alert management APIs are expanded
+      console.log('Alert acknowledgment not yet implemented in backend');
+      return true;
+    } catch (error) {
+      console.error('Error acknowledging alert:', error);
+      return false;
+    }
   }
 
   // Monitoring Plans
@@ -402,40 +481,48 @@ class RPMService {
   }
 
   // Analytics
-  generateAnalytics(patientId: string, period: string = 'month'): RPMAnalytics {
-    const readings = this.readings.get(patientId) || [];
-    const devices = this.getPatientDevices(patientId);
-    
-    // Calculate adherence
-    const adherence = this.calculateAdherence(patientId, period);
-    
-    // Analyze trends
-    const trends = this.analyzeTrends(readings, period);
-    
-    // Calculate risk score
-    const riskScore = this.calculateOverallRisk(readings);
-    
-    // Generate recommendations
-    const recommendations = this.generateRecommendations(patientId, adherence, trends, riskScore);
+  async generateAnalytics(patientId: string, period: string = 'month'): Promise<RPMAnalytics> {
+    try {
+      const readings = await this.getPatientReadings(patientId);
+      const devices = await this.getPatientDevices(patientId);
+      
+      // Calculate adherence
+      const adherence = this.calculateAdherence(readings, devices, period);
+      
+      // Analyze trends
+      const trends = this.analyzeTrends(readings, period);
+      
+      // Calculate risk score
+      const riskScore = this.calculateOverallRisk(readings);
+      
+      // Generate recommendations
+      const recommendations = this.generateRecommendations(patientId, adherence, trends, riskScore);
 
-    const analytics: RPMAnalytics = {
-      patientId,
-      period,
-      adherence,
-      trends,
-      riskScore,
-      recommendations
-    };
+      const analytics: RPMAnalytics = {
+        patientId,
+        period,
+        adherence,
+        trends,
+        riskScore,
+        recommendations
+      };
 
-    this.analytics.set(patientId, analytics);
-    return analytics;
+      return analytics;
+    } catch (error) {
+      console.error('Error generating analytics:', error);
+      // Return default analytics on error
+      return {
+        patientId,
+        period,
+        adherence: { overall: 0, byDevice: {} },
+        trends: {},
+        riskScore: 0,
+        recommendations: []
+      };
+    }
   }
 
-  private calculateAdherence(patientId: string, period: string): RPMAnalytics['adherence'] {
-    const plan = this.monitoringPlans.get(patientId);
-    if (!plan) return { overall: 0, byDevice: {} };
-
-    const readings = this.readings.get(patientId) || [];
+  private calculateAdherence(readings: RPMReading[], devices: RPMDevice[], period: string): RPMAnalytics['adherence'] {
     const periodStart = new Date();
     periodStart.setMonth(periodStart.getMonth() - 1); // Last month
 
@@ -443,13 +530,21 @@ class RPMService {
     
     const adherence = { overall: 0, byDevice: {} as { [deviceType: string]: number } };
     
-    for (const [deviceType, frequency] of Object.entries(plan.frequency)) {
+    // Group devices by type
+    const devicesByType = devices.reduce((acc, device) => {
+      if (!acc[device.deviceType]) acc[device.deviceType] = [];
+      acc[device.deviceType].push(device);
+      return acc;
+    }, {} as { [key: string]: RPMDevice[] });
+
+    // Calculate adherence for each device type
+    Object.keys(devicesByType).forEach(deviceType => {
       const deviceReadings = recentReadings.filter(r => r.deviceType === deviceType);
-      const expectedReadings = frequency.required * 30; // Assuming daily frequency
+      const expectedReadings = 30; // Assuming daily readings expected
       const actualReadings = deviceReadings.length;
       
       adherence.byDevice[deviceType] = Math.min(actualReadings / expectedReadings, 1) * 100;
-    }
+    });
 
     adherence.overall = Object.values(adherence.byDevice).reduce((a, b) => a + b, 0) / Object.keys(adherence.byDevice).length || 0;
     

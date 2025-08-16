@@ -529,7 +529,7 @@ const getCollectionsWorkflow = async (req, res) => {
         cb.patient_id as account_id,
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
         up.phone,
-        up.email,
+        up.work_email,
         COALESCE(SUM(cc.price * cb.code_units), 0) as balance,
         MAX(cb.created) as last_service_date,
         DATEDIFF(CURDATE(), MAX(cb.created)) as days_outstanding,
@@ -650,7 +650,7 @@ const getClaimDetails = async (req, res) => {
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
         up.dob,
         up.phone,
-        up.email,
+        up.work_email,
         cb.created as service_date,
         cb.billed_date as submission_date,
         cb.status,
@@ -1203,7 +1203,7 @@ const getARAccountDetails = async (req, res) => {
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
         up.dob,
         up.phone,
-        up.email,
+        up.work_email,
         up.address,
         up.city,
         up.state,
@@ -1325,7 +1325,7 @@ const initiateAutomatedFollowUp = async (req, res) => {
       SELECT 
         cb.patient_id,
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
-        up.email,
+        up.work_email,
         up.phone,
         COALESCE(SUM(cc.price * cb.code_units), 0) as balance
       FROM cpt_billing cb
@@ -1425,7 +1425,7 @@ const setupPaymentPlan = async (req, res) => {
       SELECT 
         cb.patient_id,
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
-        up.email,
+        up.work_email,
         up.phone,
         COALESCE(SUM(cc.price * cb.code_units), 0) as current_balance
       FROM cpt_billing cb

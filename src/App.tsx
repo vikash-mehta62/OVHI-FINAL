@@ -80,6 +80,30 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import RCMManagement from "./pages/RCMManagement";
 
+// RCM Components
+import DenialManagement from "./components/rcm/DenialManagement";
+import CollectionsManagement from "./components/rcm/CollectionsManagement";
+import RCMAnalyticsDashboard from "./components/rcm/RCMAnalyticsDashboard";
+
+// Settings Components
+import PrivacySettings from "./components/settings/PrivacySettings";
+import NotificationSettings from "./components/settings/NotificationSettings";
+import RegulatoryComplianceSettings from "./components/settings/RegulatoryComplianceSettings";
+import DocumentNumberingSettings from "./components/settings/DocumentNumberingSettings";
+
+// Analytics Components
+import FinancialAnalytics from "./components/analytics/FinancialAnalytics";
+import OperationalAnalytics from "./components/analytics/OperationalAnalytics";
+import CustomReportBuilder from "./components/analytics/CustomReportBuilder";
+
+// Admin Components (to be created)
+import IntegrationManagement from "./components/admin/IntegrationManagement";
+import AuditLogViewer from "./components/admin/AuditLogViewer";
+
+// Care Management Components
+import CCMDashboard from "./components/ccm/CCMDashboard";
+import RPMDashboard from "./components/rpm/RPMDashboard";
+
 const queryClient = new QueryClient();
 
 const App = () => {
@@ -246,13 +270,33 @@ const App = () => {
                       element={<BillingAutomation />}
                     />
                     <Route path="payment/:invoiceId" element={<Payment />} />
-                    <Route
-                      path="doctor-/provider/settings"
-                      element={<DoctorSettings />}
-                    />
-                    <Route path="/provider/settings" element={<Settings />} />
-                    {/* <Route path="ccm" element={<ChronicCareManagement />} /> */}
-                    {/* <Route path="pcm" element={<PCMModule />} /> */}
+                    <Route path="doctor-settings" element={<DoctorSettings />} />
+                    <Route path="settings" element={<Settings />} />
+                    
+                    {/* RCM Module Routes */}
+                    <Route path="rcm/denials" element={<DenialManagement />} />
+                    <Route path="rcm/collections" element={<CollectionsManagement />} />
+                    <Route path="rcm/analytics" element={<RCMAnalyticsDashboard />} />
+                    
+                    {/* Settings Module Routes */}
+                    <Route path="settings/privacy" element={<PrivacySettings />} />
+                    <Route path="settings/notifications" element={<NotificationSettings />} />
+                    <Route path="settings/compliance" element={<RegulatoryComplianceSettings />} />
+                    <Route path="settings/documents" element={<DocumentNumberingSettings />} />
+                    
+                    {/* Analytics Module Routes */}
+                    <Route path="analytics/financial" element={<FinancialAnalytics />} />
+                    <Route path="analytics/operational" element={<OperationalAnalytics />} />
+                    <Route path="analytics/custom-reports" element={<CustomReportBuilder />} />
+                    
+                    {/* Admin Module Routes */}
+                    <Route path="admin/integrations" element={<IntegrationManagement />} />
+                    <Route path="admin/audit" element={<AuditLogViewer />} />
+                    
+                    {/* Care Management Routes */}
+                    <Route path="ccm" element={<CCMDashboard />} />
+                    <Route path="pcm" element={<PCMModule />} />
+                    <Route path="rpm" element={<RPMDashboard />} />
                   </Route>
                 </>
               )}

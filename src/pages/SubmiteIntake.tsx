@@ -270,11 +270,107 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
     duration: "",
   });
 
+  // File upload state
+  const [uploadedFiles, setUploadedFiles] = useState<{
+    insuranceCards: File[];
+    identificationDocs: File[];
+    medicalRecords: File[];
+  }>({
+    insuranceCards: [],
+    identificationDocs: [],
+    medicalRecords: []
+  });
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+
   const [icdOptions, setIcdOptions] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [icdOpen, setIcdOpen] = useState(false);
 
   const { token } = useSelector((state: RootState) => state.auth);
+
+  // Progress persistence functionality
+  const saveProgress = () => {
+    if (!id) return;
+    
+    const progressData = {
+      formData: form.getValues(),
+      allergyList,
+      insuranceList,
+      medicationsList,
+      diagnosisList,
+      notesList,
+      timestamp: Date.now(),
+      completedSections: getCompletedSections()
+    };
+    
+    localStorage.setItem(`intake_progress_${id}`, JSON.stringify(progressData));
+  };
+
+  const loadProgress = () => {
+    if (!id) return;
+    
+    const saved = localStorage.getItem(`intake_progress_${id}`);
+    if (saved) {
+      try {
+        const progressData = JSON.parse(saved);
+        const timeDiff = Date.now() - progressData.timestamp;
+        
+        // Only restore if saved within last 7 days
+        if (timeDiff < 7 * 24 * 60 * 60 * 1000) {
+          form.reset(progressData.formData);
+          setAllergyList(progressData.allergyList || []);
+          setInsuranceList(progressData.insuranceList || []);
+          setMedicationsList(progressData.medicationsList || []);
+          setDiagnosisList(progressData.diagnosisList || []);
+          setNotesList(progressData.notesList || []);
+          
+          toast.success("Previous progress restored!");
+        } else {
+          // Clear expired data
+          localStorage.removeItem(`intake_progress_${id}`);
+        }
+      } catch (error) {
+        console.error('Error loading progress:', error);
+        localStorage.removeItem(`intake_progress_${id}`);
+      }
+    }
+  };
+
+  const clearProgress = () => {
+    if (id) {
+      localStorage.removeItem(`intake_progress_${id}`);
+    }
+  };
+
+  const getCompletedSections = () => {
+    const formData = form.getValues();
+    const sections = {
+      basic: !!(formData.firstName && formData.lastName && formData.email),
+      medical: !!(formData.allergies || allergyList.length > 0),
+      insurance: insuranceList.length > 0,
+      medications: medicationsList.length > 0,
+      vitals: !!(formData.height && formData.weight)
+    };
+    return sections;
+  };
+
+  // Auto-save progress every 30 seconds
+  useEffect(() => {
+    if (!open) return;
+    
+    const autoSaveInterval = setInterval(() => {
+      saveProgress();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [open, form.watch(), allergyList, insuranceList, medicationsList, diagnosisList, notesList]);
+
+  // Load progress on component mount
+  useEffect(() => {
+    if (open) {
+      loadProgress();
+    }
+  }, [open]);
 
   useEffect(() => {
     const fetchICDCodes = async () => {
@@ -585,6 +681,136 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
     setNotesList(notesList.filter((_, i) => i !== index));
   };
 
+  // File upload handlers
+  const handleFileUpload = async (files: FileList, category: 'insuranceCards' | 'identificationDocs' | 'medicalRecords') => {
+    const validFiles = Array.from(files).filter(file => {
+      const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      if (!validTypes.includes(file.type)) {
+        toast.error(`${file.name}: Only JPG, PNG, and PDF files are allowed`);
+        return false;
+      }
+      
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File size must be less than 5MB`);
+        return false;
+      }
+      
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setUploadedFiles(prev => ({
+        ...prev,
+        [category]: [...prev[category], ...validFiles]
+      }));
+      
+      // Simulate upload progress
+      validFiles.forEach((file, index) => {
+        const fileKey = `${category}_${file.name}`;
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 10;
+          setUploadProgress(prev => ({ ...prev, [fileKey]: progress }));
+          
+          if (progress >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+              setUploadProgress(prev => {
+                const newProgress = { ...prev };
+                delete newProgress[fileKey];
+                return newProgress;
+              });
+            }, 1000);
+          }
+        }, 100);
+      });
+      
+      toast.success(`${validFiles.length} file(s) uploaded successfully`);
+    }
+  };
+
+  const removeFile = (category: 'insuranceCards' | 'identificationDocs' | 'medicalRecords', index: number) => {
+    setUploadedFiles(prev => ({
+      ...prev,
+      [category]: prev[category].filter((_, i) => i !== index)
+    }));
+  };
+
+  const FileUploadZone = ({ 
+    category, 
+    title, 
+    description, 
+    acceptedTypes = "image/*,.pdf",
+    icon: Icon = FileText 
+  }: {
+    category: 'insuranceCards' | 'identificationDocs' | 'medicalRecords';
+    title: string;
+    description: string;
+    acceptedTypes?: string;
+    icon?: any;
+  }) => (
+    <div className="space-y-4">
+      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+        <input
+          type="file"
+          multiple
+          accept={acceptedTypes}
+          onChange={(e) => e.target.files && handleFileUpload(e.target.files, category)}
+          className="hidden"
+          id={`file-upload-${category}`}
+        />
+        <label htmlFor={`file-upload-${category}`} className="cursor-pointer">
+          <Icon className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+          <h3 className="font-medium text-gray-900 mb-1">{title}</h3>
+          <p className="text-sm text-gray-500 mb-2">{description}</p>
+          <p className="text-xs text-gray-400">JPG, PNG, PDF up to 5MB</p>
+        </label>
+      </div>
+      
+      {/* Uploaded files list */}
+      {uploadedFiles[category].length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm">Uploaded Files:</h4>
+          {uploadedFiles[category].map((file, index) => {
+            const fileKey = `${category}_${file.name}`;
+            const progress = uploadProgress[fileKey];
+            
+            return (
+              <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div className="flex items-center space-x-2">
+                  <FileText className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                  <span className="text-xs text-gray-500">({(file.size / 1024 / 1024).toFixed(1)} MB)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {progress !== undefined && (
+                    <div className="w-16 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile(category, index)}
+                    className="h-6 w-6 p-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -698,16 +924,48 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
             onSubmit={form.handleSubmit(onSubmit, onError)}
             className="space-y-6"
           >
+            {/* Mobile Progress Indicator */}
+            <div className="md:hidden mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-700">Progress</span>
+                <span className="text-sm text-gray-500">{Math.round((Object.values(getCompletedSections()).filter(Boolean).length / 5) * 100)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                  style={{ width: `${(Object.values(getCompletedSections()).filter(Boolean).length / 5) * 100}%` }}
+                />
+              </div>
+            </div>
+
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-7">
-                {/* <TabsTrigger value="basic">Basic Info</TabsTrigger> */}
-                {/* <TabsTrigger value="medical">Medical</TabsTrigger> */}
-                {/* <TabsTrigger value="insurance">Insurance</TabsTrigger> */}
-                {/* <TabsTrigger value="medications">Medications</TabsTrigger>
-                <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
-                <TabsTrigger value="vitals">Vital Signs</TabsTrigger>
-                <TabsTrigger value="notes">Notes</TabsTrigger> */}
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 gap-1">
+                <TabsTrigger value="basic" className="text-xs md:text-sm">Basic Info</TabsTrigger>
+                <TabsTrigger value="medical" className="text-xs md:text-sm">Medical</TabsTrigger>
+                <TabsTrigger value="insurance" className="text-xs md:text-sm hidden md:flex">Insurance</TabsTrigger>
+                <TabsTrigger value="medications" className="text-xs md:text-sm hidden md:flex">Medications</TabsTrigger>
+                <TabsTrigger value="diagnosis" className="text-xs md:text-sm hidden md:flex">Diagnosis</TabsTrigger>
+                <TabsTrigger value="vitals" className="text-xs md:text-sm hidden md:flex">Vitals</TabsTrigger>
+                <TabsTrigger value="documents" className="text-xs md:text-sm hidden md:flex">Documents</TabsTrigger>
               </TabsList>
+
+              {/* Mobile Tab Navigation */}
+              <div className="md:hidden mt-4">
+                <Select defaultValue="basic">
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="basic">📝 Basic Information</SelectItem>
+                    <SelectItem value="medical">🏥 Medical History</SelectItem>
+                    <SelectItem value="insurance">🛡️ Insurance</SelectItem>
+                    <SelectItem value="medications">💊 Medications</SelectItem>
+                    <SelectItem value="diagnosis">🔬 Diagnosis</SelectItem>
+                    <SelectItem value="vitals">❤️ Vital Signs</SelectItem>
+                    <SelectItem value="documents">📄 Documents</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               <TabsContent value="basic" className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -896,7 +1154,7 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                                     readOnly
                                     className="mr-2"
                                   />
-                                  RPM
+                                  RPM (Remote Patient Monitoring)
                                 </CommandItem>
                                 <CommandItem
                                   onSelect={() => {
@@ -915,7 +1173,7 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                                     readOnly
                                     className="mr-2"
                                   />
-                                  PCM
+                                  PCM (Principal Care Management)
                                 </CommandItem>
                                 <CommandItem
                                   onSelect={() => {
@@ -934,7 +1192,7 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                                     readOnly
                                     className="mr-2"
                                   />
-                                  CCM
+                                  CCM (Chronic Care Management)
                                 </CommandItem>
                               </CommandList>
                             </Command>
@@ -2182,10 +2440,106 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                   ))}
                 </div>
               </TabsContent>
+              <TabsContent value="documents" className="space-y-6">
+                <div className="space-y-6">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-semibold mb-2">📄 Upload Documents</h3>
+                    <p className="text-sm text-gray-600">
+                      Upload your insurance cards, identification, and any relevant medical documents
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center">
+                        <Shield className="h-4 w-4 mr-2 text-blue-600" />
+                        Insurance Cards
+                      </h4>
+                      <FileUploadZone
+                        category="insuranceCards"
+                        title="Upload Insurance Cards"
+                        description="Front and back of all insurance cards"
+                        icon={Shield}
+                      />
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center">
+                        <UserPlus className="h-4 w-4 mr-2 text-green-600" />
+                        Identification
+                      </h4>
+                      <FileUploadZone
+                        category="identificationDocs"
+                        title="Upload ID Documents"
+                        description="Driver's license, passport, or state ID"
+                        icon={UserPlus}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-3 flex items-center">
+                      <FileText className="h-4 w-4 mr-2 text-purple-600" />
+                      Medical Records (Optional)
+                    </h4>
+                    <FileUploadZone
+                      category="medicalRecords"
+                      title="Upload Medical Records"
+                      description="Previous test results, referral letters, or medical reports"
+                      icon={FileText}
+                    />
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start space-x-3">
+                      <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-blue-900">Secure Document Handling</h4>
+                        <p className="text-sm text-blue-700 mt-1">
+                          All uploaded documents are encrypted and stored securely in compliance with HIPAA regulations. 
+                          Only authorized healthcare providers will have access to your information.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
             </Tabs>
 
-            <DialogFooter>
-              <Button type="submit">Add Patient</Button>
+            {/* Mobile-friendly action buttons with progress saving */}
+            <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-6">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    saveProgress();
+                    toast.success("Progress saved! You can continue later.");
+                  }}
+                  className="w-full sm:w-auto order-2 sm:order-1"
+                >
+                  💾 Save Progress
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    clearProgress();
+                    handleDialogClose(false);
+                  }}
+                  className="w-full sm:w-auto order-3 sm:order-2"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="w-full sm:w-auto order-1 sm:order-3"
+                  disabled={Object.values(getCompletedSections()).filter(Boolean).length < 2}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Complete Registration
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </Form>

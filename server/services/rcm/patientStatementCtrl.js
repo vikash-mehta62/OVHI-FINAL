@@ -22,7 +22,7 @@ const generatePatientStatement = async (req, res) => {
         up.lastname,
         up.dob,
         up.phone,
-        up.email,
+        up.work_email,
         up.address,
         up.city,
         up.state,
@@ -47,7 +47,7 @@ const generatePatientStatement = async (req, res) => {
         up.firstname as provider_firstname,
         up.lastname as provider_lastname,
         up.phone as provider_phone,
-        up.email as provider_email,
+        up.work_email as provider_email,
         up.address as provider_address,
         up.city as provider_city,
         up.state as provider_state,
@@ -445,7 +445,7 @@ const sendPatientStatement = async (req, res) => {
       SELECT 
         ps.*,
         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
-        up.email as patient_email
+        up.work_email as patient_email
       FROM patient_statements ps
       LEFT JOIN user_profiles up ON up.fk_userid = ps.patient_id
       WHERE ps.id = ? AND ps.provider_id = ?

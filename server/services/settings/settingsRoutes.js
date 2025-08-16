@@ -306,4 +306,10 @@ router.get("/get-pdf-header", settingsCtrl.getPdfHeaderByProvider);
 // Enhanced Settings Routes
 router.use('/enhanced', require('./enhancedSettingsRoutes'));
 
+// Document Numbering Routes
+router.use('/document-numbering', require('./documentNumberingRoutes'));
+
+// Regulatory Compliance Routes
+router.use('/regulatory', require('./regulatoryComplianceRoutes'));
+
 module.exports = router;

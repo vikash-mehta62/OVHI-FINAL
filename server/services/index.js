@@ -5,6 +5,8 @@ const { default: axios } = require("axios")
 // Import all route files
 const authRoutes = require('./auth/authRoute');
 const patientRoutes = require('./patients/patientRoute');
+const enhancedPatientRoutes = require('./patients/enhancedPatientRoutes');
+const patientMedicalRecordsRoutes = require('./patients/patientMedicalRecordsRoutes');
 const settingsRoutes = require('./settings/settingsRoutes');
 const providerRoutes = require('./providers/providerRoutes');
 const ringCentralRoute = require('./ring-central/ringCentralRoute');
@@ -24,6 +26,8 @@ const thirdPartyApiRoutes = require("./third-party-apis/api-routes");
 const generalRoutes = require("./general-apis/generalRoutes");
 const rcmRoutes = require("./rcm/rcmRoutes");
 const paymentRoutes = require("./payments/paymentRoutes");
+const analyticsRoutes = require("./analytics/analyticsRoutes");
+const rpmRoutes = require("./rpm/rpmRoutes");
 
 
 
@@ -34,6 +38,8 @@ router.use('/aws', awsRoute);
 
 // Protected routes (require auth)
 router.use('/patient', verifyToken, patientRoutes);
+router.use('/patients', verifyToken, enhancedPatientRoutes);
+router.use('/patients', verifyToken, require('./patients/patientPortalRoutes'));
 router.use('/intake', require("./intake/intakeRoute"));
 router.use('/settings', verifyToken, settingsRoutes);
 router.use('/physician', verifyToken, providerRoutes);
@@ -59,6 +65,12 @@ router.use("/rcm", verifyToken, rcmRoutes);
 
 // Payment Routes
 router.use("/payments", verifyToken, paymentRoutes);
+
+// Analytics Routes
+router.use("/analytics", verifyToken, analyticsRoutes);
+
+// RPM Routes
+router.use("/rpm", verifyToken, rpmRoutes);
 
 // Smart Template Routes
 router.use("/encounters/smart-templates", verifyToken, require("./encounters/smartTemplateRoutes"));

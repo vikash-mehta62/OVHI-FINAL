@@ -30,6 +30,9 @@ import {
   FileSignature,
   CreditCard,
   DollarSign,
+  AlertCircle,
+  BarChart3,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,18 +54,46 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
     { name: "Dashboard", path: "/provider/dashboard", icon: LayoutDashboard },
     { name: "Patients", path: "/provider/patients", icon: Users },
     { name: "Appointments", path: "/provider/appointments", icon: Calendar },
+    { name: "Encounters", path: "/provider/encounters", icon: Stethoscope },
     { name: "Telehealth", path: "/provider/telehealth", icon: Video },
-    // { name: "Monitoring", path: "/provider/monitoring", icon: HeartPulse },
     {
       name: "Patient Monitoring",
       path: "/provider/patient-monitoring",
       icon: Activity,
     },
     { name: "Messages", path: "/provider/messages", icon: MessageSquare },
-    // { name: "Patient Portal", path: "/provider/portal", icon: ShieldAlert },
+  ];
+
+  const billingItems = [
+    { name: "Billing", path: "/provider/billing", icon: Receipt },
+    { 
+      name: "RCM Management", 
+      path: "/provider/rcm", 
+      icon: CreditCard,
+      badge: "Enhanced"
+    },
+  ];
+
+  const rcmSubItems = [
+    { name: "RCM Dashboard", path: "/provider/rcm", icon: LayoutDashboard },
+    { name: "Denials", path: "/provider/rcm/denials", icon: AlertCircle },
+    { name: "Collections", path: "/provider/rcm/collections", icon: DollarSign },
+    { name: "Analytics", path: "/provider/rcm/analytics", icon: Activity },
+  ];
+
+  const analyticsItems = [
+    { name: "Analytics", path: "/provider/analytics", icon: Activity },
     { name: "Reports", path: "/provider/reports", icon: FileText },
+  ];
+
+  const careManagementItems = [
+    { name: "CCM", path: "/provider/ccm", icon: HeartPulse },
+    { name: "PCM", path: "/provider/pcm", icon: UserCog },
+    { name: "RPM", path: "/provider/rpm", icon: Activity },
+  ];
+
+  const clinicalItems = [
     { name: "Medications", path: "/provider/medications", icon: Pill },
-    { name: "Encounters", path: "/provider/encounters", icon: Stethoscope },
     { name: "Patient Intake", path: "/provider/intake", icon: ClipboardList },
     { name: "Patient Beds", path: "/provider/patient-beds", icon: Bed },
     {
@@ -70,20 +101,15 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
       path: "/provider/patient-consent",
       icon: FileSignature,
     },
-    { name: "Billing", path: "/provider/billing", icon: Receipt },
-    { 
-      name: "RCM Management", 
-      path: "/provider/rcm", 
-      icon: CreditCard,
-      badge: "New"
-    },
+  ];
+
+  const settingsItems = [
     {
       name: "Doctor Settings",
       path: "/provider/doctor-settings",
       icon: UserCog,
     },
-    // { name: "CCM", path: "/provider/ccm", icon: UserCog },
-    // { name: "PCM", path: "/provider/pcm", icon: UserCog },
+    { name: "Settings", path: "/provider/settings", icon: Settings },
   ];
 
   const handleBackdropClick = () => {
@@ -177,7 +203,37 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4 max-h-[calc(100vh-130px)]">
           <nav className="grid gap-1 px-2">
+            {/* Core Navigation */}
             {navItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Billing & RCM Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Revenue Cycle
+              </div>
+            )}
+            {billingItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
@@ -204,23 +260,140 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                 )}
               </Link>
             ))}
+            
+            {/* RCM Sub-items (show when RCM is active) */}
+            {open && location.pathname.startsWith('/provider/rcm') && (
+              <div className="ml-4 space-y-1">
+                {rcmSubItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-all",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      location.pathname === item.path
+                        ? "bg-accent text-accent-foreground font-medium"
+                        : "text-muted-foreground"
+                    )}
+                    onClick={handleNavClick}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </nav>
 
-          <Separator className="my-4 mx-2" />
+          {open && <Separator className="my-4 mx-2" />}
 
+          {/* Analytics Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Analytics
+              </div>
+            )}
+            {analyticsItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Care Management Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Care Management
+              </div>
+            )}
+            {careManagementItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Clinical Tools Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Clinical Tools
+              </div>
+            )}
+            {clinicalItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Settings Section */}
           <div className="grid gap-1 px-2">
-            <Link
-              to="/provider/settings"
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all",
-                "hover:bg-accent hover:text-accent-foreground",
-                !open && "justify-center"
-              )}
-              onClick={handleNavClick}
-            >
-              <Settings className={cn("h-5 w-5", !open && "h-6 w-6")} />
-              {open && <span className="text-base">Settings</span>}
-            </Link>
+            {settingsItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
 
             <Button
               variant="ghost"

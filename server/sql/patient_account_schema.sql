@@ -17,11 +17,11 @@ CREATE TABLE IF NOT EXISTS claims (
     denial_code VARCHAR(20) NULL,
     denial_reason TEXT NULL,
     appeal_deadline DATE NULL,
-    days_since_submission INT GENERATED ALWAYS AS (DATEDIFF(CURDATE(), submitted_date)) STORED,
+    days_since_submission INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_by INT NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patientId) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_claims (patient_id),
     INDEX idx_claim_status (status),
     INDEX idx_service_date (service_date)
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS patient_payments (
     notes TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by INT NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patientId) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     FOREIGN KEY (claim_id) REFERENCES claims(claim_id) ON DELETE SET NULL,
     INDEX idx_patient_payments (patient_id),
     INDEX idx_payment_date (payment_date),
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS payment_adjustments (
     notes TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by INT NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patientId) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     FOREIGN KEY (claim_id) REFERENCES claims(claim_id) ON DELETE SET NULL,
     INDEX idx_patient_adjustments (patient_id),
     INDEX idx_adjustment_date (adjustment_date)
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS patient_statements (
     additional_message TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by INT NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patientId) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_statements (patient_id),
     INDEX idx_statement_date (statement_date)
 );
@@ -161,63 +161,64 @@ CREATE TABLE IF NOT EXISTS statement_line_items (
 -- Account summary view for quick financial overview
 CREATE OR REPLACE VIEW patient_account_summary AS
 SELECT 
-    p.patientId as patient_id,
-    CONCAT(p.firstName, ' ', p.lastName) as patient_name,
-    COALESCE(charges.total_charges, 0) as total_charges,
-    COALESCE(payments.total_payments, 0) as total_payments,
-    COALESCE(adjustments.total_adjustments, 0) as total_adjustments,
-    COALESCE(insurance_payments.insurance_paid, 0) as insurance_paid,
-    COALESCE(patient_payments.patient_paid, 0) as patient_paid,
-    (COALESCE(charges.total_charges, 0) - COALESCE(payments.total_payments, 0) - COALESCE(adjustments.total_adjustments, 0)) as outstanding_balance,
-    COALESCE(pending_claims.pending_amount, 0) as insurance_pending
-FROM patients p
+    up.fk_userid AS patient_id,
+    CONCAT(up.firstName, ' ', up.lastName) AS patient_name,
+    COALESCE(charges.total_charges, 0) AS total_charges,
+    COALESCE(payments.total_payments, 0) AS total_payments,
+    COALESCE(adjustments.total_adjustments, 0) AS total_adjustments,
+    COALESCE(insurance_payments.insurance_paid, 0) AS insurance_paid,
+    COALESCE(patient_payments.patient_paid, 0) AS patient_paid,
+    (COALESCE(charges.total_charges, 0) - COALESCE(payments.total_payments, 0) - COALESCE(adjustments.total_adjustments, 0)) AS outstanding_balance,
+    COALESCE(pending_claims.pending_amount, 0) AS insurance_pending
+FROM user_profiles up
 LEFT JOIN (
     SELECT 
         c.patient_id,
-        SUM(c.billed_amount) as total_charges
+        SUM(c.billed_amount) AS total_charges
     FROM claims c
     WHERE c.status != 'voided'
     GROUP BY c.patient_id
-) charges ON p.patientId = charges.patient_id
+) charges ON up.fk_userid = charges.patient_id
 LEFT JOIN (
     SELECT 
         pp.patient_id,
-        SUM(pp.amount) as total_payments
+        SUM(pp.amount) AS total_payments
     FROM patient_payments pp
     WHERE pp.status = 'posted'
     GROUP BY pp.patient_id
-) payments ON p.patientId = payments.patient_id
+) payments ON up.fk_userid = payments.patient_id
 LEFT JOIN (
     SELECT 
         pa.patient_id,
-        SUM(pa.amount) as total_adjustments
+        SUM(pa.amount) AS total_adjustments
     FROM payment_adjustments pa
     GROUP BY pa.patient_id
-) adjustments ON p.patientId = adjustments.patient_id
+) adjustments ON up.fk_userid = adjustments.patient_id
 LEFT JOIN (
     SELECT 
         pp.patient_id,
-        SUM(pp.amount) as insurance_paid
+        SUM(pp.amount) AS insurance_paid
     FROM patient_payments pp
     WHERE pp.payment_type = 'insurance' AND pp.status = 'posted'
     GROUP BY pp.patient_id
-) insurance_payments ON p.patientId = insurance_payments.patient_id
+) insurance_payments ON up.fk_userid = insurance_payments.patient_id
 LEFT JOIN (
     SELECT 
         pp.patient_id,
-        SUM(pp.amount) as patient_paid
+        SUM(pp.amount) AS patient_paid
     FROM patient_payments pp
     WHERE pp.payment_type = 'patient' AND pp.status = 'posted'
     GROUP BY pp.patient_id
-) patient_payments ON p.patientId = patient_payments.patient_id
+) patient_payments ON up.fk_userid = patient_payments.patient_id
 LEFT JOIN (
     SELECT 
         c.patient_id,
-        SUM(c.billed_amount - c.paid_amount) as pending_amount
+        SUM(c.billed_amount - c.paid_amount) AS pending_amount
     FROM claims c
     WHERE c.status IN ('submitted', 'pending')
     GROUP BY c.patient_id
-) pending_claims ON p.patientId = pending_claims.patient_id;
+) pending_claims ON up.fk_userid = pending_claims.patient_id;
+
 
 -- Insert sample data for testing
 INSERT IGNORE INTO claims (claim_id, patient_id, provider_id, service_date, submitted_date, insurance_company, status, billed_amount, allowed_amount, paid_amount, patient_responsibility, created_by) VALUES

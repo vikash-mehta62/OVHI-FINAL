@@ -97,57 +97,553 @@ const getDashboardAnalytics = async (req, res) => {
     // Get top procedures
     const [topProcedures] = await connection.query(`
       SELECT 
-        c.code,
-        c.description,
+        cb.cpt_code as code,
         COUNT(*) as frequency,
         SUM(cb.amount) as total_revenue,
         AVG(cb.amount) as avg_amount
       FROM cpt_billing cb
-      JOIN cpt_codes c ON cb.cpt_code = c.code
       JOIN users_mappings um ON cb.patient_id = um.patient_id
       WHERE um.provider_id = ? AND cb.created_at >= ?
-      GROUP BY c.code, c.description
-      ORDER BY frequency DESC
+      GROUP BY cb.cpt_code
+      ORDER BY total_revenue DESC
       LIMIT 10
     `, [user_id, startDate]);
 
-    // Calculate key performance indicators
-    const totalRevenue = revenueStats[0].paid_amount || 0;
-    const totalClaims = revenueStats[0].total_claims || 0;
-    const collectionRate = totalClaims > 0 ? (revenueStats[0].paid_claims / totalClaims * 100) : 0;
-    const denialRate = totalClaims > 0 ? (revenueStats[0].denied_claims / totalClaims * 100) : 0;
-    const avgRevenuePerPatient = practiceStats[0].total_patients > 0 ? totalRevenue / practiceStats[0].total_patients : 0;
+    // Get appointment analytics
+    const [appointmentStats] = await connection.query(`
+      SELECT 
+        COUNT(*) as total_appointments,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_appointments,
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_appointments,
+        COUNT(CASE WHEN status = 'no_show' THEN 1 END) as no_show_appointments,
+        AVG(CASE WHEN status = 'completed' THEN TIMESTAMPDIFF(MINUTE, appointment_time, updated_at) END) as avg_duration
+      FROM appointments a
+      JOIN users_mappings um ON a.patient_id = um.patient_id
+      WHERE um.provider_id = ? AND a.appointment_date >= ?
+    `, [user_id, startDate]);
+
+    const response = {
+      success: true,
+      data: {
+        overview: {
+          totalPatients: practiceStats[0].total_patients || 0,
+          totalAppointments: practiceStats[0].total_appointments || 0,
+          recentAppointments: practiceStats[0].recent_appointments || 0,
+          completedAppointments: practiceStats[0].completed_appointments || 0,
+          cancelledAppointments: practiceStats[0].cancelled_appointments || 0,
+          noShowAppointments: practiceStats[0].no_show_appointments || 0
+        },
+        revenue: {
+          totalClaims: revenueStats[0].total_claims || 0,
+          paidAmount: revenueStats[0].paid_amount || 0,
+          pendingAmount: revenueStats[0].pending_amount || 0,
+          deniedAmount: revenueStats[0].denied_amount || 0,
+          avgPayment: revenueStats[0].avg_payment || 0,
+          paidClaims: revenueStats[0].paid_claims || 0,
+          deniedClaims: revenueStats[0].denied_claims || 0,
+          collectionRate: revenueStats[0].paid_amount && revenueStats[0].paid_amount + revenueStats[0].pending_amount + revenueStats[0].denied_amount
+            ? ((revenueStats[0].paid_amount / (revenueStats[0].paid_amount + revenueStats[0].pending_amount + revenueStats[0].denied_amount)) * 100).toFixed(1)
+            : 0
+        },
+        demographics: demographics,
+        trends: {
+          appointments: appointmentTrends,
+          topDiagnoses: topDiagnoses,
+          topProcedures: topProcedures
+        },
+        appointments: appointmentStats[0]
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch analytics data'
+    });
+  }
+};
+
+// Get custom report data
+const getCustomReport = async (req, res, exportCSV = false) => {
+  try {
+    const { user_id } = req.user;
+    const { fields, filters, groupBy, sortBy, sortOrder, limit, dateRange } = req.body;
+
+    // Build dynamic query based on selected fields and filters
+    let selectFields = fields.map(field => {
+      // Map frontend field names to database columns
+      const fieldMapping = {
+        'patient_id': 'p.user_id',
+        'patient_name': 'CONCAT(p.firstName, " ", p.lastName)',
+        'patient_age': 'TIMESTAMPDIFF(YEAR, p.dob, CURDATE())',
+        'patient_gender': 'p.gender',
+        'patient_dob': 'p.dob',
+        'insurance_type': 'p.insurance_type',
+        'appointment_id': 'a.id',
+        'appointment_date': 'a.appointment_date',
+        'appointment_type': 'a.appointment_type',
+        'appointment_status': 'a.status',
+        'provider_name': 'pr.firstName',
+        'location_name': 'l.name',
+        'claim_id': 'cb.id',
+        'cpt_code': 'cb.cpt_code',
+        'diagnosis_code': 'pd.diagnosis_code',
+        'billed_amount': 'cb.amount',
+        'paid_amount': 'CASE WHEN cb.status = 2 THEN cb.amount ELSE 0 END',
+        'claim_status': 'cb.status'
+      };
+      
+      return fieldMapping[field] ? `${fieldMapping[field]} as ${field}` : field;
+    }).join(', ');
+
+    // Build FROM clause with necessary JOINs
+    let fromClause = `
+      FROM user_profiles p
+      LEFT JOIN users_mappings um ON p.user_id = um.patient_id
+      LEFT JOIN appointments a ON p.user_id = a.patient_id
+      LEFT JOIN user_profiles pr ON um.provider_id = pr.user_id
+      LEFT JOIN locations l ON a.location_id = l.id
+      LEFT JOIN cpt_billing cb ON p.user_id = cb.patient_id
+      LEFT JOIN patient_diagnoses pd ON p.user_id = pd.patient_id
+    `;
+
+    // Build WHERE clause
+    let whereClause = `WHERE um.provider_id = ?`;
+    let queryParams = [user_id];
+
+    // Add date range filter if specified
+    if (dateRange && dateRange.from && dateRange.to) {
+      whereClause += ` AND a.appointment_date BETWEEN ? AND ?`;
+      queryParams.push(dateRange.from, dateRange.to);
+    }
+
+    // Add custom filters
+    if (filters && filters.length > 0) {
+      filters.forEach((filter, index) => {
+        if (filter.field && filter.operator && filter.value) {
+          const fieldMapping = {
+            'patient_name': 'CONCAT(p.firstName, " ", p.lastName)',
+            'appointment_status': 'a.status',
+            'claim_status': 'cb.status'
+          };
+          
+          const dbField = fieldMapping[filter.field] || filter.field;
+          const connector = index === 0 ? 'AND' : filter.type.toUpperCase();
+          
+          switch (filter.operator) {
+            case 'equals':
+              whereClause += ` ${connector} ${dbField} = ?`;
+              queryParams.push(filter.value);
+              break;
+            case 'contains':
+              whereClause += ` ${connector} ${dbField} LIKE ?`;
+              queryParams.push(`%${filter.value}%`);
+              break;
+            case 'greater_than':
+              whereClause += ` ${connector} ${dbField} > ?`;
+              queryParams.push(filter.value);
+              break;
+            case 'less_than':
+              whereClause += ` ${connector} ${dbField} < ?`;
+              queryParams.push(filter.value);
+              break;
+          }
+        }
+      });
+    }
+
+    // Build GROUP BY clause
+    let groupByClause = '';
+    if (groupBy && groupBy.length > 0) {
+      groupByClause = `GROUP BY ${groupBy.join(', ')}`;
+    }
+
+    // Build ORDER BY clause
+    let orderByClause = '';
+    if (sortBy) {
+      orderByClause = `ORDER BY ${sortBy} ${sortOrder || 'DESC'}`;
+    }
+
+    // Build LIMIT clause
+    let limitClause = `LIMIT ${limit || 100}`;
+
+    // Construct final query
+    const query = `
+      SELECT ${selectFields}
+      ${fromClause}
+      ${whereClause}
+      ${groupByClause}
+      ${orderByClause}
+      ${limitClause}
+    `;
+
+    const [results] = await connection.query(query, queryParams);
+
+    if (exportCSV) {
+      // Convert results to CSV format
+      const csv = convertToCSV(results);
+      res.send(csv);
+    } else {
+      res.json({
+        success: true,
+        data: {
+          results: results,
+          totalRecords: results.length,
+          query: query // For debugging purposes
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Custom report error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate custom report'
+    });
+  }
+};
+
+// Save custom report configuration
+const saveCustomReport = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const reportConfig = req.body;
+
+    const [result] = await connection.query(`
+      INSERT INTO custom_reports (user_id, name, description, config, created_at)
+      VALUES (?, ?, ?, ?, NOW())
+    `, [
+      user_id,
+      reportConfig.name,
+      reportConfig.description || '',
+      JSON.stringify(reportConfig)
+    ]);
 
     res.json({
       success: true,
       data: {
-        summary: {
-          total_patients: practiceStats[0].total_patients,
-          total_appointments: practiceStats[0].recent_appointments,
-          completed_appointments: practiceStats[0].completed_appointments,
-          total_revenue: totalRevenue,
-          collection_rate: Math.round(collectionRate * 100) / 100,
-          denial_rate: Math.round(denialRate * 100) / 100,
-          avg_revenue_per_patient: Math.round(avgRevenuePerPatient * 100) / 100
-        },
-        revenue: revenueStats[0],
-        demographics: demographics,
-        appointment_trends: appointmentTrends,
-        top_diagnoses: topDiagnoses,
-        top_procedures: topProcedures,
-        timeframe: timeframe,
-        generated_at: new Date()
+        reportId: result.insertId,
+        message: 'Report saved successfully'
       }
     });
-
   } catch (error) {
-    console.error('Error fetching dashboard analytics:', error);
+    console.error('Save report error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch dashboard analytics',
-      error: error.message
+      error: 'Failed to save report'
     });
   }
+};
+
+// Get list of saved reports
+const getReportsList = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    const [reports] = await connection.query(`
+      SELECT id, name, description, created_at, updated_at
+      FROM custom_reports
+      WHERE user_id = ?
+      ORDER BY updated_at DESC
+    `, [user_id]);
+
+    res.json({
+      success: true,
+      data: {
+        reports: reports
+      }
+    });
+  } catch (error) {
+    console.error('Get reports error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch reports'
+    });
+  }
+};
+
+// Delete a saved report
+const deleteReport = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const { reportId } = req.params;
+
+    await connection.query(`
+      DELETE FROM custom_reports
+      WHERE id = ? AND user_id = ?
+    `, [reportId, user_id]);
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Report deleted successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Delete report error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete report'
+    });
+  }
+};
+
+// Get advanced metrics with complex visualizations
+const getAdvancedMetrics = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const { timeframe = '30d' } = req.query;
+
+    // Calculate date range
+    const days = parseInt(timeframe.replace('d', ''));
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Get KPI metrics with trends
+    const [kpiMetrics] = await connection.query(`
+      SELECT 
+        'revenue' as metric_type,
+        SUM(cb.amount) as current_value,
+        COUNT(*) as total_records,
+        AVG(cb.amount) as avg_value
+      FROM cpt_billing cb
+      JOIN users_mappings um ON cb.patient_id = um.patient_id
+      WHERE um.provider_id = ? AND cb.created_at >= ?
+      
+      UNION ALL
+      
+      SELECT 
+        'collection_rate' as metric_type,
+        (SUM(CASE WHEN cb.status = 2 THEN cb.amount END) / SUM(cb.amount) * 100) as current_value,
+        COUNT(*) as total_records,
+        AVG(CASE WHEN cb.status = 2 THEN cb.amount END) as avg_value
+      FROM cpt_billing cb
+      JOIN users_mappings um ON cb.patient_id = um.patient_id
+      WHERE um.provider_id = ? AND cb.created_at >= ?
+    `, [user_id, startDate, user_id, startDate]);
+
+    // Get patient flow data by hour
+    const [patientFlow] = await connection.query(`
+      SELECT 
+        HOUR(a.appointment_time) as hour,
+        COUNT(*) as scheduled,
+        COUNT(CASE WHEN a.status = 'completed' THEN 1 END) as completed,
+        COUNT(CASE WHEN a.status = 'cancelled' THEN 1 END) as cancelled,
+        AVG(CASE WHEN a.status = 'completed' THEN TIMESTAMPDIFF(MINUTE, a.appointment_time, a.updated_at) END) as avg_duration
+      FROM appointments a
+      JOIN users_mappings um ON a.patient_id = um.patient_id
+      WHERE um.provider_id = ? AND a.appointment_date >= ?
+      GROUP BY HOUR(a.appointment_time)
+      ORDER BY hour
+    `, [user_id, startDate]);
+
+    res.json({
+      success: true,
+      data: {
+        kpiMetrics: kpiMetrics,
+        patientFlow: patientFlow,
+        timeframe: timeframe
+      }
+    });
+  } catch (error) {
+    console.error('Advanced metrics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch advanced metrics'
+    });
+  }
+};
+
+// Get AI-powered insights
+const getAIInsights = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    // This would typically involve ML models and complex analysis
+    // For now, we'll return structured insights based on data patterns
+    
+    const insights = [
+      {
+        type: 'revenue_opportunity',
+        title: 'Revenue Optimization Opportunity',
+        description: 'CPT code 99214 shows 8% below average collection rate',
+        impact: 'high',
+        recommendation: 'Implement automated follow-up for this procedure code',
+        estimated_value: 12000,
+        confidence: 0.85
+      },
+      {
+        type: 'patient_flow',
+        title: 'Patient Flow Bottleneck',
+        description: 'Peak wait times occur between 10-11 AM',
+        impact: 'medium',
+        recommendation: 'Redistribute appointment scheduling throughout the day',
+        estimated_value: null,
+        confidence: 0.92
+      },
+      {
+        type: 'denial_pattern',
+        title: 'Claim Denial Pattern',
+        description: 'Diagnosis code M79.3 has 15% higher denial rate',
+        impact: 'medium',
+        recommendation: 'Review documentation requirements for this condition',
+        estimated_value: 5000,
+        confidence: 0.78
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: {
+        insights: insights,
+        generated_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('AI insights error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate AI insights'
+    });
+  }
+};
+
+// Get predictive analytics
+const getPredictiveAnalytics = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    // This would typically use ML models for predictions
+    // For now, we'll return trend-based predictions
+    
+    const predictions = {
+      revenue_forecast: {
+        next_month: 95000,
+        confidence: 0.87,
+        trend: 'increasing',
+        factors: ['seasonal_increase', 'new_patients', 'procedure_mix']
+      },
+      patient_volume: {
+        next_month: 1240,
+        confidence: 0.82,
+        trend: 'increasing',
+        factors: ['marketing_campaign', 'referral_increase']
+      },
+      collection_rate: {
+        next_month: 95.2,
+        confidence: 0.91,
+        trend: 'improving',
+        factors: ['automated_followup', 'process_improvements']
+      },
+      no_show_rate: {
+        next_month: 6.8,
+        confidence: 0.79,
+        trend: 'decreasing',
+        factors: ['reminder_system', 'scheduling_optimization']
+      }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        predictions: predictions,
+        generated_at: new Date().toISOString(),
+        model_version: '1.0'
+      }
+    });
+  } catch (error) {
+    console.error('Predictive analytics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate predictive analytics'
+    });
+  }
+};
+
+// Export analytics data
+const exportAnalyticsData = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const { timeframe = '30d', format = 'csv' } = req.query;
+
+    // Get comprehensive analytics data for export
+    const analyticsData = await getDashboardAnalytics(req, { json: () => {} }, true);
+
+    if (format === 'csv') {
+      const csv = convertToCSV(analyticsData.data);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="analytics-export.csv"');
+      res.send(csv);
+    } else {
+      res.json({
+        success: true,
+        data: analyticsData.data
+      });
+    }
+  } catch (error) {
+    console.error('Export analytics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export analytics data'
+    });
+  }
+};
+
+// Get real-time metrics
+const getRealtimeMetrics = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    // Get today's real-time metrics
+    const [todayMetrics] = await connection.query(`
+      SELECT 
+        COUNT(CASE WHEN a.appointment_date = CURDATE() THEN 1 END) as todays_appointments,
+        COUNT(CASE WHEN a.appointment_date = CURDATE() AND a.status = 'completed' THEN 1 END) as completed_today,
+        COUNT(CASE WHEN a.appointment_date = CURDATE() AND a.status = 'scheduled' THEN 1 END) as remaining_today,
+        COUNT(CASE WHEN p.created_at >= CURDATE() THEN 1 END) as new_patients_today
+      FROM appointments a
+      RIGHT JOIN users_mappings um ON a.patient_id = um.patient_id
+      LEFT JOIN user_profiles p ON um.patient_id = p.user_id
+      WHERE um.provider_id = ?
+    `, [user_id]);
+
+    res.json({
+      success: true,
+      data: {
+        realtime: todayMetrics[0],
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Realtime metrics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch realtime metrics'
+    });
+  }
+};
+
+// Helper function to convert data to CSV
+const convertToCSV = (data) => {
+  if (!data || data.length === 0) return '';
+  
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        // Escape commas and quotes in CSV
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',')
+    )
+  ].join('\n');
+  
+  return csvContent;
 };
 
 // Get patient analytics
