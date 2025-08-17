@@ -71,6 +71,7 @@ app.use("/api/v1/client/api-documentation", swaggerUi.serve, swaggerUi.setup(swa
 const apiRoutes = require("./services/index")
 app.use("/api/v1", apiRoutes)
 app.use("/api/v1/tenovi", require("./routes/tenoviRoutes"));
+app.use("/api/v1/patient-outreach", require("./routes/patientOutreachRoutes"));
 
 app.use("/check", (req, res) => {
   res.send({

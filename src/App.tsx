@@ -104,6 +104,13 @@ import AuditLogViewer from "./components/admin/AuditLogViewer";
 import CCMDashboard from "./components/ccm/CCMDashboard";
 import RPMDashboard from "./components/rpm/RPMDashboard";
 
+// MIPS Compliance Components
+import MIPSCompliance from "./pages/MIPSCompliance";
+
+// Patient Outreach Components
+import PatientOutreach from "./pages/provider/PatientOutreach";
+import PatientOutreachAnalytics from "./pages/provider/PatientOutreachAnalytics";
+
 const queryClient = new QueryClient();
 
 const App = () => {
@@ -297,6 +304,13 @@ const App = () => {
                     <Route path="ccm" element={<CCMDashboard />} />
                     <Route path="pcm" element={<PCMModule />} />
                     <Route path="rpm" element={<RPMDashboard />} />
+                    
+                    {/* MIPS Compliance Routes */}
+                    <Route path="mips" element={<MIPSCompliance />} />
+                    
+                    {/* Patient Outreach Routes */}
+                    <Route path="patient-outreach" element={<PatientOutreach />} />
+                    <Route path="patient-outreach/analytics" element={<PatientOutreachAnalytics />} />
                   </Route>
                 </>
               )}

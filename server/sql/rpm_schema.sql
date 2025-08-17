@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS rpm_patient_enrollments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (provider_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
+    FOREIGN KEY (provider_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_provider (patient_id, provider_id),
     INDEX idx_status (status),
     INDEX idx_enrollment_date (enrollment_date)
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS rpm_devices (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_device (patient_id, device_type),
     INDEX idx_serial_number (serial_number),
     INDEX idx_status (status),
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS rpm_readings (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (device_id) REFERENCES rpm_devices(id) ON DELETE CASCADE,
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_readings (patient_id, reading_timestamp),
     INDEX idx_device_readings (device_id, reading_timestamp),
     INDEX idx_reading_type (reading_type),
@@ -98,10 +98,10 @@ CREATE TABLE IF NOT EXISTS rpm_alerts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     FOREIGN KEY (device_id) REFERENCES rpm_devices(id) ON DELETE SET NULL,
     FOREIGN KEY (reading_id) REFERENCES rpm_readings(id) ON DELETE SET NULL,
-    FOREIGN KEY (acknowledged_by) REFERENCES user_profiles(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (acknowledged_by) REFERENCES user_profiles(fk_userid) ON DELETE SET NULL,
     INDEX idx_patient_alerts (patient_id, status),
     INDEX idx_severity_status (severity, status),
     INDEX idx_created_at (created_at),
@@ -125,8 +125,8 @@ CREATE TABLE IF NOT EXISTS rpm_care_plans (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (provider_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
+    FOREIGN KEY (provider_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_patient_plan (patient_id, status),
     INDEX idx_provider_plan (provider_id, status)
 );
@@ -154,8 +154,8 @@ CREATE TABLE IF NOT EXISTS rpm_interventions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (provider_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
+    FOREIGN KEY (provider_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     FOREIGN KEY (alert_id) REFERENCES rpm_alerts(id) ON DELETE SET NULL,
     INDEX idx_patient_interventions (patient_id, status),
     INDEX idx_provider_interventions (provider_id, status),
@@ -181,8 +181,8 @@ CREATE TABLE IF NOT EXISTS rpm_billing_records (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (provider_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
+    FOREIGN KEY (provider_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     INDEX idx_billing_period (billing_period_start, billing_period_end),
     INDEX idx_patient_billing (patient_id, billing_period_start),
     INDEX idx_provider_billing (provider_id, billing_period_start),
@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS rpm_device_calibrations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (device_id) REFERENCES rpm_devices(id) ON DELETE CASCADE,
-    FOREIGN KEY (performed_by) REFERENCES user_profiles(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (performed_by) REFERENCES user_profiles(fk_userid) ON DELETE SET NULL,
     INDEX idx_device_calibration (device_id, calibration_date),
     INDEX idx_next_calibration (next_calibration_date)
 );
@@ -223,8 +223,8 @@ CREATE TABLE IF NOT EXISTS rpm_patient_communications (
     related_alert_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (patient_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (provider_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
+    FOREIGN KEY (provider_id) REFERENCES user_profiles(fk_userid) ON DELETE CASCADE,
     FOREIGN KEY (related_alert_id) REFERENCES rpm_alerts(id) ON DELETE SET NULL,
     INDEX idx_patient_communications (patient_id, created_at),
     INDEX idx_provider_communications (provider_id, created_at),
@@ -241,7 +241,7 @@ INSERT IGNORE INTO rpm_care_plans (patient_id, provider_id, plan_name, condition
 -- Create views for common RPM queries
 CREATE OR REPLACE VIEW rpm_patient_summary AS
 SELECT 
-    up.user_id as patient_id,
+    up.fk_userid as patient_id,
     CONCAT(up.first_name, ' ', up.last_name) as patient_name,
     up.date_of_birth,
     rpe.enrollment_date,
@@ -256,12 +256,12 @@ SELECT
         ELSE 'non_compliant'
     END as compliance_status
 FROM user_profiles up
-INNER JOIN rpm_patient_enrollments rpe ON up.user_id = rpe.patient_id
-LEFT JOIN rpm_devices rd ON up.user_id = rd.patient_id AND rd.status = 'active'
+INNER JOIN rpm_patient_enrollments rpe ON up.fk_userid = rpe.patient_id
+LEFT JOIN rpm_devices rd ON up.fk_userid = rd.patient_id AND rd.status = 'active'
 LEFT JOIN rpm_readings rr ON rd.id = rr.device_id
-LEFT JOIN rpm_alerts ra ON up.user_id = ra.patient_id AND ra.status = 'active'
+LEFT JOIN rpm_alerts ra ON up.fk_userid = ra.patient_id AND ra.status = 'active'
 WHERE rpe.status = 'active'
-GROUP BY up.user_id, up.first_name, up.last_name, up.date_of_birth, rpe.enrollment_date, rpe.status;
+GROUP BY up.fk_userid, up.first_name, up.last_name, up.date_of_birth, rpe.enrollment_date, rpe.status;
 
 CREATE OR REPLACE VIEW rpm_alert_summary AS
 SELECT 
@@ -277,7 +277,7 @@ SELECT
     rr.value as reading_value,
     rr.unit as reading_unit
 FROM rpm_alerts ra
-INNER JOIN user_profiles up ON ra.patient_id = up.user_id
+INNER JOIN user_profiles up ON ra.patient_id = up.fk_userid
 LEFT JOIN rpm_devices rd ON ra.device_id = rd.id
 LEFT JOIN rpm_readings rr ON ra.reading_id = rr.id
 ORDER BY ra.created_at DESC;

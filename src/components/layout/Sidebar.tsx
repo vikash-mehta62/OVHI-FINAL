@@ -33,6 +33,9 @@ import {
   AlertCircle,
   BarChart3,
   Shield,
+  Award,
+  Send,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -100,6 +103,29 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
       name: "Patient Consents",
       path: "/provider/patient-consent",
       icon: FileSignature,
+    },
+  ];
+
+  const communicationItems = [
+    { 
+      name: "Patient Outreach", 
+      path: "/provider/patient-outreach", 
+      icon: Send,
+      badge: "New"
+    },
+    { 
+      name: "Communication Analytics", 
+      path: "/provider/patient-outreach/analytics", 
+      icon: BarChart3 
+    },
+  ];
+
+  const complianceItems = [
+    { 
+      name: "MIPS Compliance", 
+      path: "/provider/mips", 
+      icon: Award,
+      badge: "New"
     },
   ];
 
@@ -368,6 +394,82 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
               >
                 <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
                 {open && <span className="text-base">{item.name}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Patient Communication Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Patient Communication
+              </div>
+            )}
+            {communicationItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-base">{item.name}</span>
+                    {item.badge && (
+                      <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </Link>
+            ))}
+          </nav>
+
+          {open && <Separator className="my-4 mx-2" />}
+
+          {/* Compliance Section */}
+          <nav className="grid gap-1 px-2">
+            {open && (
+              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Compliance
+              </div>
+            )}
+            {complianceItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  location.pathname === item.path
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground",
+                  !open && "justify-center"
+                )}
+                onClick={handleNavClick}
+              >
+                <item.icon className={cn("h-5 w-5", !open && "h-6 w-6")} />
+                {open && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-base">{item.name}</span>
+                    {item.badge && (
+                      <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
               </Link>
             ))}
           </nav>
