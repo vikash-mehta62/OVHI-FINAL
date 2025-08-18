@@ -25,6 +25,7 @@ const { getConsentDetails, submitConsentForm,uploadConsentForms } = require("./p
 const thirdPartyApiRoutes = require("./third-party-apis/api-routes");
 const generalRoutes = require("./general-apis/generalRoutes");
 const rcmRoutes = require("./rcm/rcmRoutes");
+const rcmAdvancedWorkflowRoutes = require("../routes/rcmAdvancedWorkflowRoutes");
 const paymentRoutes = require("./payments/paymentRoutes");
 const analyticsRoutes = require("./analytics/analyticsRoutes");
 const rpmRoutes = require("./rpm/rpmRoutes");
@@ -63,6 +64,9 @@ router.use("/client",thirdPartyApiRoutes);
 router.use("/general",generalRoutes);
 // RCM Routes
 router.use("/rcm", verifyToken, rcmRoutes);
+
+// RCM Advanced Workflow Routes
+router.use("/rcm-advanced", verifyToken, rcmAdvancedWorkflowRoutes);
 
 // Payment Routes
 router.use("/payments", verifyToken, paymentRoutes);
