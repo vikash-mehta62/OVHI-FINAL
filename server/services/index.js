@@ -28,6 +28,7 @@ const rcmRoutes = require("./rcm/rcmRoutes");
 const paymentRoutes = require("./payments/paymentRoutes");
 const analyticsRoutes = require("./analytics/analyticsRoutes");
 const rpmRoutes = require("./rpm/rpmRoutes");
+const mipsRoutes = require("../routes/mipsRoutes");
 
 
 
@@ -74,6 +75,12 @@ router.use("/rpm", verifyToken, rpmRoutes);
 
 // Smart Template Routes
 router.use("/encounters/smart-templates", verifyToken, require("./encounters/smartTemplateRoutes"));
+
+// MIPS Routes
+router.use("/mips", verifyToken, mipsRoutes);
+
+// RCM Critical Features Routes
+router.use("/rcm", verifyToken, require("../routes/rcmCriticalRoutes"));
 
 
 
