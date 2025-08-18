@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,42 +24,98 @@ import { StatusBadge } from './shared/StatusBadge';
 import { UrgencyIndicator } from './shared/UrgencyIndicator';
 
 interface ReferralDashboardProps {
-  providerId: string;
+  initialTab?: 'new' | 'incoming' | 'outgoing' | 'completed';
+  viewMode?: 'details' | 'edit' | 'list';
+  providerId?: string;
   patientId?: string;
-  filters?: ReferralFilters;
   onReferralSelect?: (referral: Referral) => void;
 }
 
 export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
-  providerId,
+  initialTab = 'incoming',
+  viewMode = 'list',
+  providerId: propProviderId,
   patientId,
-  filters: initialFilters,
   onReferralSelect
 }) => {
+  const { id: routeId } = useParams<{ id?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get providerId from props or use the current user's ID if not provided
+  const [providerId] = useState(propProviderId || 'current-user-id'); // Replace with actual auth context
+  
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-  const [filters, setFilters] = useState<ReferralFilters>(initialFilters || {});
+  const [activeTab, setActiveTab] = useState<'new' | 'incoming' | 'outgoing' | 'completed'>(initialTab);
+  const [filters, setFilters] = useState<ReferralFilters>({});
   const [selectedReferral, setSelectedReferral] = useState<Referral | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [currentViewMode, setCurrentViewMode] = useState<'list' | 'details' | 'edit'>(viewMode);
   const [pagination, setPagination] = useState({
     total: 0,
     limit: 20,
     offset: 0,
-    totalPages: 0,
-    currentPage: 1
   });
-  const [statistics, setStatistics] = useState({
-    totalReferrals: 0,
-    completedReferrals: 0,
-    pendingReferrals: 0,
-    urgentReferrals: 0,
-    specialtyBreakdown: [],
-    statusBreakdown: []
-  });
+
+  // Sync with URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tab = searchParams.get('tab') as ReferralDashboardProps['initialTab'];
+    if (tab && ['new', 'incoming', 'outgoing', 'completed'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
+
+  // Handle view mode changes based on URL
+  useEffect(() => {
+    if (routeId) {
+      if (location.pathname.endsWith('/edit')) {
+        setCurrentViewMode('edit');
+        // Load referral data for editing
+        loadReferralDetails(routeId);
+      } else {
+        setCurrentViewMode('details');
+        // Load referral data for viewing
+        loadReferralDetails(routeId);
+      }
+    } else {
+      setCurrentViewMode('list');
+      loadReferrals();
+    }
+  }, [routeId, location.pathname]);
+
+  const loadReferralDetails = async (referralId: string) => {
+    try {
+      const referral = await referralService.getReferralById(referralId);
+      setSelectedReferral(referral);
+      setShowDetailsDialog(true);
+    } catch (error) {
+      console.error('Error loading referral details:', error);
+      toast.error('Failed to load referral details');
+    }
+  };
+
+  const handleTabChange = (tab: string) => {
+    navigate(`?tab=${tab}`);
+  };
+
+  const handleReferralClick = (referral: Referral) => {
+    navigate(`/provider/referrals/${referral.id}`);
+    setSelectedReferral(referral);
+    onReferralSelect?.(referral);
+  };
+
+  const handleEditReferral = (referral: Referral) => {
+    navigate(`/provider/referrals/${referral.id}/edit`);
+  };
+
+  const handleBackToList = () => {
+    navigate('/provider/referrals');
+  };
 
   // Load referrals
   const loadReferrals = async (newFilters?: ReferralFilters, newPagination?: any) => {
@@ -111,7 +168,7 @@ export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
   const loadStatistics = async () => {
     try {
       const stats = await referralService.getReferralStatistics(providerId);
-      setStatistics(stats);
+      // setStatistics(stats);
     } catch (error) {
       console.error('Error loading statistics:', error);
     }
@@ -138,12 +195,6 @@ export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
     loadReferrals(updatedFilters, { offset: 0 });
   };
 
-  // Tab change handler
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    setPagination(prev => ({ ...prev, offset: 0, currentPage: 1 }));
-  };
-
   // Pagination handlers
   const handlePageChange = (page: number) => {
     const newOffset = (page - 1) * pagination.limit;
@@ -152,15 +203,6 @@ export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
   };
 
   // Referral action handlers
-  const handleReferralClick = (referral: Referral) => {
-    setSelectedReferral(referral);
-    if (onReferralSelect) {
-      onReferralSelect(referral);
-    } else {
-      setShowDetailsDialog(true);
-    }
-  };
-
   const handleStatusUpdate = async (referralId: string, newStatus: string, notes?: string) => {
     try {
       await referralService.updateReferralStatus(referralId, newStatus, notes);
@@ -184,89 +226,124 @@ export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
     toast.success('Referral created successfully');
   };
 
-  // Get status counts for tabs
-  const getStatusCount = (status: string) => {
-    if (status === 'all') return statistics.totalReferrals;
-    const statusItem = statistics.statusBreakdown.find(s => s.status === status);
-    return statusItem?.count || 0;
-  };
+  if (currentViewMode === 'details' && selectedReferral) {
+    return (
+      <div className="container mx-auto p-6">
+        <Button variant="outline" onClick={handleBackToList} className="mb-4">
+          &larr; Back to Referrals
+        </Button>
+        <ReferralDetails 
+          referral={selectedReferral} 
+          onEdit={() => handleEditReferral(selectedReferral)}
+        />
+      </div>
+    );
+  }
 
+  if (currentViewMode === 'edit' && selectedReferral) {
+    return (
+      <div className="container mx-auto p-6">
+        <Button variant="outline" onClick={handleBackToList} className="mb-4">
+          &larr; Back to Referrals
+        </Button>
+        <ReferralEditForm 
+          referral={selectedReferral}
+          onSave={handleSaveReferral}
+          onCancel={handleBackToList}
+        />
+      </div>
+    );
+  }
+
+  // Default list view
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Referral Management</h1>
-          <p className="text-muted-foreground">
-            Manage and track patient referrals to specialists
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={() => loadReferrals()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button onClick={handleCreateReferral}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Referral
-          </Button>
-        </div>
+    <div className="container mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Referral Management</h1>
+        <Button onClick={() => setShowCreateDialog(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New Referral
+        </Button>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics.totalReferrals}</div>
-            <p className="text-xs text-muted-foreground">
-              All time referrals
-            </p>
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList className="grid grid-cols-4 w-full max-w-md mb-6">
+          <TabsTrigger value="incoming">Incoming</TabsTrigger>
+          <TabsTrigger value="outgoing">Outgoing</TabsTrigger>
+          <TabsTrigger value="new">New</TabsTrigger>
+          <TabsTrigger value="completed">Completed</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value={activeTab} className="mt-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : referrals.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No referrals found</h3>
+                <p className="text-gray-500 text-center mb-4">
+                  {searchTerm || Object.keys(filters).length > 0
+                    ? 'Try adjusting your search or filters'
+                    : 'Get started by creating your first referral'
+                  }
+                </p>
+                {!searchTerm && Object.keys(filters).length === 0 && (
+                  <Button onClick={handleCreateReferral}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Referral
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {/* Referrals List */}
+              <div className="grid gap-4">
+                {referrals.map((referral) => (
+                  <ReferralCard
+                    key={referral.id}
+                    referral={referral}
+                    onClick={() => handleReferralClick(referral)}
+                    onStatusUpdate={handleStatusUpdate}
+                  />
+                ))}
+              </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics.completedReferrals}</div>
-            <p className="text-xs text-muted-foreground">
-              Successfully completed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics.pendingReferrals}</div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting action
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Urgent</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statistics.urgentReferrals}</div>
-            <p className="text-xs text-muted-foreground">
-              Require immediate attention
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+              {/* Pagination */}
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} referrals
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(pagination.currentPage - 1)}
+                      disabled={pagination.currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm">
+                      Page {pagination.currentPage} of {pagination.totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(pagination.currentPage + 1)}
+                      disabled={pagination.currentPage === pagination.totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Search and Filters */}
       <Card>
@@ -378,101 +455,6 @@ export const ReferralDashboard: React.FC<ReferralDashboardProps> = ({
           )}
         </CardContent>
       </Card>
-
-      {/* Referrals Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="all">
-            All ({getStatusCount('all')})
-          </TabsTrigger>
-          <TabsTrigger value="draft">
-            Draft ({getStatusCount('draft')})
-          </TabsTrigger>
-          <TabsTrigger value="pending">
-            Pending ({getStatusCount('pending')})
-          </TabsTrigger>
-          <TabsTrigger value="sent">
-            Sent ({getStatusCount('sent')})
-          </TabsTrigger>
-          <TabsTrigger value="scheduled">
-            Scheduled ({getStatusCount('scheduled')})
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed ({getStatusCount('completed')})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab} className="mt-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : referrals.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FileText className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No referrals found</h3>
-                <p className="text-gray-500 text-center mb-4">
-                  {searchTerm || Object.keys(filters).length > 0
-                    ? 'Try adjusting your search or filters'
-                    : 'Get started by creating your first referral'
-                  }
-                </p>
-                {!searchTerm && Object.keys(filters).length === 0 && (
-                  <Button onClick={handleCreateReferral}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Referral
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {/* Referrals List */}
-              <div className="grid gap-4">
-                {referrals.map((referral) => (
-                  <ReferralCard
-                    key={referral.id}
-                    referral={referral}
-                    onClick={() => handleReferralClick(referral)}
-                    onStatusUpdate={handleStatusUpdate}
-                  />
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-500">
-                    Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} referrals
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(pagination.currentPage - 1)}
-                      disabled={pagination.currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm">
-                      Page {pagination.currentPage} of {pagination.totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(pagination.currentPage + 1)}
-                      disabled={pagination.currentPage === pagination.totalPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
 
       {/* Dialogs */}
       <ReferralCreationDialog

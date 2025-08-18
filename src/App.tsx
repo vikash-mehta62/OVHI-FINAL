@@ -111,6 +111,12 @@ import MIPSCompliance from "./pages/MIPSCompliance";
 import PatientOutreach from "./pages/provider/PatientOutreach";
 import PatientOutreachAnalytics from "./pages/provider/PatientOutreachAnalytics";
 
+// Import Referral Management Components
+import {ReferralDashboard} from "./components/referrals/ReferralDashboard";
+
+// Lab Module Components
+import { LabsDashboard, LabOrderList, LabOrderForm, LabResults } from "./components/labs";
+
 const queryClient = new QueryClient();
 
 const App = () => {
@@ -311,6 +317,27 @@ const App = () => {
                     {/* Patient Outreach Routes */}
                     <Route path="patient-outreach" element={<PatientOutreach />} />
                     <Route path="patient-outreach/analytics" element={<PatientOutreachAnalytics />} />
+                    
+                    {/* Lab Module Routes */}
+                    <Route path="labs" element={<LabsDashboard />}>
+                      <Route index element={<LabOrderList />} />
+                      <Route path="orders" element={<LabOrderList />} />
+                      <Route path="orders/new" element={<LabOrderForm />} />
+                      <Route path="orders/:orderId" element={<LabOrderForm />} />
+                      <Route path="results" element={<LabResults />} />
+                      {/* Uncomment when these components are implemented */}
+                      {/* <Route path="results/:resultId" element={<LabResultDetails />} /> */}
+                      {/* <Route path="catalog" element={<LabTestCatalog />} /> */}
+                    </Route>
+
+                    {/* Referral Management Routes */}
+                    <Route path="referrals" element={<ReferralDashboard providerId={user?.id} />} />
+                    <Route path="referrals/new" element={<ReferralDashboard providerId={user?.id} initialTab="new" />} />
+                    <Route path="referrals/incoming" element={<ReferralDashboard providerId={user?.id} initialTab="incoming" />} />
+                    <Route path="referrals/outgoing" element={<ReferralDashboard providerId={user?.id} initialTab="outgoing" />} />
+                    <Route path="referrals/completed" element={<ReferralDashboard providerId={user?.id} initialTab="completed" />} />
+                    <Route path="referrals/:id" element={<ReferralDashboard providerId={user?.id} viewMode="details" />} />
+                    <Route path="referrals/:id/edit" element={<ReferralDashboard providerId={user?.id} viewMode="edit" />} />
                   </Route>
                 </>
               )}

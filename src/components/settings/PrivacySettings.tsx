@@ -1,126 +1,126 @@
-
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Shield, Lock, Eye, FileText, AlertTriangle } from "lucide-react";
-import { useSelector } from 'react-redux';
-import { RootState } from '@/redux/store';
-import { updatePrivacySettingsAPI, getPrivacySettingsAPI } from '@/services/operations/enhancedSettings';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Shield, Lock, Eye, UserCheck, AlertTriangle, Save, RefreshCw } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
+
+interface PrivacySettings {
+  dataRetention: {
+    patientRecords: number; // months
+    auditLogs: number; // months
+    backups: number; // months
+    autoDelete: boolean;
+  };
+  accessControls: {
+    sessionTimeout: number; // minutes
+    maxLoginAttempts: number;
+    passwordExpiry: number; // days
+    mfaRequired: boolean;
+    ipWhitelist: string[];
+  };
+  dataSharing: {
+    allowThirdParty: boolean;
+    allowResearch: boolean;
+    allowMarketing: boolean;
+    consentRequired: boolean;
+  };
+  encryption: {
+    dataAtRest: boolean;
+    dataInTransit: boolean;
+    keyRotation: number; // days
+    algorithm: string;
+  };
+  auditSettings: {
+    logAllAccess: boolean;
+    logDataChanges: boolean;
+    logExports: boolean;
+    logPrints: boolean;
+    retentionPeriod: number; // months
+  };
+  patientRights: {
+    allowDataAccess: boolean;
+    allowDataPortability: boolean;
+    allowDataDeletion: boolean;
+    responseTimeLimit: number; // days
+  };
+}
 
 const PrivacySettings: React.FC = () => {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Privacy and Security</CardTitle>
-        <CardDescription>
-          Manage your privacy and security settings
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Account Security</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base">Two-Factor Authentication</Label>
-                <p className="text-sm text-muted-foreground">
-                  Add an extra layer of security to your account
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base">Session Timeout</Label>
-                <p className="text-sm text-muted-foreground">
-                  Automatically log out after period of inactivity
-                </p>
-              </div>
-              <Select defaultValue="30">
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Select time" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">60 minutes</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        
-        <Separator />
-        
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Data Privacy</h3>
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="analytics" defaultChecked />
-              <Label htmlFor="analytics">
-                Allow anonymous analytics to improve the application
-              </Label>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox id="marketing" />
-              <Label htmlFor="marketing">
-                Receive updates about new features and improvements
-              </Label>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox id="third-party" />
-              <Label htmlFor="third-party">
-                Share data with trusted third-party services
-              </Label>
-            </div>
-          </div>
-        </div>
-        
-        <Separator />
-        
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Login History</h3>
-          <div className="rounded-md border">
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-medium">Current Session</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Chrome on Windows • New York, USA
-                  </p>
-                </div>
-                <Badge variant="success">Active Now</Badge>
-              </div>
-            </div>
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-medium">Previous Login</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Safari on macOS • New York, USA • 2 days ago
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="p-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-medium">Previous Login</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Chrome on iOS • Chicago, USA • 5 days ago
-                  </p>
-                </div>
-              </div>
+  const [settings, setSettings] = useState<PrivacySettings>({
+    dataRetention: {
+      patientRecords: 84, // 7 years
+      auditLogs: 84,
+      backups: 12,
+      autoDelete: false
+    },
+    accessControls: {
+      sessionTimeout: 30,
+      maxLoginAttempts: 3,
+      passwordExpiry: 90,
+      mfaRequired: true,
+      ipWhitelist: []
+    },
+    dataSharing: {
+      allowThirdParty: false,
+      allowResearch: false,
+      allowMarketing: false,
+      consentRequired: true
+    },
+    encryption: {
+      dataAtRest: true,
+      dataInTransit: true,
+      keyRotation: 90,
+      algorithm: 'AES-256'
+    },
+    auditSettings: {
+      logAllAccess: true,
+      logDataChanges: true,
+      logExports: true,
+      logPrints: true,
+      retentionPeriod: 84
+    },
+    patientRights: {
+      allowDataAccess: true,
+      allowDataPortability: true,
+      allowDataDeletion: false,
+      responseTimeLimit: 30
+    }
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [newIpAddress, setNewIpAddress] = useState('');
+
+  useEffect(() => {
+    fetchPrivacySettings();
+  }, []);
+
+  const fetchPrivacySettings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/v1/settings/privacy', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.settings) {
+          setSettings(data.settings);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching privacy settings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load privacy settings",
+        va    </div>
             </div>
           </div>
           <Button variant="outline" size="sm">
