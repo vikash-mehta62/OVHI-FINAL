@@ -1,335 +1,461 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/redux/store';
-import { getARAgingReportAPI, initiateAutomatedFollowUpAPI, setupPaymentPlanAPI } from '@/services/operations/rcm';
-import {
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line
+} from 'recharts';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  AlertTriangle, 
+  DollarSign, 
+  Users, 
   Clock,
-  DollarSign,
-  TrendingDown,
-  AlertTriangle,
-  Bot,
   Target,
-  Filter,
-  Download,
-  Mail,
-  Phone,
-  CreditCard,
-  CheckCircle
+  Brain,
+  Zap
 } from 'lucide-react';
 
-interface ARBucket {
-  range: string;
-  amount: number;
-  percentage: number;
-  count: number;
-  priority: 'high' | 'medium' | 'low';
-  collectability: number;
+interface ARAccount {
+  account_id: number;
+  patient_id: number;
+  current_balance: number;
+  days_outstanding: number;
+  first_name: string;
+  last_name: string;
+  insurance_name: string;
+  aging_bucket: string;
 }
 
-interface ARAccount {
-  id: string;
-  patientName: string;
-  payerName: string;
-  balance: number;
-  lastPayment: string;
-  daysPastDue: number;
-  collectabilityScore: number;
-  recommendedAction: string;
-  contactMethod: 'phone' | 'email' | 'letter';
-  paymentPlan?: boolean;
+interface ARAnalysis {
+  totalOutstanding: number;
+  agingBuckets: Record<string, { count: number; amount: number }>;
+  collectionProbability: number;
+  accounts: ARAccount[];
+  riskDistribution: Record<string, number>;
+}
+
+interface PredictionResult {
+  accountId: number;
+  predictionScore: number;
+  confidenceLevel: number;
+  riskFactors: string[];
+  recommendedActions: string[];
 }
 
 const ARAgingIntelligence: React.FC = () => {
-  const [selectedBucket, setSelectedBucket] = useState<string>('all');
-  const [automationEnabled, setAutomationEnabled] = useState(true);
-  const [arData, setArData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const { token } = useSelector((state: RootState) => state.auth);
+  const [analysis, setAnalysis] = useState<ARAnalysis | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<ARAccount | null>(null);
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [filters, setFilters] = useState({
+    providerId: '',
+    payerId: '',
+    minBalance: ''
+  });
 
-  // Fetch A/R aging data
-  const fetchARData = async () => {
+  useEffect(() => {
+    loadARAnalysis();
+  }, []);
+
+  const loadARAnalysis = async () => {
     setLoading(true);
     try {
-      const response = await getARAgingReportAPI(token);
-      if (response?.data) {
-        setArData(response.data);
+      const queryParams = new URLSearchParams();
+      if (filters.providerId) queryParams.append('providerId', filters.providerId);
+      if (filters.payerId) queryParams.append('payerId', filters.payerId);
+      if (filters.minBalance) queryParams.append('minBalance', filters.minBalance);
+
+      const response = await fetch(`/api/v1/rcm-advanced/ar-aging/analyze?${queryParams}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setAnalysis(data.data);
       }
     } catch (error) {
-      console.error('Error fetching A/R data:', error);
+      console.error('Error loading AR analysis:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchARData();
-    }
-  }, [token]);
-
-  // Use real data or fallback to mock data
-  const arBuckets: ARBucket[] = arData?.arBuckets || [
-    {
-      range: '0-30 days',
-      amount: 0,
-      percentage: 0,
-      count: 0,
-      priority: 'low',
-      collectability: 95
-    },
-    {
-      range: '31-60 days',
-      amount: 0,
-      percentage: 0,
-      count: 0,
-      priority: 'medium',
-      collectability: 85
-    },
-    {
-      range: '61-90 days',
-      amount: 0,
-      percentage: 0,
-      count: 0,
-      priority: 'high',
-      collectability: 70
-    },
-    {
-      range: '91-120 days',
-      amount: 0,
-      percentage: 0,
-      count: 0,
-      priority: 'high',
-      collectability: 50
-    },
-    {
-      range: '120+ days',
-      amount: 0,
-      percentage: 0,
-      count: 0,
-      priority: 'high',
-      collectability: 25
-    }
-  ];
-
-  const arAccounts: ARAccount[] = arData?.arAccounts || [];
-  const totalAR = arData?.totalAR || 0;
-
-  const handleAutomatedFollowUp = async (accountId: string) => {
+  const loadPrediction = async (accountId: number) => {
     try {
-      await initiateAutomatedFollowUpAPI(token, accountId);
-      // Refresh data after follow-up
-      fetchARData();
+      const response = await fetch(`/api/v1/rcm-advanced/ar-aging/predict/${accountId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setPrediction(data.data);
+      }
     } catch (error) {
-      console.error('Failed to initiate follow-up:', error);
+      console.error('Error loading prediction:', error);
     }
   };
 
-  const handleBulkAction = async (action: string) => {
+  const triggerAutomatedActions = async () => {
     try {
-      // Simulate bulk action
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      toast.success(`${action} completed for selected accounts`);
+      const thresholds = {
+        riskScoreThreshold: 80,
+        balanceThreshold: 1000,
+        daysOutstandingThreshold: 90
+      };
+
+      const response = await fetch('/api/v1/rcm-advanced/ar-aging/trigger-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(thresholds)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`Triggered ${data.data.length} automated actions`);
+      }
     } catch (error) {
-      toast.error(`Failed to complete ${action}`);
+      console.error('Error triggering actions:', error);
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-500';
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'critical': return 'bg-red-500';
+      case 'high': return 'bg-orange-500';
       case 'medium': return 'bg-yellow-500';
       case 'low': return 'bg-green-500';
       default: return 'bg-gray-500';
     }
   };
 
-  const getCollectabilityColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
+  const getPredictionColor = (score: number) => {
+    if (score >= 70) return 'text-green-600';
+    if (score >= 40) return 'text-yellow-600';
     return 'text-red-600';
   };
 
+  const agingBucketData = analysis ? Object.entries(analysis.agingBuckets).map(([bucket, data]) => ({
+    bucket,
+    count: data.count,
+    amount: data.amount
+  })) : [];
+
+  const riskDistributionData = analysis ? Object.entries(analysis.riskDistribution).map(([risk, count]) => ({
+    risk,
+    count,
+    color: getRiskColor(risk)
+  })) : [];
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* A/R Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            A/R Aging Intelligence
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
-            </Button>
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Auto-Follow Up:</span>
-              <input
-                type="checkbox"
-                checked={automationEnabled}
-                onChange={(e) => setAutomationEnabled(e.target.checked)}
-                className="rounded"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Total A/R Overview */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl font-bold">${totalAR.toLocaleString()}</span>
-              <Badge variant="secondary">Total A/R</Badge>
-            </div>
-            <p className="text-muted-foreground">
-              {arBuckets.reduce((sum, bucket) => sum + bucket.count, 0)} total accounts
-            </p>
-          </div>
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">AR Aging Intelligence</h1>
+          <p className="text-gray-600">AI-powered accounts receivable analysis and collection optimization</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={loadARAnalysis} variant="outline">
+            <Brain className="w-4 h-4 mr-2" />
+            Refresh Analysis
+          </Button>
+          <Button onClick={triggerAutomatedActions}>
+            <Zap className="w-4 h-4 mr-2" />
+            Trigger Actions
+          </Button>
+        </div>
+      </div>
 
-          {/* A/R Buckets */}
-          <div className="space-y-4">
-            {arBuckets.map((bucket, index) => (
-              <div key={index} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium">{bucket.range}</span>
-                    <Badge className={getPriorityColor(bucket.priority)}>
-                      {bucket.priority}
-                    </Badge>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">${bucket.amount.toLocaleString()}</p>
-                    <p className="text-sm text-muted-foreground">{bucket.count} accounts</p>
-                  </div>
-                </div>
+      {/* Summary Cards */}
+      {analysis && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Outstanding</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(analysis.totalOutstanding)}</div>
+              <p className="text-xs text-muted-foreground">
+                Across {analysis.accounts.length} accounts
+              </p>
+            </CardContent>
+          </Card>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Percentage of Total A/R</span>
-                    <span>{bucket.percentage}%</span>
-                  </div>
-                  <Progress value={bucket.percentage} className="w-full" />
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Collection Probability</CardTitle>
+              <Target className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{analysis.collectionProbability.toFixed(1)}%</div>
+              <Progress value={analysis.collectionProbability} className="mt-2" />
+            </CardContent>
+          </Card>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Collectability Score</span>
-                    <span className={getCollectabilityColor(bucket.collectability)}>
-                      {bucket.collectability}%
-                    </span>
-                  </div>
-                  <Progress value={bucket.collectability} className="w-full" />
-                </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">High Risk Accounts</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {(analysis.riskDistribution.high || 0) + (analysis.riskDistribution.critical || 0)}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <p className="text-xs text-muted-foreground">
+                Require immediate attention
+              </p>
+            </CardContent>
+          </Card>
 
-      {/* Individual Account Management */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            AI-Powered Collections Workflow
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <select 
-              value={selectedBucket} 
-              onChange={(e) => setSelectedBucket(e.target.value)}
-              className="border rounded-md px-3 py-2 text-sm"
-            >
-              <option value="all">All Buckets</option>
-              <option value="0-30">0-30 Days</option>
-              <option value="31-60">31-60 Days</option>
-              <option value="61-90">61-90 Days</option>
-              <option value="91+">91+ Days</option>
-            </select>
-            <Button size="sm" onClick={() => handleBulkAction('Send Statements')}>
-              <Mail className="h-4 w-4 mr-2" />
-              Bulk Statements
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {arAccounts.map((account) => (
-              <div key={account.id} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium">{account.patientName}</span>
-                    <Badge variant="outline">{account.payerName}</Badge>
-                    {account.paymentPlan && (
-                      <Badge variant="secondary">
-                        <CreditCard className="h-3 w-3 mr-1" />
-                        Payment Plan
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">${account.balance.toFixed(2)}</p>
-                    <p className="text-sm text-muted-foreground">{account.daysPastDue} days</p>
-                  </div>
-                </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Avg Days Outstanding</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {analysis.accounts.length > 0 
+                  ? Math.round(analysis.accounts.reduce((sum, acc) => sum + acc.days_outstanding, 0) / analysis.accounts.length)
+                  : 0
+                } days
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Average across all accounts
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Last Payment:</span>
-                    <p className="font-medium">{account.lastPayment}</p>
+      <Tabs defaultValue="analysis" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="accounts">Account Details</TabsTrigger>
+          <TabsTrigger value="predictions">AI Predictions</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="analysis" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Aging Buckets Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>AR Aging Distribution</CardTitle>
+                <CardDescription>Outstanding amounts by aging bucket</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={agingBucketData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="bucket" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    <Bar dataKey="amount" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Risk Distribution */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Risk Distribution</CardTitle>
+                <CardDescription>Account risk level breakdown</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={riskDistributionData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ risk, count }) => `${risk}: ${count}`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="count"
+                    >
+                      {riskDistributionData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="accounts" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Details</CardTitle>
+              <CardDescription>Detailed view of accounts receivable</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="border border-gray-300 px-4 py-2 text-left">Patient</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Balance</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Days Outstanding</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Aging Bucket</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Insurance</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis?.accounts.slice(0, 20).map((account) => (
+                      <tr key={account.account_id} className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-4 py-2">
+                          {account.first_name} {account.last_name}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2">
+                          {formatCurrency(account.current_balance)}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2">
+                          {account.days_outstanding} days
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2">
+                          <Badge variant={account.aging_bucket === '120+' ? 'destructive' : 'secondary'}>
+                            {account.aging_bucket}
+                          </Badge>
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2">
+                          {account.insurance_name}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedAccount(account);
+                              loadPrediction(account.account_id);
+                            }}
+                          >
+                            Predict
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="predictions" className="space-y-4">
+          {selectedAccount && prediction ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Collection Prediction</CardTitle>
+                  <CardDescription>
+                    AI prediction for {selectedAccount.first_name} {selectedAccount.last_name}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center">
+                    <div className={`text-4xl font-bold ${getPredictionColor(prediction.predictionScore)}`}>
+                      {prediction.predictionScore.toFixed(1)}%
+                    </div>
+                    <p className="text-sm text-gray-600">Collection Probability</p>
+                    <Progress value={prediction.predictionScore} className="mt-2" />
                   </div>
+
                   <div>
-                    <span className="text-muted-foreground">Collectability:</span>
-                    <p className={`font-medium ${getCollectabilityColor(account.collectabilityScore)}`}>
-                      {account.collectabilityScore}%
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Contact Method:</span>
-                    <div className="flex items-center gap-1">
-                      {account.contactMethod === 'phone' && <Phone className="h-3 w-3" />}
-                      {account.contactMethod === 'email' && <Mail className="h-3 w-3" />}
-                      <span className="font-medium capitalize">{account.contactMethod}</span>
+                    <h4 className="font-semibold mb-2">Confidence Level</h4>
+                    <div className="flex items-center gap-2">
+                      <Progress value={prediction.confidenceLevel} className="flex-1" />
+                      <span className="text-sm">{prediction.confidenceLevel}%</span>
                     </div>
                   </div>
+
                   <div>
-                    <span className="text-muted-foreground">Days Past Due:</span>
-                    <p className="font-medium">{account.daysPastDue}</p>
+                    <h4 className="font-semibold mb-2">Account Details</h4>
+                    <div className="space-y-1 text-sm">
+                      <p>Balance: {formatCurrency(selectedAccount.current_balance)}</p>
+                      <p>Days Outstanding: {selectedAccount.days_outstanding} days</p>
+                      <p>Aging Bucket: {selectedAccount.aging_bucket}</p>
+                    </div>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
 
-                <div className="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Target className="h-4 w-4 text-blue-600" />
-                    <span className="font-medium text-blue-800">AI Recommendation</span>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Risk Factors & Actions</CardTitle>
+                  <CardDescription>AI-identified risk factors and recommendations</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2">Risk Factors</h4>
+                    <div className="space-y-1">
+                      {prediction.riskFactors.map((factor, index) => (
+                        <Alert key={index}>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>{factor}</AlertDescription>
+                        </Alert>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-sm text-blue-700">{account.recommendedAction}</p>
-                </div>
 
-                <div className="flex items-center gap-2 pt-2">
-                  <Button 
-                    size="sm" 
-                    onClick={() => handleAutomatedFollowUp(account.id)}
-                  >
-                    <Bot className="h-4 w-4 mr-2" />
-                    Auto Follow-Up
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Setup Payment Plan
-                  </Button>
-                  <Button size="sm" variant="ghost">
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Mark Resolved
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                  <div>
+                    <h4 className="font-semibold mb-2">Recommended Actions</h4>
+                    <div className="space-y-2">
+                      {prediction.recommendedActions.map((action, index) => (
+                        <div key={index} className="flex items-center gap-2 p-2 bg-blue-50 rounded">
+                          <Target className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm">{action}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="text-center py-8">
+                <Brain className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Select an account from the Account Details tab to view AI predictions</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
