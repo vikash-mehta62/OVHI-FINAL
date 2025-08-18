@@ -614,7 +614,7 @@ export default function TeamChats() {
         </div>
 
         {/* Debug Info */}
-        {process.env.NODE_ENV === "development" && (
+        {import.meta.env.NODE_ENV === "development" && (
           <div className="p-2 border-t border-gray-200 bg-gray-50 text-xs">
             <p className="font-semibold">Debug Info:</p>
             <p>

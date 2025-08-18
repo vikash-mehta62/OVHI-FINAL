@@ -173,7 +173,7 @@ const AdvancedRCMWorkflow: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
 
   // API base URL
-  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+  const API_BASE = import.meta.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
   // Fetch RCM metrics
   const fetchMetrics = useCallback(async () => {

@@ -1,7 +1,7 @@
 import { apiConnector } from "../apiConnector";
 import { toast } from "sonner";
 
-const { REACT_APP_BASE_URL } = process.env;
+const { REACT_APP_BASE_URL } = import.meta.env;
 
 // Patient Account API endpoints
 const PATIENT_ACCOUNT_ENDPOINTS = {
