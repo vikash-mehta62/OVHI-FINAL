@@ -112,7 +112,7 @@ import PatientOutreach from "./pages/provider/PatientOutreach";
 import PatientOutreachAnalytics from "./pages/provider/PatientOutreachAnalytics";
 
 // Import Referral Management Components
-import {ReferralDashboard} from "./components/referrals/ReferralDashboard";
+import { ReferralDashboard } from "./components/referrals/ReferralDashboard";
 
 // Lab Module Components
 import { LabsDashboard, LabOrderList, LabOrderForm, LabResults } from "./components/labs";
@@ -285,39 +285,39 @@ const App = () => {
                     <Route path="payment/:invoiceId" element={<Payment />} />
                     <Route path="doctor-settings" element={<DoctorSettings />} />
                     <Route path="settings" element={<Settings />} />
-                    
+
                     {/* RCM Module Routes */}
                     <Route path="rcm/denials" element={<DenialManagement />} />
                     <Route path="rcm/collections" element={<CollectionsManagement />} />
                     <Route path="rcm/analytics" element={<RCMAnalyticsDashboard />} />
-                    
+
                     {/* Settings Module Routes */}
                     <Route path="settings/privacy" element={<PrivacySettings />} />
                     <Route path="settings/notifications" element={<NotificationSettings />} />
                     <Route path="settings/compliance" element={<RegulatoryComplianceSettings />} />
                     <Route path="settings/documents" element={<DocumentNumberingSettings />} />
-                    
+
                     {/* Analytics Module Routes */}
                     <Route path="analytics/financial" element={<FinancialAnalytics />} />
                     <Route path="analytics/operational" element={<OperationalAnalytics />} />
                     <Route path="analytics/custom-reports" element={<CustomReportBuilder />} />
-                    
+
                     {/* Admin Module Routes */}
                     <Route path="admin/integrations" element={<IntegrationManagement />} />
                     <Route path="admin/audit" element={<AuditLogViewer />} />
-                    
+
                     {/* Care Management Routes */}
                     <Route path="ccm" element={<CCMDashboard />} />
                     <Route path="pcm" element={<PCMModule />} />
                     <Route path="rpm" element={<RPMDashboard />} />
-                    
+
                     {/* MIPS Compliance Routes */}
                     <Route path="mips" element={<MIPSCompliance />} />
-                    
+
                     {/* Patient Outreach Routes */}
                     <Route path="patient-outreach" element={<PatientOutreach />} />
                     <Route path="patient-outreach/analytics" element={<PatientOutreachAnalytics />} />
-                    
+
                     {/* Lab Module Routes */}
                     <Route path="labs" element={<LabsDashboard />}>
                       <Route index element={<LabOrderList />} />

@@ -98,7 +98,7 @@ const handleControllerError = (error, res, req = null) => {
     method: req?.method,
     userId: req?.user?.user_id,
     ip: req?.ip,
-    userAgent: req?.get('User-Agent')
+    userAgent: req?.['User-Agent']
   };
 
   // Log based on error severity

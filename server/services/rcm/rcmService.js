@@ -580,6 +580,173 @@ class RCMService {
       });
     }
   }
+
+  /**
+   * Create new claim
+   * @param {Object} claimData - Claim data
+   * @returns {Object} Created claim
+   */
+  async createClaim(claimData) {
+    try {
+      // Validate claim data
+      const validatedData = validateClaimData(claimData);
+      if (!validatedData.isValid) {
+        throw createValidationError('Invalid claim data', validatedData.errors);
+      }
+
+      const {
+        patient_id,
+        procedure_code,
+        total_amount,
+        service_date,
+        diagnosis_code,
+        notes,
+        created_by,
+        payer_name,
+        policy_number,
+        group_number,
+        unit_price,
+        code_units,
+        procedure_description,
+        diagnosis_description
+      } = claimData;
+
+      const insertQuery = `
+        INSERT INTO billings (
+          patient_id, procedure_code, total_amount, service_date, 
+          diagnosis_code, notes, status, created_by, created, updated,
+          payer_name, policy_number, group_number, unit_price, code_units,
+          procedure_description, diagnosis_description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const result = await executeQuery(insertQuery, [
+        patient_id,
+        procedure_code,
+        total_amount,
+        service_date,
+        diagnosis_code || '',
+        notes || '',
+        claimData.status || 0, // Default to draft
+        created_by,
+        payer_name || '',
+        policy_number || '',
+        group_number || '',
+        unit_price || total_amount,
+        code_units || 1,
+        procedure_description || '',
+        diagnosis_description || ''
+      ]);
+
+      // Get the created claim
+      const newClaim = await this.getClaimById(result.insertId);
+
+      // Log audit trail
+      await auditLog({
+        table_name: 'billings',
+        record_id: result.insertId,
+        action: 'CREATE',
+        old_values: null,
+        new_values: JSON.stringify(claimData),
+        user_id: created_by,
+        timestamp: new Date()
+      });
+
+      return newClaim;
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to create claim', {
+        originalError: error.message,
+        claimData
+      });
+    }
+  }
+
+  /**
+   * Update claim
+   * @param {number} claimId - Claim ID
+   * @param {Object} updateData - Update data
+   * @returns {Object} Updated claim
+   */
+  async updateClaim(claimId, updateData) {
+    try {
+      // Get existing claim
+      const existingClaim = await this.getClaimById(claimId);
+
+      const {
+        patient_id,
+        procedure_code,
+        total_amount,
+        service_date,
+        diagnosis_code,
+        notes,
+        updated_by,
+        payer_name,
+        policy_number,
+        group_number,
+        unit_price,
+        code_units,
+        procedure_description,
+        diagnosis_description,
+        status
+      } = updateData;
+
+      const updateQuery = `
+        UPDATE billings 
+        SET patient_id = ?, procedure_code = ?, total_amount = ?, 
+            service_date = ?, diagnosis_code = ?, notes = ?, 
+            updated_by = ?, updated = NOW(), payer_name = ?,
+            policy_number = ?, group_number = ?, unit_price = ?,
+            code_units = ?, procedure_description = ?, diagnosis_description = ?,
+            status = ?
+        WHERE id = ?
+      `;
+
+      await executeQuery(updateQuery, [
+        patient_id || existingClaim.patient_id,
+        procedure_code || existingClaim.procedure_code,
+        total_amount || existingClaim.total_amount,
+        service_date || existingClaim.service_date,
+        diagnosis_code || existingClaim.diagnosis_code,
+        notes || existingClaim.notes,
+        updated_by,
+        payer_name || existingClaim.payer_name,
+        policy_number || existingClaim.policy_number,
+        group_number || existingClaim.group_number,
+        unit_price || existingClaim.unit_price,
+        code_units || existingClaim.code_units,
+        procedure_description || existingClaim.procedure_description,
+        diagnosis_description || existingClaim.diagnosis_description,
+        status !== undefined ? status : existingClaim.status,
+        claimId
+      ]);
+
+      // Log audit trail
+      await auditLog({
+        table_name: 'billings',
+        record_id: claimId,
+        action: 'UPDATE',
+        old_values: JSON.stringify(existingClaim),
+        new_values: JSON.stringify(updateData),
+        user_id: updated_by,
+        timestamp: new Date()
+      });
+
+      // Return updated claim
+      return await this.getClaimById(claimId);
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to update claim', {
+        originalError: error.message,
+        claimId,
+        updateData
+      });
+    }
+  }
 }
 
 module.exports = RCMService;

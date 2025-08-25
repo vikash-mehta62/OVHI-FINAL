@@ -358,6 +358,56 @@ export const getClaimDetailsAPI = async (token, claimId) => {
   }
 };
 
+// Create New Claim
+export const createClaimAPI = async (token, claimData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      RCM_CLAIMS_API,
+      claimData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to create claim");
+    }
+
+    toast.success("Claim created successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Create Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to create claim");
+    return null;
+  }
+};
+
+// Update Existing Claim
+export const updateClaimAPI = async (token, claimId, claimData) => {
+  try {
+    const response = await apiConnector(
+      "PUT",
+      `${RCM_CLAIMS_API}/${claimId}`,
+      claimData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to update claim");
+    }
+
+    toast.success("Claim updated successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Update Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to update claim");
+    return null;
+  }
+};
+
 // Bulk Claim Status Update
 export const bulkClaimStatusUpdateAPI = async (token, updateData) => {
   try {

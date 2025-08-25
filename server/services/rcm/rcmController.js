@@ -4,6 +4,8 @@
  */
 
 const ConsolidatedRCMService = require('./consolidatedRCMService');
+const ClaimHistoryService = require('./claimHistoryService');
+const CMSValidationService = require('./cmsValidationService');
 const {
     createController,
     ParamExtractors,
@@ -34,6 +36,7 @@ const {
 
 // Initialize consolidated service
 const rcmService = new ConsolidatedRCMService();
+const historyService = new ClaimHistoryService();
 
 /**
  * Controller method mappings with service methods and options
@@ -67,6 +70,47 @@ const controllerMappings = {
             transformResponse: ResponseTransformers.claimTransformer,
             validateInput: InputValidators.validateClaimUpdate,
             successMessage: 'Claim status updated successfully',
+            successStatus: StatusCodes.OK
+        }
+    },
+
+    // Create new claim
+    createClaim: {
+        serviceMethod: 'createClaim',
+        options: {
+            extractParams: (req) => ({
+                ...req.body,
+                created_by: req.user?.user_id
+            }),
+            validateInput: InputValidators.validateClaimUpdate, // Use existing validator
+            successMessage: 'Claim created successfully',
+            successStatus: StatusCodes.CREATED
+        }
+    },
+
+    // Update existing claim
+    updateClaim: {
+        serviceMethod: 'updateClaim',
+        options: {
+            extractParams: (req) => ([
+                parseInt(req.params.claimId),
+                {
+                    ...req.body,
+                    updated_by: req.user?.user_id
+                }
+            ]),
+            validateInput: InputValidators.validateClaimUpdate,
+            successMessage: 'Claim updated successfully',
+            successStatus: StatusCodes.OK
+        }
+    },
+
+    // Get claim by ID
+    getClaimById: {
+        serviceMethod: 'getClaimById',
+        options: {
+            extractParams: (req) => ([parseInt(req.params.claimId)]),
+            successMessage: 'Claim details retrieved successfully',
             successStatus: StatusCodes.OK
         }
     },
@@ -409,6 +453,84 @@ rcmController.invalidateCache = async (req, res) => {
         }, 'Cache patterns invalidated successfully');
     } catch (error) {
         handleControllerError(error, res, 'Invalidate cache');
+    }
+};
+
+/**
+ * Get claim history
+ */
+rcmController.getClaimHistory = async (req, res) => {
+    try {
+        const claimId = parseInt(req.params.claimId);
+        const {
+            page = 1,
+            limit = 50,
+            actionType,
+            userId,
+            dateFrom,
+            dateTo,
+            search
+        } = req.query;
+
+        if (!claimId || isNaN(claimId)) {
+            return ResponseHelpers.sendValidationError(res, [
+                { field: 'claimId', message: 'Valid claim ID is required' }
+            ]);
+        }
+
+        const historyData = await historyService.getClaimHistory(claimId, {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            actionType,
+            userId: userId ? parseInt(userId) : undefined,
+            dateFrom,
+            dateTo,
+            search
+        });
+
+        ResponseHelpers.sendSuccess(res, historyData, 'Claim history retrieved successfully');
+    } catch (error) {
+        handleControllerError(error, res, 'Get claim history');
+    }
+};
+
+/**
+ * Export claim history
+ */
+rcmController.exportClaimHistory = async (req, res) => {
+    try {
+        const claimId = parseInt(req.params.claimId);
+        const {
+            format = 'json',
+            dateFrom,
+            dateTo,
+            includeMetadata = true
+        } = req.query;
+
+        if (!claimId || isNaN(claimId)) {
+            return ResponseHelpers.sendValidationError(res, [
+                { field: 'claimId', message: 'Valid claim ID is required' }
+            ]);
+        }
+
+        const exportData = await historyService.exportHistory(claimId, {
+            format,
+            dateFrom,
+            dateTo,
+            includeMetadata: includeMetadata === 'true'
+        });
+
+        if (format === 'csv') {
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="claim-${claimId}-history.csv"`);
+            res.send(exportData);
+        } else {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Disposition', `attachment; filename="claim-${claimId}-history.json"`);
+            res.json(exportData);
+        }
+    } catch (error) {
+        handleControllerError(error, res, 'Export claim history');
     }
 };
 

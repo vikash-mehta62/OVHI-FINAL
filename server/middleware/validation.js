@@ -57,12 +57,38 @@ const ValidationSchemas = {
   // Claim validation
   createClaim: Joi.object({
     patient_id: ValidationPatterns.positiveInteger.required(),
+    patient_name: Joi.string().min(1).max(255).required(),
     procedure_code: ValidationPatterns.cptCode.required(),
+    procedure_description: Joi.string().max(500).optional(),
+    diagnosis_code: ValidationPatterns.icdCode.required(),
+    diagnosis_description: Joi.string().max(500).optional(),
     total_amount: ValidationPatterns.monetaryAmount.required(),
+    unit_price: ValidationPatterns.monetaryAmount.optional(),
+    code_units: ValidationPatterns.positiveInteger.optional().default(1),
     service_date: ValidationPatterns.dateString.required(),
-    diagnosis_codes: Joi.array().items(ValidationPatterns.icdCode).optional(),
+    payer_name: Joi.string().max(255).optional(),
+    policy_number: Joi.string().max(100).optional(),
+    group_number: Joi.string().max(100).optional(),
     notes: ValidationPatterns.optionalString,
-    provider_id: ValidationPatterns.optionalPositiveInteger
+    status: ValidationPatterns.claimStatus.optional().default(0)
+  }),
+
+  updateClaim: Joi.object({
+    patient_id: ValidationPatterns.positiveInteger.optional(),
+    patient_name: Joi.string().min(1).max(255).optional(),
+    procedure_code: ValidationPatterns.cptCode.optional(),
+    procedure_description: Joi.string().max(500).optional(),
+    diagnosis_code: ValidationPatterns.icdCode.optional(),
+    diagnosis_description: Joi.string().max(500).optional(),
+    total_amount: ValidationPatterns.monetaryAmount.optional(),
+    unit_price: ValidationPatterns.monetaryAmount.optional(),
+    code_units: ValidationPatterns.positiveInteger.optional(),
+    service_date: ValidationPatterns.dateString.optional(),
+    payer_name: Joi.string().max(255).optional(),
+    policy_number: Joi.string().max(100).optional(),
+    group_number: Joi.string().max(100).optional(),
+    notes: ValidationPatterns.optionalString,
+    status: ValidationPatterns.claimStatus.optional()
   }),
 
   updateClaimStatus: Joi.object({
@@ -465,6 +491,7 @@ const sanitizeObject = (obj, context = 'general') => {
 const ValidationMiddleware = {
   // Claim validations
   validateCreateClaim: createValidationMiddleware(ValidationSchemas.createClaim, 'body'),
+  validateUpdateClaim: createValidationMiddleware(ValidationSchemas.updateClaim, 'body'),
   validateUpdateClaimStatus: createValidationMiddleware(ValidationSchemas.updateClaimStatus, 'body'),
   validateGetClaimsQuery: createValidationMiddleware(ValidationSchemas.getClaimsQuery, 'query'),
   

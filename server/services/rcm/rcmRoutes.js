@@ -93,9 +93,33 @@ router.get('/claims',
   ValidationMiddleware.validateGetClaimsQuery,
   rcmController.getClaimsStatus
 );
+router.post('/claims',
+  sanitizationMiddleware,
+  ValidationMiddleware.validateCreateClaim,
+  rcmController.createClaim
+);
 router.get('/claims/:claimId',
   ValidationMiddleware.validatePositiveIntegerParam('claimId'),
-  rcmController.getClaimDetails
+  rcmController.getClaimById
+);
+router.put('/claims/:claimId',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  ValidationMiddleware.validateUpdateClaim,
+  rcmController.updateClaim
+);
+router.get('/claims/:claimId/history',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  rcmController.getClaimHistory
+);
+router.get('/claims/:claimId/history/export',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  rcmController.exportClaimHistory
+);
+router.post('/claims/validate',
+  sanitizationMiddleware,
+  ValidationMiddleware.validateCreateClaim,
+  rcmController.validateClaim
 );
 router.post('/claims/bulk-update',
   sanitizationMiddleware,

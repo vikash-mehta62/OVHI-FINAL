@@ -50,10 +50,20 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Plus,
+  History
 } from 'lucide-react';
-import { getClaimsStatusAPI, getClaimDetailsAPI, updateClaimStatusAPI } from '@/services/operations/rcm';
+import { 
+  getClaimsStatusAPI, 
+  getClaimDetailsAPI, 
+  updateClaimStatusAPI,
+  createClaimAPI,
+  updateClaimAPI
+} from '@/services/operations/rcm';
 import PaymentForm from '@/components/payments/PaymentForm';
+import ClaimForm from './ClaimForm';
+import ClaimHistory from './ClaimHistory';
 import { formatCurrency, formatDate } from '@/utils/rcmFormatters';
 
 interface Claim {
@@ -79,6 +89,11 @@ const ClaimsManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showClaimForm, setShowClaimForm] = useState(false);
+  const [editingClaim, setEditingClaim] = useState<any>(null);
+  const [claimFormLoading, setClaimFormLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyClaimId, setHistoryClaimId] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     status: 'all',
     search: '',
@@ -166,6 +181,59 @@ const ClaimsManagement: React.FC = () => {
     // Show success message
   };
 
+  // Handle create new claim
+  const handleCreateClaim = () => {
+    setEditingClaim(null);
+    setShowClaimForm(true);
+  };
+
+  // Handle edit claim
+  const handleEditClaim = (claim: Claim) => {
+    setEditingClaim(claim);
+    setShowClaimForm(true);
+  };
+
+  // Handle claim form submit
+  const handleClaimFormSubmit = async (claimData: any) => {
+    try {
+      setClaimFormLoading(true);
+      
+      let response;
+      if (editingClaim) {
+        // Update existing claim
+        response = await updateClaimAPI(token, editingClaim.claim_id, claimData);
+      } else {
+        // Create new claim
+        response = await createClaimAPI(token, claimData);
+      }
+
+      if (response) {
+        setShowClaimForm(false);
+        setEditingClaim(null);
+        fetchClaims(); // Refresh claims list
+      } else {
+        throw new Error('Failed to save claim');
+      }
+    } catch (error) {
+      console.error('Error saving claim:', error);
+      throw error; // Re-throw to let ClaimForm handle the error display
+    } finally {
+      setClaimFormLoading(false);
+    }
+  };
+
+  // Handle claim form cancel
+  const handleClaimFormCancel = () => {
+    setShowClaimForm(false);
+    setEditingClaim(null);
+  };
+
+  // Handle view history
+  const handleViewHistory = (claimId: number) => {
+    setHistoryClaimId(claimId);
+    setShowHistory(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -177,6 +245,10 @@ const ClaimsManagement: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center space-x-2">
+          <Button onClick={handleCreateClaim}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Claim
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchClaims}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -344,6 +416,22 @@ const ClaimsManagement: React.FC = () => {
                             </DialogContent>
                           </Dialog>
                           
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditClaim(claim)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewHistory(claim.claim_id)}
+                          >
+                            <History className="h-4 w-4" />
+                          </Button>
+                          
                           {(claim.status === 1 || claim.status === 3) && (
                             <Button
                               variant="outline"
@@ -412,6 +500,49 @@ const ClaimsManagement: React.FC = () => {
               description={`Payment for ${selectedClaim.procedure_code} - ${selectedClaim.patient_name}`}
               onSuccess={handlePaymentSuccess}
               onCancel={() => setShowPaymentForm(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim Form Dialog */}
+      <Dialog open={showClaimForm} onOpenChange={setShowClaimForm}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingClaim ? 'Edit Claim' : 'Create New Claim'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingClaim 
+                ? `Editing claim #${editingClaim.claim_id}` 
+                : 'Enter claim information to create a new claim'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <ClaimForm
+            claim={editingClaim}
+            onSubmit={handleClaimFormSubmit}
+            onCancel={handleClaimFormCancel}
+            loading={claimFormLoading}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim History Dialog */}
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Claim History
+            </DialogTitle>
+            <DialogDescription>
+              Complete audit trail for claim #{historyClaimId}
+            </DialogDescription>
+          </DialogHeader>
+          {historyClaimId && (
+            <ClaimHistory
+              claimId={historyClaimId}
+              onClose={() => setShowHistory(false)}
             />
           )}
         </DialogContent>
