@@ -1,7 +1,333 @@
-/**\n * Controller Wrapper Utilities\n * Provides standardized patterns for handling HTTP requests and responses\n */\n\nconst { handleControllerError } = require('../middleware/errorHandler');
-const {
-  StandardizedAPIResponse,
-  ResponseStatusCodes,
-  ResponseHelpers,
-  PaginationMeta
-} = require('./standardizedResponse');\n\n/**\n * Standard API Response format\n */\nclass APIResponse {\n  constructor(success = true, data = null, message = null, meta = null) {\n    this.success = success;\n    this.timestamp = new Date().toISOString();\n    \n    if (data !== null) {\n      this.data = data;\n    }\n    \n    if (message) {\n      this.message = message;\n    }\n    \n    if (meta) {\n      this.meta = meta;\n    }\n  }\n\n  /**\n   * Create success response\n   * @param {*} data - Response data\n   * @param {string} message - Success message\n   * @param {Object} meta - Additional metadata\n   * @returns {APIResponse} Success response\n   */\n  static success(data = null, message = null, meta = null) {\n    return new APIResponse(true, data, message, meta);\n  }\n\n  /**\n   * Create error response\n   * @param {string} message - Error message\n   * @param {*} details - Error details\n   * @returns {APIResponse} Error response\n   */\n  static error(message, details = null) {\n    const response = new APIResponse(false, null, message);\n    if (details) {\n      response.error = details;\n    }\n    return response;\n  }\n\n  /**\n   * Create paginated response\n   * @param {Array} data - Response data\n   * @param {Object} pagination - Pagination info\n   * @param {string} message - Success message\n   * @returns {APIResponse} Paginated response\n   */\n  static paginated(data, pagination, message = null) {\n    return new APIResponse(true, data, message, { pagination });\n  }\n}\n\n/**\n * Controller wrapper for standardized request/response handling\n * @param {Function} serviceMethod - Service method to call\n * @param {Object} options - Wrapper options\n * @returns {Function} Express middleware function\n */\nconst controllerWrapper = (serviceMethod, options = {}) => {\n  const {\n    successMessage = null,\n    successStatus = 200,\n    extractParams = null,\n    validateInput = null,\n    transformResponse = null\n  } = options;\n\n  return async (req, res, next) => {\n    try {\n      // Extract parameters from request\n      let params = {};\n      if (extractParams) {\n        params = extractParams(req);\n      } else {\n        // Default parameter extraction\n        params = {\n          ...req.query,\n          ...req.params,\n          ...req.body,\n          userId: req.user?.user_id\n        };\n      }\n\n      // Validate input if validator provided\n      if (validateInput) {\n        const validation = validateInput(params);\n        if (!validation.isValid) {\n          return res.status(400).json(\n            APIResponse.error('Validation failed', validation.errors)\n          );\n        }\n      }\n\n      // Call service method\n      const result = await serviceMethod(params);\n\n      // Transform response if transformer provided\n      let responseData = result;\n      if (transformResponse) {\n        responseData = transformResponse(result);\n      }\n\n      // Handle paginated responses\n      if (result && result.pagination) {\n        return res.status(successStatus).json(\n          APIResponse.paginated(result.data || result, result.pagination, successMessage)\n        );\n      }\n\n      // Standard success response\n      res.status(successStatus).json(\n        APIResponse.success(responseData, successMessage)\n      );\n\n    } catch (error) {\n      handleControllerError(error, res, `${serviceMethod.name || 'Service method'}`);\n    }\n  };\n};\n\n/**\n * Create a controller for a service class\n * @param {Object} serviceInstance - Service class instance\n * @param {Object} methodMappings - Method mappings with options\n * @returns {Object} Controller object with wrapped methods\n */\nconst createController = (serviceInstance, methodMappings) => {\n  const controller = {};\n\n  for (const [controllerMethod, config] of Object.entries(methodMappings)) {\n    const { serviceMethod, options = {} } = config;\n    \n    if (typeof serviceInstance[serviceMethod] !== 'function') {\n      throw new Error(`Service method '${serviceMethod}' not found`);\n    }\n\n    controller[controllerMethod] = controllerWrapper(\n      serviceInstance[serviceMethod].bind(serviceInstance),\n      options\n    );\n  }\n\n  return controller;\n};\n\n/**\n * Parameter extraction helpers\n */\nconst ParamExtractors = {\n  /**\n   * Extract dashboard query parameters\n   */\n  dashboardParams: (req) => ({\n    timeframe: req.query.timeframe,\n    compareWith: req.query.compareWith,\n    userId: req.user?.user_id\n  }),\n\n  /**\n   * Extract claims query parameters\n   */\n  claimsParams: (req) => ({\n    page: parseInt(req.query.page) || 1,\n    limit: parseInt(req.query.limit) || 10,\n    status: req.query.status,\n    search: req.query.search,\n    priority: req.query.priority,\n    dateFrom: req.query.date_from,\n    dateTo: req.query.date_to,\n    userId: req.user?.user_id\n  }),\n\n  /**\n   * Extract claim update parameters\n   */\n  claimUpdateParams: (req) => ({\n    claimId: parseInt(req.params.claimId),\n    status: req.body.status,\n    notes: req.body.notes,\n    userId: req.user?.user_id\n  }),\n\n  /**\n   * Extract A/R aging parameters\n   */\n  arAgingParams: (req) => ({\n    includeZeroBalance: req.query.include_zero_balance === 'true',\n    payerFilter: req.query.payer_filter,\n    priorityFilter: req.query.priority_filter,\n    userId: req.user?.user_id\n  }),\n\n  /**\n   * Extract collections parameters\n   */\n  collectionsParams: (req) => ({\n    page: parseInt(req.query.page) || 1,\n    limit: parseInt(req.query.limit) || 10,\n    patientId: req.query.patient_id ? parseInt(req.query.patient_id) : null,\n    activityType: req.query.activity_type,\n    outcome: req.query.outcome,\n    dateFrom: req.query.date_from,\n    dateTo: req.query.date_to,\n    userId: req.user?.user_id\n  })\n};\n\n/**\n * Response transformers\n */\nconst ResponseTransformers = {\n  /**\n   * Transform dashboard data for frontend consumption\n   */\n  dashboardTransformer: (data) => ({\n    ...data,\n    summary: {\n      ...data.summary,\n      totalBilled: data.summary.totalBilled,\n      totalCollected: data.summary.totalCollected,\n      totalAR: data.summary.totalAR\n    }\n  }),\n\n  /**\n   * Transform claims data\n   */\n  claimsTransformer: (data) => ({\n    claims: data.claims,\n    filters: data.filters,\n    // Pagination is handled separately\n  }),\n\n  /**\n   * Transform single claim data\n   */\n  claimTransformer: (data) => ({\n    ...data,\n    formatted_amount: data.total_amount,\n    formatted_date: data.service_date\n  })\n};\n\n/**\n * Input validators\n */\nconst InputValidators = {\n  /**\n   * Validate claim update input\n   */\n  validateClaimUpdate: (params) => {\n    const errors = [];\n    \n    if (!params.claimId || isNaN(params.claimId)) {\n      errors.push('Valid claim ID is required');\n    }\n    \n    if (params.status === undefined || params.status === null) {\n      errors.push('Status is required');\n    }\n    \n    if (![0, 1, 2, 3, 4].includes(parseInt(params.status))) {\n      errors.push('Invalid status value');\n    }\n    \n    return {\n      isValid: errors.length === 0,\n      errors\n    };\n  },\n\n  /**\n   * Validate pagination parameters\n   */\n  validatePagination: (params) => {\n    const errors = [];\n    \n    if (params.page && (isNaN(params.page) || params.page < 1)) {\n      errors.push('Page must be a positive integer');\n    }\n    \n    if (params.limit && (isNaN(params.limit) || params.limit < 1 || params.limit > 100)) {\n      errors.push('Limit must be between 1 and 100');\n    }\n    \n    return {\n      isValid: errors.length === 0,\n      errors\n    };\n  }\n};\n\n/**\n * HTTP status codes for different scenarios\n */\nconst StatusCodes = {\n  OK: 200,\n  CREATED: 201,\n  ACCEPTED: 202,\n  NO_CONTENT: 204,\n  BAD_REQUEST: 400,\n  UNAUTHORIZED: 401,\n  FORBIDDEN: 403,\n  NOT_FOUND: 404,\n  CONFLICT: 409,\n  UNPROCESSABLE_ENTITY: 422,\n  INTERNAL_SERVER_ERROR: 500,\n  BAD_GATEWAY: 502,\n  SERVICE_UNAVAILABLE: 503\n};\n\nmodule.exports = {\n  APIResponse,\n  controllerWrapper,\n  createController,\n  ParamExtractors,\n  ResponseTransformers,\n  InputValidators,\n  StatusCodes\n};"
+/**
+ * Controller Wrapper Utilities
+ * Provides standardized patterns for handling HTTP requests and responses
+ */
+
+const { handleControllerError } = require('../middleware/errorHandler');
+
+/**
+ * Standard API Response format
+ */
+class APIResponse {
+  constructor(success = true, data = null, message = null, meta = null) {
+    this.success = success;
+    this.timestamp = new Date().toISOString();
+    
+    if (data !== null) {
+      this.data = data;
+    }
+    
+    if (message) {
+      this.message = message;
+    }
+    
+    if (meta) {
+      this.meta = meta;
+    }
+  }
+
+  /**
+   * Create success response
+   * @param {*} data - Response data
+   * @param {string} message - Success message
+   * @param {Object} meta - Additional metadata
+   * @returns {APIResponse} Success response
+   */
+  static success(data = null, message = null, meta = null) {
+    return new APIResponse(true, data, message, meta);
+  }
+
+  /**
+   * Create error response
+   * @param {string} message - Error message
+   * @param {*} details - Error details
+   * @returns {APIResponse} Error response
+   */
+  static error(message, details = null) {
+    const response = new APIResponse(false, null, message);
+    if (details) {
+      response.error = details;
+    }
+    return response;
+  }
+
+  /**
+   * Create paginated response
+   * @param {Array} data - Response data
+   * @param {Object} pagination - Pagination info
+   * @param {string} message - Success message
+   * @returns {APIResponse} Paginated response
+   */
+  static paginated(data, pagination, message = null) {
+    return new APIResponse(true, data, message, { pagination });
+  }
+}
+
+/**
+ * Controller wrapper for standardized request/response handling
+ * @param {Function} serviceMethod - Service method to call
+ * @param {Object} options - Wrapper options
+ * @returns {Function} Express middleware function
+ */
+const controllerWrapper = (serviceMethod, options = {}) => {
+  const {
+    successMessage = null,
+    successStatus = 200,
+    extractParams = null,
+    validateInput = null,
+    transformResponse = null
+  } = options;
+
+  return async (req, res, next) => {
+    try {
+      // Extract parameters from request
+      let params = {};
+      if (extractParams) {
+        params = extractParams(req);
+      } else {
+        // Default parameter extraction
+        params = {
+          ...req.query,
+          ...req.params,
+          ...req.body,
+          userId: req.user?.user_id
+        };
+      }
+
+      // Validate input if validator provided
+      if (validateInput) {
+        const validation = validateInput(params);
+        if (!validation.isValid) {
+          return res.status(400).json(
+            APIResponse.error('Validation failed', validation.errors)
+          );
+        }
+      }
+
+      // Call service method
+      const result = await serviceMethod(params);
+
+      // Transform response if transformer provided
+      let responseData = result;
+      if (transformResponse) {
+        responseData = transformResponse(result);
+      }
+
+      // Handle paginated responses
+      if (result && result.pagination) {
+        return res.status(successStatus).json(
+          APIResponse.paginated(result.data || result, result.pagination, successMessage)
+        );
+      }
+
+      // Standard success response
+      res.status(successStatus).json(
+        APIResponse.success(responseData, successMessage)
+      );
+
+    } catch (error) {
+      handleControllerError(error, res, `${serviceMethod.name || 'Service method'}`);
+    }
+  };
+};
+
+/**
+ * Create a controller for a service class
+ * @param {Object} serviceInstance - Service class instance
+ * @param {Object} methodMappings - Method mappings with options
+ * @returns {Object} Controller object with wrapped methods
+ */
+const createController = (serviceInstance, methodMappings) => {
+  const controller = {};
+
+  for (const [controllerMethod, config] of Object.entries(methodMappings)) {
+    const { serviceMethod, options = {} } = config;
+    
+    if (typeof serviceInstance[serviceMethod] !== 'function') {
+      throw new Error(`Service method '${serviceMethod}' not found`);
+    }
+
+    controller[controllerMethod] = controllerWrapper(
+      serviceInstance[serviceMethod].bind(serviceInstance),
+      options
+    );
+  }
+
+  return controller;
+};
+
+/**
+ * Parameter extraction helpers
+ */
+const ParamExtractors = {
+  /**
+   * Extract dashboard query parameters
+   */
+  dashboardParams: (req) => ({
+    timeframe: req.query.timeframe,
+    compareWith: req.query.compareWith,
+    userId: req.user?.user_id
+  }),
+
+  /**
+   * Extract claims query parameters
+   */
+  claimsParams: (req) => ({
+    page: parseInt(req.query.page) || 1,
+    limit: parseInt(req.query.limit) || 10,
+    status: req.query.status,
+    search: req.query.search,
+    priority: req.query.priority,
+    dateFrom: req.query.date_from,
+    dateTo: req.query.date_to,
+    userId: req.user?.user_id
+  }),
+
+  /**
+   * Extract claim update parameters
+   */
+  claimUpdateParams: (req) => ({
+    claimId: parseInt(req.params.claimId),
+    status: req.body.status,
+    notes: req.body.notes,
+    userId: req.user?.user_id
+  }),
+
+  /**
+   * Extract A/R aging parameters
+   */
+  arAgingParams: (req) => ({
+    includeZeroBalance: req.query.include_zero_balance === 'true',
+    payerFilter: req.query.payer_filter,
+    priorityFilter: req.query.priority_filter,
+    userId: req.user?.user_id
+  }),
+
+  /**
+   * Extract collections parameters
+   */
+  collectionsParams: (req) => ({
+    page: parseInt(req.query.page) || 1,
+    limit: parseInt(req.query.limit) || 10,
+    patientId: req.query.patient_id ? parseInt(req.query.patient_id) : null,
+    activityType: req.query.activity_type,
+    outcome: req.query.outcome,
+    dateFrom: req.query.date_from,
+    dateTo: req.query.date_to,
+    userId: req.user?.user_id
+  })
+};
+
+/**
+ * Response transformers
+ */
+const ResponseTransformers = {
+  /**
+   * Transform dashboard data for frontend consumption
+   */
+  dashboardTransformer: (data) => ({
+    ...data,
+    summary: {
+      ...data.summary,
+      totalBilled: data.summary.totalBilled,
+      totalCollected: data.summary.totalCollected,
+      totalAR: data.summary.totalAR
+    }
+  }),
+
+  /**
+   * Transform claims data
+   */
+  claimsTransformer: (data) => ({
+    claims: data.claims,
+    filters: data.filters
+    // Pagination is handled separately
+  }),
+
+  /**
+   * Transform single claim data
+   */
+  claimTransformer: (data) => ({
+    ...data,
+    formatted_amount: data.total_amount,
+    formatted_date: data.service_date
+  })
+};
+
+/**
+ * Input validators
+ */
+const InputValidators = {
+  /**
+   * Validate claim update input
+   */
+  validateClaimUpdate: (params) => {
+    const errors = [];
+    
+    if (!params.claimId || isNaN(params.claimId)) {
+      errors.push('Valid claim ID is required');
+    }
+    
+    if (params.status === undefined || params.status === null) {
+      errors.push('Status is required');
+    }
+    
+    if (![0, 1, 2, 3, 4].includes(parseInt(params.status))) {
+      errors.push('Invalid status value');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  },
+
+  /**
+   * Validate pagination parameters
+   */
+  validatePagination: (params) => {
+    const errors = [];
+    
+    if (params.page && (isNaN(params.page) || params.page < 1)) {
+      errors.push('Page must be a positive integer');
+    }
+    
+    if (params.limit && (isNaN(params.limit) || params.limit < 1 || params.limit > 100)) {
+      errors.push('Limit must be between 1 and 100');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+};
+
+/**
+ * HTTP status codes for different scenarios
+ */
+const StatusCodes = {
+  OK: 200,
+  CREATED: 201,
+  ACCEPTED: 202,
+  NO_CONTENT: 204,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_ENTITY: 422,
+  INTERNAL_SERVER_ERROR: 500,
+  BAD_GATEWAY: 502,
+  SERVICE_UNAVAILABLE: 503
+};
+
+module.exports = {
+  APIResponse,
+  controllerWrapper,
+  createController,
+  ParamExtractors,
+  ResponseTransformers,
+  InputValidators,
+  StatusCodes
+};

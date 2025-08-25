@@ -155,11 +155,11 @@ export const ErrorBoundaryEnhanced: React.FC<ErrorBoundaryProps> = ({
 }) => {
   return (
     <EnhancedErrorBoundary
-      fallback={fallback ? () => fallback : undefined}
+      fallback={fallback}
       onError={onError}
-      enableReporting={true}
-      enableRecovery={true}
-      level="component"
+      reportErrors={true}
+      enableRetry={true}
+      showErrorDetails={showDetails}
     >
       {children}
     </EnhancedErrorBoundary>

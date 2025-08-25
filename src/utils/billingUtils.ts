@@ -227,7 +227,7 @@ export const generateMockBilling = (appointmentId: string, patientId: string): B
   // Random diagnoses
   const diagnoses: Diagnosis[] = [
     {
-      id: `diag-${Math.random().toString(36).substr(2, 9)}`,
+      id: `diag-${Math.random().toString(36).substring(2, 11)}`,
       icd10Code: commonICD10Codes[Math.floor(Math.random() * commonICD10Codes.length)].code,
       description: commonICD10Codes[Math.floor(Math.random() * commonICD10Codes.length)].description
     }
@@ -237,7 +237,7 @@ export const generateMockBilling = (appointmentId: string, patientId: string): B
   const randomCPT = commonCPTCodes[Math.floor(Math.random() * commonCPTCodes.length)];
   const procedures: ProcedureCode[] = [
     {
-      id: `proc-${Math.random().toString(36).substr(2, 9)}`,
+      id: `proc-${Math.random().toString(36).substring(2, 11)}`,
       cptCode: randomCPT.code,
       description: randomCPT.description,
       fee: randomCPT.fee,
@@ -441,6 +441,45 @@ export const createCCMBilling = (patientId: string, timeEntries: any[], month: s
 // Calculate billing total
 export const calculateBillingTotal = (procedures: ProcedureCode[]): number => {
   return procedures.reduce((sum, proc) => sum + (proc.fee * proc.quantity), 0);
+};
+
+/**
+ * Format currency amount with proper validation and error handling
+ * @param amount - The amount to format
+ * @param currency - Currency code (default: USD)
+ * @param locale - Locale for formatting (default: en-US)
+ * @returns Formatted currency string
+ */
+export const formatCurrency = (
+  amount: number | string | null | undefined,
+  currency: string = 'USD',
+  locale: string = 'en-US'
+): string => {
+  try {
+    // Handle null, undefined, or empty values
+    if (amount === null || amount === undefined || amount === '') {
+      return '$0.00';
+    }
+
+    // Convert string to number if needed
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    
+    // Validate numeric input
+    if (isNaN(numericAmount)) {
+      console.warn(`Invalid amount provided to formatCurrency: ${amount}`);
+      return '$0.00';
+    }
+
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(numericAmount);
+  } catch (error) {
+    console.error('Error formatting currency:', error);
+    return '$0.00';
+  }
 };
 
 

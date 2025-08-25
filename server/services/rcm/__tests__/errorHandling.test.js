@@ -646,5 +646,3 @@ describe('RCM Error Handling', () => {
     });
   });
 });
-</content>
-</invoke>

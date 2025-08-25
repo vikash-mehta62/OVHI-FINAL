@@ -24,7 +24,7 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
   const handleSelect = (cptCode: string, description: string, fee: number) => {
     // Check if this procedure is already selected
     const existingIndex = selectedProcedures.findIndex(p => p.cptCode === cptCode);
-    
+
     if (existingIndex >= 0) {
       // Increase quantity of existing procedure
       const updatedProcedures = [...selectedProcedures];
@@ -36,7 +36,7 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
     } else {
       // Check if we're at max unique selections
       if (selectedProcedures.length >= maxSelections) return;
-      
+
       // Add new procedure
       const newProcedure: ProcedureCode = {
         id: `proc-${Math.random().toString(36).substr(2, 9)}`,
@@ -45,10 +45,10 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
         fee,
         quantity: 1
       };
-      
+
       onProcedureChange([...selectedProcedures, newProcedure]);
     }
-    
+
     setOpen(false);
   };
 
@@ -64,12 +64,12 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
       }
       return proc;
     });
-    
+
     onProcedureChange(updatedProcedures);
   };
 
-  const filteredCodes = commonCPTCodes.filter(code => 
-    code.code.toLowerCase().includes(searchValue.toLowerCase()) || 
+  const filteredCodes = commonCPTCodes.filter(code =>
+    code.code.toLowerCase().includes(searchValue.toLowerCase()) ||
     code.description.toLowerCase().includes(searchValue.toLowerCase())
   );
 
@@ -118,12 +118,12 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
           </div>
         ))}
       </div>
-      
+
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button 
-            variant="outline" 
-            role="combobox" 
+          <Button
+            variant="outline"
+            role="combobox"
             aria-expanded={open}
             className="w-full justify-between"
             disabled={selectedProcedures.length >= maxSelections}
@@ -134,8 +134,8 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
         </PopoverTrigger>
         <PopoverContent className="w-[400px] p-0">
           <Command>
-            <CommandInput 
-              placeholder="Search CPT codes..." 
+            <CommandInput
+              placeholder="Search CPT codes..."
               value={searchValue}
               onValueChange={setSearchValue}
             />
@@ -152,11 +152,10 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center">
                         <Check
-                          className={`mr-2 h-4 w-4 ${
-                            selectedProcedures.some(p => p.cptCode === code.code)
+                          className={`mr-2 h-4 w-4 ${selectedProcedures.some(p => p.cptCode === code.code)
                               ? "opacity-100"
                               : "opacity-0"
-                          }`}
+                            }`}
                         />
                         <span className="font-mono mr-2">{code.code}</span>
                         <span className="text-sm text-muted-foreground">{code.description}</span>

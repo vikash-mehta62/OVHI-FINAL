@@ -1,1 +1,585 @@
-/**\n * RCM Service Layer\n * Main service facade for Revenue Cycle Management operations\n * Handles business logic and data access for RCM functionality\n */\n\nconst moment = require('moment');\nconst axios = require('axios');\nconst {\n  formatCurrency,\n  formatDate,\n  calculateDaysInAR,\n  validateClaimData,\n  calculateCollectionRate,\n  calculateDenialRate,\n  getAgingBucket,\n  getCollectabilityScore,\n  getClaimRecommendations\n} = require('../../utils/rcmUtils');\nconst {\n  executeQuery,\n  executeTransaction,\n  executeQueryWithPagination,\n  executeQuerySingle,\n  auditLog\n} = require('../../utils/dbUtils');\nconst {\n  createDatabaseError,\n  createNotFoundError,\n  createValidationError\n} = require('../../middleware/errorHandler');\n\n/**\n * RCM Service Class\n * Provides business logic for Revenue Cycle Management operations\n */\nclass RCMService {\n  constructor() {\n    this.name = 'RCMService';\n  }\n\n  /**\n   * Get RCM Dashboard Data\n   * @param {Object} options - Query options\n   * @param {string} options.timeframe - Time period for data (7d, 30d, 90d, 1y)\n   * @param {number} options.userId - User ID for filtering\n   * @returns {Object} Dashboard data with KPIs and metrics\n   */\n  async getDashboardData(options = {}) {\n    const { timeframe = '30d', userId } = options;\n\n    try {\n      // Build date filter based on timeframe\n      let dateFilter = '';\n      switch (timeframe) {\n        case '7d':\n          dateFilter = \"AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)\";\n          break;\n        case '30d':\n          dateFilter = \"AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)\";\n          break;\n        case '90d':\n          dateFilter = \"AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)\";\n          break;\n        case '1y':\n          dateFilter = \"AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)\";\n          break;\n        default:\n          dateFilter = \"AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)\";\n      }\n\n      // Get claims summary\n      const claimsQuery = `\n        SELECT \n          COUNT(*) as total_claims,\n          SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as draft_claims,\n          SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as submitted_claims,\n          SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END) as paid_claims,\n          SUM(CASE WHEN status = 3 THEN 1 ELSE 0 END) as denied_claims,\n          SUM(total_amount) as total_billed,\n          SUM(CASE WHEN status = 2 THEN total_amount ELSE 0 END) as total_collected,\n          AVG(total_amount) as avg_claim_amount\n        FROM billings \n        WHERE 1=1 ${dateFilter}\n      `;\n\n      const claimsData = await executeQuerySingle(claimsQuery);\n\n      // Get A/R aging data\n      const arQuery = `\n        SELECT \n          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) <= 30 THEN total_amount ELSE 0 END) as aging_0_30,\n          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) BETWEEN 31 AND 60 THEN total_amount ELSE 0 END) as aging_31_60,\n          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) BETWEEN 61 AND 90 THEN total_amount ELSE 0 END) as aging_61_90,\n          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) > 90 THEN total_amount ELSE 0 END) as aging_90_plus\n        FROM billings \n        WHERE status IN (1, 3) ${dateFilter}\n      `;\n\n      const arData = await executeQuerySingle(arQuery);\n\n      // Get denial analytics\n      const denialQuery = `\n        SELECT \n          COUNT(*) as total_denials,\n          SUM(total_amount) as denied_amount,\n          AVG(total_amount) as avg_denial_amount\n        FROM billings \n        WHERE status = 3 ${dateFilter}\n      `;\n\n      const denialData = await executeQuerySingle(denialQuery);\n\n      // Calculate KPIs\n      const collectionRate = calculateCollectionRate(\n        claimsData.total_collected || 0,\n        claimsData.total_billed || 0\n      );\n\n      const denialRate = calculateDenialRate(\n        claimsData.denied_claims || 0,\n        claimsData.total_claims || 0\n      );\n\n      const totalAR = (arData.aging_0_30 || 0) + (arData.aging_31_60 || 0) + \n                     (arData.aging_61_90 || 0) + (arData.aging_90_plus || 0);\n\n      // Get recent activity\n      const activityQuery = `\n        SELECT \n          'claim_submitted' as activity_type,\n          COUNT(*) as count,\n          DATE(created) as activity_date\n        FROM billings \n        WHERE status = 1 ${dateFilter}\n        GROUP BY DATE(created)\n        ORDER BY activity_date DESC\n        LIMIT 7\n      `;\n\n      const recentActivity = await executeQuery(activityQuery);\n\n      return {\n        summary: {\n          totalClaims: claimsData.total_claims || 0,\n          totalBilled: claimsData.total_billed || 0,\n          totalCollected: claimsData.total_collected || 0,\n          totalAR: totalAR,\n          collectionRate: collectionRate,\n          denialRate: denialRate,\n          avgClaimAmount: claimsData.avg_claim_amount || 0\n        },\n        claimsBreakdown: {\n          draft: claimsData.draft_claims || 0,\n          submitted: claimsData.submitted_claims || 0,\n          paid: claimsData.paid_claims || 0,\n          denied: claimsData.denied_claims || 0\n        },\n        arAging: {\n          aging_0_30: arData.aging_0_30 || 0,\n          aging_31_60: arData.aging_31_60 || 0,\n          aging_61_90: arData.aging_61_90 || 0,\n          aging_90_plus: arData.aging_90_plus || 0\n        },\n        denialAnalytics: {\n          totalDenials: denialData.total_denials || 0,\n          deniedAmount: denialData.denied_amount || 0,\n          avgDenialAmount: denialData.avg_denial_amount || 0\n        },\n        recentActivity: recentActivity || [],\n        timeframe: timeframe,\n        generatedAt: new Date().toISOString()\n      };\n\n    } catch (error) {\n      throw createDatabaseError('Failed to fetch dashboard data', {\n        originalError: error.message,\n        timeframe,\n        userId\n      });\n    }\n  }\n\n  /**\n   * Get Claims Status with filtering and pagination\n   * @param {Object} options - Query options\n   * @returns {Object} Claims data with pagination\n   */\n  async getClaimsStatus(options = {}) {\n    const {\n      page = 1,\n      limit = 10,\n      status = 'all',\n      search = '',\n      priority = 'all',\n      dateFrom,\n      dateTo\n    } = options;\n\n    try {\n      let whereConditions = ['1=1'];\n      let queryParams = [];\n\n      // Status filter\n      if (status !== 'all') {\n        whereConditions.push('b.status = ?');\n        queryParams.push(status);\n      }\n\n      // Search filter\n      if (search) {\n        whereConditions.push('(p.first_name LIKE ? OR p.last_name LIKE ? OR b.procedure_code LIKE ?)');\n        const searchTerm = `%${search}%`;\n        queryParams.push(searchTerm, searchTerm, searchTerm);\n      }\n\n      // Date range filter\n      if (dateFrom) {\n        whereConditions.push('DATE(b.service_date) >= ?');\n        queryParams.push(dateFrom);\n      }\n      if (dateTo) {\n        whereConditions.push('DATE(b.service_date) <= ?');\n        queryParams.push(dateTo);\n      }\n\n      const whereClause = whereConditions.join(' AND ');\n\n      const query = `\n        SELECT \n          b.id,\n          b.patient_id,\n          CONCAT(p.first_name, ' ', p.last_name) as patient_name,\n          b.procedure_code,\n          b.total_amount,\n          b.service_date,\n          b.status,\n          b.created,\n          b.updated,\n          DATEDIFF(CURDATE(), b.service_date) as days_in_ar,\n          CASE \n            WHEN b.status = 0 THEN 'Draft'\n            WHEN b.status = 1 THEN 'Submitted'\n            WHEN b.status = 2 THEN 'Paid'\n            WHEN b.status = 3 THEN 'Denied'\n            WHEN b.status = 4 THEN 'Appealed'\n            ELSE 'Unknown'\n          END as status_text\n        FROM billings b\n        LEFT JOIN patients p ON b.patient_id = p.id\n        WHERE ${whereClause}\n        ORDER BY b.created DESC\n      `;\n\n      const result = await executeQueryWithPagination(query, queryParams, page, limit);\n\n      // Add recommendations for each claim\n      const claimsWithRecommendations = result.data.map(claim => ({\n        ...claim,\n        total_amount: formatCurrency(claim.total_amount),\n        service_date: formatDate(claim.service_date),\n        aging_bucket: getAgingBucket(claim.days_in_ar),\n        collectability_score: getCollectabilityScore(claim.days_in_ar),\n        recommendations: getClaimRecommendations(claim)\n      }));\n\n      return {\n        claims: claimsWithRecommendations,\n        pagination: result.pagination,\n        filters: {\n          status,\n          search,\n          priority,\n          dateFrom,\n          dateTo\n        }\n      };\n\n    } catch (error) {\n      throw createDatabaseError('Failed to fetch claims status', {\n        originalError: error.message,\n        options\n      });\n    }\n  }\n\n  /**\n   * Update claim status\n   * @param {number} claimId - Claim ID\n   * @param {Object} updateData - Update data\n   * @returns {Object} Updated claim data\n   */\n  async updateClaimStatus(claimId, updateData) {\n    const { status, notes, userId } = updateData;\n\n    try {\n      // Validate claim exists\n      const existingClaim = await executeQuerySingle(\n        'SELECT * FROM billings WHERE id = ?',\n        [claimId]\n      );\n\n      if (!existingClaim) {\n        throw createNotFoundError('Claim not found');\n      }\n\n      // Update claim\n      const updateQuery = `\n        UPDATE billings \n        SET status = ?, notes = ?, updated = NOW()\n        WHERE id = ?\n      `;\n\n      await executeQuery(updateQuery, [status, notes || '', claimId]);\n\n      // Log audit trail\n      await auditLog({\n        table_name: 'billings',\n        record_id: claimId,\n        action: 'UPDATE',\n        old_values: JSON.stringify({ status: existingClaim.status }),\n        new_values: JSON.stringify({ status, notes }),\n        user_id: userId,\n        timestamp: new Date()\n      });\n\n      // Get updated claim\n      const updatedClaim = await executeQuerySingle(\n        'SELECT * FROM billings WHERE id = ?',\n        [claimId]\n      );\n\n      return {\n        ...updatedClaim,\n        total_amount: formatCurrency(updatedClaim.total_amount),\n        service_date: formatDate(updatedClaim.service_date)\n      };\n\n    } catch (error) {\n      if (error.isOperational) {\n        throw error;\n      }\n      throw createDatabaseError('Failed to update claim status', {\n        originalError: error.message,\n        claimId,\n        updateData\n      });\n    }\n  }\n\n  /**\n   * Get A/R Aging Report\n   * @param {Object} options - Query options\n   * @returns {Object} A/R aging data\n   */\n  async getARAgingReport(options = {}) {\n    const {\n      includeZeroBalance = false,\n      payerFilter,\n      priorityFilter = 'all'\n    } = options;\n\n    try {\n      let whereConditions = ['b.status IN (1, 3)']; // Submitted or Denied\n      let queryParams = [];\n\n      if (!includeZeroBalance) {\n        whereConditions.push('b.total_amount > 0');\n      }\n\n      if (payerFilter) {\n        whereConditions.push('b.payer_id = ?');\n        queryParams.push(payerFilter);\n      }\n\n      const whereClause = whereConditions.join(' AND ');\n\n      const query = `\n        SELECT \n          b.id,\n          b.patient_id,\n          CONCAT(p.first_name, ' ', p.last_name) as patient_name,\n          b.total_amount,\n          b.service_date,\n          b.status,\n          DATEDIFF(CURDATE(), b.service_date) as days_outstanding,\n          CASE \n            WHEN DATEDIFF(CURDATE(), b.service_date) <= 30 THEN '0-30'\n            WHEN DATEDIFF(CURDATE(), b.service_date) <= 60 THEN '31-60'\n            WHEN DATEDIFF(CURDATE(), b.service_date) <= 90 THEN '61-90'\n            WHEN DATEDIFF(CURDATE(), b.service_date) <= 120 THEN '91-120'\n            ELSE '120+'\n          END as aging_bucket\n        FROM billings b\n        LEFT JOIN patients p ON b.patient_id = p.id\n        WHERE ${whereClause}\n        ORDER BY days_outstanding DESC, b.total_amount DESC\n      `;\n\n      const arData = await executeQuery(query, queryParams);\n\n      // Group by aging buckets\n      const agingBuckets = {\n        '0-30': { count: 0, amount: 0, claims: [] },\n        '31-60': { count: 0, amount: 0, claims: [] },\n        '61-90': { count: 0, amount: 0, claims: [] },\n        '91-120': { count: 0, amount: 0, claims: [] },\n        '120+': { count: 0, amount: 0, claims: [] }\n      };\n\n      arData.forEach(claim => {\n        const bucket = claim.aging_bucket;\n        agingBuckets[bucket].count++;\n        agingBuckets[bucket].amount += parseFloat(claim.total_amount);\n        agingBuckets[bucket].claims.push({\n          ...claim,\n          total_amount: formatCurrency(claim.total_amount),\n          service_date: formatDate(claim.service_date),\n          collectability_score: getCollectabilityScore(claim.days_outstanding)\n        });\n      });\n\n      // Calculate totals\n      const totals = {\n        totalClaims: arData.length,\n        totalAmount: arData.reduce((sum, claim) => sum + parseFloat(claim.total_amount), 0),\n        avgDaysOutstanding: arData.length > 0 ? \n          arData.reduce((sum, claim) => sum + claim.days_outstanding, 0) / arData.length : 0\n      };\n\n      return {\n        agingBuckets,\n        totals: {\n          ...totals,\n          totalAmount: formatCurrency(totals.totalAmount)\n        },\n        filters: {\n          includeZeroBalance,\n          payerFilter,\n          priorityFilter\n        },\n        generatedAt: new Date().toISOString()\n      };\n\n    } catch (error) {\n      throw createDatabaseError('Failed to generate A/R aging report', {\n        originalError: error.message,\n        options\n      });\n    }\n  }\n\n  /**\n   * Get claim by ID\n   * @param {number} claimId - Claim ID\n   * @returns {Object} Claim data\n   */\n  async getClaimById(claimId) {\n    try {\n      const query = `\n        SELECT \n          b.*,\n          CONCAT(p.first_name, ' ', p.last_name) as patient_name,\n          p.email as patient_email,\n          p.phone as patient_phone\n        FROM billings b\n        LEFT JOIN patients p ON b.patient_id = p.id\n        WHERE b.id = ?\n      `;\n\n      const claim = await executeQuerySingle(query, [claimId]);\n      \n      if (!claim) {\n        throw createNotFoundError('Claim not found');\n      }\n\n      return claim;\n\n    } catch (error) {\n      if (error.isOperational) {\n        throw error;\n      }\n      throw createDatabaseError('Failed to fetch claim details', {\n        originalError: error.message,\n        claimId\n      });\n    }\n  }\n\n  /**\n   * Get denial analytics\n   * @param {Object} options - Query options\n   * @returns {Object} Denial analytics data\n   */\n  async getDenialAnalytics(options = {}) {\n    const { timeframe = '30d' } = options;\n\n    try {\n      let dateFilter = '';\n      switch (timeframe) {\n        case '7d':\n          dateFilter = \"AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)\";\n          break;\n        case '30d':\n          dateFilter = \"AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)\";\n          break;\n        case '90d':\n          dateFilter = \"AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)\";\n          break;\n        case '1y':\n          dateFilter = \"AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)\";\n          break;\n      }\n\n      // Get denial summary\n      const summaryQuery = `\n        SELECT \n          COUNT(*) as total_denials,\n          SUM(total_amount) as denied_amount,\n          AVG(total_amount) as avg_denial_amount\n        FROM billings b\n        WHERE b.status = 3 ${dateFilter}\n      `;\n\n      const summary = await executeQuerySingle(summaryQuery);\n\n      // Get denial reasons (if available)\n      const reasonsQuery = `\n        SELECT \n          denial_reason,\n          COUNT(*) as count,\n          SUM(total_amount) as amount\n        FROM billings b\n        WHERE b.status = 3 AND denial_reason IS NOT NULL ${dateFilter}\n        GROUP BY denial_reason\n        ORDER BY count DESC\n        LIMIT 10\n      `;\n\n      const denialReasons = await executeQuery(reasonsQuery);\n\n      // Get denial trends by date\n      const trendsQuery = `\n        SELECT \n          DATE(created) as denial_date,\n          COUNT(*) as count,\n          SUM(total_amount) as amount\n        FROM billings b\n        WHERE b.status = 3 ${dateFilter}\n        GROUP BY DATE(created)\n        ORDER BY denial_date DESC\n        LIMIT 30\n      `;\n\n      const trends = await executeQuery(trendsQuery);\n\n      return {\n        summary: {\n          totalDenials: summary.total_denials || 0,\n          deniedAmount: formatCurrency(summary.denied_amount || 0),\n          avgDenialAmount: formatCurrency(summary.avg_denial_amount || 0)\n        },\n        denialReasons: denialReasons.map(reason => ({\n          ...reason,\n          amount: formatCurrency(reason.amount)\n        })),\n        trends: trends.map(trend => ({\n          ...trend,\n          denial_date: formatDate(trend.denial_date),\n          amount: formatCurrency(trend.amount)\n        })),\n        timeframe,\n        generatedAt: new Date().toISOString()\n      };\n\n    } catch (error) {\n      throw createDatabaseError('Failed to fetch denial analytics', {\n        originalError: error.message,\n        options\n      });\n    }\n  }\n}\n\nmodule.exports = RCMService;"
+/**
+ * RCM Service Layer
+ * Main service facade for Revenue Cycle Management operations
+ * Handles business logic and data access for RCM functionality
+ */
+
+const moment = require('moment');
+const axios = require('axios');
+const {
+  formatCurrency,
+  formatDate,
+  calculateDaysInAR,
+  validateClaimData,
+  calculateCollectionRate,
+  calculateDenialRate,
+  getAgingBucket,
+  getCollectabilityScore,
+  getClaimRecommendations
+} = require('../../utils/rcmUtils');
+const {
+  executeQuery,
+  executeTransaction,
+  executeQueryWithPagination,
+  executeQuerySingle,
+  auditLog
+} = require('../../utils/dbUtils');
+const {
+  createDatabaseError,
+  createNotFoundError,
+  createValidationError
+} = require('../../middleware/errorHandler');
+
+/**
+ * RCM Service Class
+ * Provides business logic for Revenue Cycle Management operations
+ */
+class RCMService {
+  constructor() {
+    this.name = 'RCMService';
+  }
+
+  /**
+   * Get RCM Dashboard Data
+   * @param {Object} options - Query options
+   * @param {string} options.timeframe - Time period for data (7d, 30d, 90d, 1y)
+   * @param {number} options.userId - User ID for filtering
+   * @returns {Object} Dashboard data with KPIs and metrics
+   */
+  async getDashboardData(options = {}) {
+    const { timeframe = '30d', userId } = options;
+
+    try {
+      // Build date filter based on timeframe
+      let dateFilter = '';
+      switch (timeframe) {
+        case '7d':
+          dateFilter = "AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+          break;
+        case '30d':
+          dateFilter = "AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+          break;
+        case '90d':
+          dateFilter = "AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)";
+          break;
+        case '1y':
+          dateFilter = "AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+          break;
+        default:
+          dateFilter = "AND DATE(created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+      }
+
+      // Get claims summary
+      const claimsQuery = `
+        SELECT 
+          COUNT(*) as total_claims,
+          SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) as draft_claims,
+          SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as submitted_claims,
+          SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END) as paid_claims,
+          SUM(CASE WHEN status = 3 THEN 1 ELSE 0 END) as denied_claims,
+          SUM(total_amount) as total_billed,
+          SUM(CASE WHEN status = 2 THEN total_amount ELSE 0 END) as total_collected,
+          AVG(total_amount) as avg_claim_amount
+        FROM billings 
+        WHERE 1=1 ${dateFilter}
+      `;
+
+      const claimsData = await executeQuerySingle(claimsQuery);
+
+      // Get A/R aging data
+      const arQuery = `
+        SELECT 
+          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) <= 30 THEN total_amount ELSE 0 END) as aging_0_30,
+          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) BETWEEN 31 AND 60 THEN total_amount ELSE 0 END) as aging_31_60,
+          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) BETWEEN 61 AND 90 THEN total_amount ELSE 0 END) as aging_61_90,
+          SUM(CASE WHEN DATEDIFF(CURDATE(), service_date) > 90 THEN total_amount ELSE 0 END) as aging_90_plus
+        FROM billings 
+        WHERE status IN (1, 3) ${dateFilter}
+      `;
+
+      const arData = await executeQuerySingle(arQuery);
+
+      // Get denial analytics
+      const denialQuery = `
+        SELECT 
+          COUNT(*) as total_denials,
+          SUM(total_amount) as denied_amount,
+          AVG(total_amount) as avg_denial_amount
+        FROM billings 
+        WHERE status = 3 ${dateFilter}
+      `;
+
+      const denialData = await executeQuerySingle(denialQuery);
+
+      // Calculate KPIs
+      const collectionRate = calculateCollectionRate(
+        claimsData.total_collected || 0,
+        claimsData.total_billed || 0
+      );
+
+      const denialRate = calculateDenialRate(
+        claimsData.denied_claims || 0,
+        claimsData.total_claims || 0
+      );
+
+      const totalAR = (arData.aging_0_30 || 0) + (arData.aging_31_60 || 0) + 
+                     (arData.aging_61_90 || 0) + (arData.aging_90_plus || 0);
+
+      // Get recent activity
+      const activityQuery = `
+        SELECT 
+          'claim_submitted' as activity_type,
+          COUNT(*) as count,
+          DATE(created) as activity_date
+        FROM billings 
+        WHERE status = 1 ${dateFilter}
+        GROUP BY DATE(created)
+        ORDER BY activity_date DESC
+        LIMIT 7
+      `;
+
+      const recentActivity = await executeQuery(activityQuery);
+
+      return {
+        summary: {
+          totalClaims: claimsData.total_claims || 0,
+          totalBilled: claimsData.total_billed || 0,
+          totalCollected: claimsData.total_collected || 0,
+          totalAR: totalAR,
+          collectionRate: collectionRate,
+          denialRate: denialRate,
+          avgClaimAmount: claimsData.avg_claim_amount || 0
+        },
+        claimsBreakdown: {
+          draft: claimsData.draft_claims || 0,
+          submitted: claimsData.submitted_claims || 0,
+          paid: claimsData.paid_claims || 0,
+          denied: claimsData.denied_claims || 0
+        },
+        arAging: {
+          aging_0_30: arData.aging_0_30 || 0,
+          aging_31_60: arData.aging_31_60 || 0,
+          aging_61_90: arData.aging_61_90 || 0,
+          aging_90_plus: arData.aging_90_plus || 0
+        },
+        denialAnalytics: {
+          totalDenials: denialData.total_denials || 0,
+          deniedAmount: denialData.denied_amount || 0,
+          avgDenialAmount: denialData.avg_denial_amount || 0
+        },
+        recentActivity: recentActivity || [],
+        timeframe: timeframe,
+        generatedAt: new Date().toISOString()
+      };
+
+    } catch (error) {
+      throw createDatabaseError('Failed to fetch dashboard data', {
+        originalError: error.message,
+        timeframe,
+        userId
+      });
+    }
+  }
+
+  /**
+   * Get Claims Status with filtering and pagination
+   * @param {Object} options - Query options
+   * @returns {Object} Claims data with pagination
+   */
+  async getClaimsStatus(options = {}) {
+    const {
+      page = 1,
+      limit = 10,
+      status = 'all',
+      search = '',
+      priority = 'all',
+      dateFrom,
+      dateTo
+    } = options;
+
+    try {
+      let whereConditions = ['1=1'];
+      let queryParams = [];
+
+      // Status filter
+      if (status !== 'all') {
+        whereConditions.push('b.status = ?');
+        queryParams.push(status);
+      }
+
+      // Search filter
+      if (search) {
+        whereConditions.push('(p.first_name LIKE ? OR p.last_name LIKE ? OR b.procedure_code LIKE ?)');
+        const searchTerm = `%${search}%`;
+        queryParams.push(searchTerm, searchTerm, searchTerm);
+      }
+
+      // Date range filter
+      if (dateFrom) {
+        whereConditions.push('DATE(b.service_date) >= ?');
+        queryParams.push(dateFrom);
+      }
+      if (dateTo) {
+        whereConditions.push('DATE(b.service_date) <= ?');
+        queryParams.push(dateTo);
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      const query = `
+        SELECT 
+          b.id,
+          b.patient_id,
+          CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+          b.procedure_code,
+          b.total_amount,
+          b.service_date,
+          b.status,
+          b.created,
+          b.updated,
+          DATEDIFF(CURDATE(), b.service_date) as days_in_ar,
+          CASE 
+            WHEN b.status = 0 THEN 'Draft'
+            WHEN b.status = 1 THEN 'Submitted'
+            WHEN b.status = 2 THEN 'Paid'
+            WHEN b.status = 3 THEN 'Denied'
+            WHEN b.status = 4 THEN 'Appealed'
+            ELSE 'Unknown'
+          END as status_text
+        FROM billings b
+        LEFT JOIN patients p ON b.patient_id = p.id
+        WHERE ${whereClause}
+        ORDER BY b.created DESC
+      `;
+
+      const result = await executeQueryWithPagination(query, queryParams, page, limit);
+
+      // Add recommendations for each claim
+      const claimsWithRecommendations = result.data.map(claim => ({
+        ...claim,
+        total_amount: formatCurrency(claim.total_amount),
+        service_date: formatDate(claim.service_date),
+        aging_bucket: getAgingBucket(claim.days_in_ar),
+        collectability_score: getCollectabilityScore(claim.days_in_ar),
+        recommendations: getClaimRecommendations(claim)
+      }));
+
+      return {
+        claims: claimsWithRecommendations,
+        pagination: result.pagination,
+        filters: {
+          status,
+          search,
+          priority,
+          dateFrom,
+          dateTo
+        }
+      };
+
+    } catch (error) {
+      throw createDatabaseError('Failed to fetch claims status', {
+        originalError: error.message,
+        options
+      });
+    }
+  }
+
+  /**
+   * Update claim status
+   * @param {number} claimId - Claim ID
+   * @param {Object} updateData - Update data
+   * @returns {Object} Updated claim data
+   */
+  async updateClaimStatus(claimId, updateData) {
+    const { status, notes, userId } = updateData;
+
+    try {
+      // Validate claim exists
+      const existingClaim = await executeQuerySingle(
+        'SELECT * FROM billings WHERE id = ?',
+        [claimId]
+      );
+
+      if (!existingClaim) {
+        throw createNotFoundError('Claim not found');
+      }
+
+      // Update claim
+      const updateQuery = `
+        UPDATE billings 
+        SET status = ?, notes = ?, updated = NOW()
+        WHERE id = ?
+      `;
+
+      await executeQuery(updateQuery, [status, notes || '', claimId]);
+
+      // Log audit trail
+      await auditLog({
+        table_name: 'billings',
+        record_id: claimId,
+        action: 'UPDATE',
+        old_values: JSON.stringify({ status: existingClaim.status }),
+        new_values: JSON.stringify({ status, notes }),
+        user_id: userId,
+        timestamp: new Date()
+      });
+
+      // Get updated claim
+      const updatedClaim = await executeQuerySingle(
+        'SELECT * FROM billings WHERE id = ?',
+        [claimId]
+      );
+
+      return {
+        ...updatedClaim,
+        total_amount: formatCurrency(updatedClaim.total_amount),
+        service_date: formatDate(updatedClaim.service_date)
+      };
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to update claim status', {
+        originalError: error.message,
+        claimId,
+        updateData
+      });
+    }
+  }
+
+  /**
+   * Get A/R Aging Report
+   * @param {Object} options - Query options
+   * @returns {Object} A/R aging data
+   */
+  async getARAgingReport(options = {}) {
+    const {
+      includeZeroBalance = false,
+      payerFilter,
+      priorityFilter = 'all'
+    } = options;
+
+    try {
+      let whereConditions = ['b.status IN (1, 3)']; // Submitted or Denied
+      let queryParams = [];
+
+      if (!includeZeroBalance) {
+        whereConditions.push('b.total_amount > 0');
+      }
+
+      if (payerFilter) {
+        whereConditions.push('b.payer_id = ?');
+        queryParams.push(payerFilter);
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      const query = `
+        SELECT 
+          b.id,
+          b.patient_id,
+          CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+          b.total_amount,
+          b.service_date,
+          b.status,
+          DATEDIFF(CURDATE(), b.service_date) as days_outstanding,
+          CASE 
+            WHEN DATEDIFF(CURDATE(), b.service_date) <= 30 THEN '0-30'
+            WHEN DATEDIFF(CURDATE(), b.service_date) <= 60 THEN '31-60'
+            WHEN DATEDIFF(CURDATE(), b.service_date) <= 90 THEN '61-90'
+            WHEN DATEDIFF(CURDATE(), b.service_date) <= 120 THEN '91-120'
+            ELSE '120+'
+          END as aging_bucket
+        FROM billings b
+        LEFT JOIN patients p ON b.patient_id = p.id
+        WHERE ${whereClause}
+        ORDER BY days_outstanding DESC, b.total_amount DESC
+      `;
+
+      const arData = await executeQuery(query, queryParams);
+
+      // Group by aging buckets
+      const agingBuckets = {
+        '0-30': { count: 0, amount: 0, claims: [] },
+        '31-60': { count: 0, amount: 0, claims: [] },
+        '61-90': { count: 0, amount: 0, claims: [] },
+        '91-120': { count: 0, amount: 0, claims: [] },
+        '120+': { count: 0, amount: 0, claims: [] }
+      };
+
+      arData.forEach(claim => {
+        const bucket = claim.aging_bucket;
+        agingBuckets[bucket].count++;
+        agingBuckets[bucket].amount += parseFloat(claim.total_amount);
+        agingBuckets[bucket].claims.push({
+          ...claim,
+          total_amount: formatCurrency(claim.total_amount),
+          service_date: formatDate(claim.service_date),
+          collectability_score: getCollectabilityScore(claim.days_outstanding)
+        });
+      });
+
+      // Calculate totals
+      const totals = {
+        totalClaims: arData.length,
+        totalAmount: arData.reduce((sum, claim) => sum + parseFloat(claim.total_amount), 0),
+        avgDaysOutstanding: arData.length > 0 ? 
+          arData.reduce((sum, claim) => sum + claim.days_outstanding, 0) / arData.length : 0
+      };
+
+      return {
+        agingBuckets,
+        totals: {
+          ...totals,
+          totalAmount: formatCurrency(totals.totalAmount)
+        },
+        filters: {
+          includeZeroBalance,
+          payerFilter,
+          priorityFilter
+        },
+        generatedAt: new Date().toISOString()
+      };
+
+    } catch (error) {
+      throw createDatabaseError('Failed to generate A/R aging report', {
+        originalError: error.message,
+        options
+      });
+    }
+  }
+
+  /**
+   * Get claim by ID
+   * @param {number} claimId - Claim ID
+   * @returns {Object} Claim data
+   */
+  async getClaimById(claimId) {
+    try {
+      const query = `
+        SELECT 
+          b.*,
+          CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+          p.email as patient_email,
+          p.phone as patient_phone
+        FROM billings b
+        LEFT JOIN patients p ON b.patient_id = p.id
+        WHERE b.id = ?
+      `;
+
+      const claim = await executeQuerySingle(query, [claimId]);
+      
+      if (!claim) {
+        throw createNotFoundError('Claim not found');
+      }
+
+      return claim;
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to fetch claim details', {
+        originalError: error.message,
+        claimId
+      });
+    }
+  }
+
+  /**
+   * Get denial analytics
+   * @param {Object} options - Query options
+   * @returns {Object} Denial analytics data
+   */
+  async getDenialAnalytics(options = {}) {
+    const { timeframe = '30d' } = options;
+
+    try {
+      let dateFilter = '';
+      switch (timeframe) {
+        case '7d':
+          dateFilter = "AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+          break;
+        case '30d':
+          dateFilter = "AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+          break;
+        case '90d':
+          dateFilter = "AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)";
+          break;
+        case '1y':
+          dateFilter = "AND DATE(b.created) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+          break;
+      }
+
+      // Get denial summary
+      const summaryQuery = `
+        SELECT 
+          COUNT(*) as total_denials,
+          SUM(total_amount) as denied_amount,
+          AVG(total_amount) as avg_denial_amount
+        FROM billings b
+        WHERE b.status = 3 ${dateFilter}
+      `;
+
+      const summary = await executeQuerySingle(summaryQuery);
+
+      // Get denial reasons (if available)
+      const reasonsQuery = `
+        SELECT 
+          denial_reason,
+          COUNT(*) as count,
+          SUM(total_amount) as amount
+        FROM billings b
+        WHERE b.status = 3 AND denial_reason IS NOT NULL ${dateFilter}
+        GROUP BY denial_reason
+        ORDER BY count DESC
+        LIMIT 10
+      `;
+
+      const denialReasons = await executeQuery(reasonsQuery);
+
+      // Get denial trends by date
+      const trendsQuery = `
+        SELECT 
+          DATE(created) as denial_date,
+          COUNT(*) as count,
+          SUM(total_amount) as amount
+        FROM billings b
+        WHERE b.status = 3 ${dateFilter}
+        GROUP BY DATE(created)
+        ORDER BY denial_date DESC
+        LIMIT 30
+      `;
+
+      const trends = await executeQuery(trendsQuery);
+
+      return {
+        summary: {
+          totalDenials: summary.total_denials || 0,
+          deniedAmount: formatCurrency(summary.denied_amount || 0),
+          avgDenialAmount: formatCurrency(summary.avg_denial_amount || 0)
+        },
+        denialReasons: denialReasons.map(reason => ({
+          ...reason,
+          amount: formatCurrency(reason.amount)
+        })),
+        trends: trends.map(trend => ({
+          ...trend,
+          denial_date: formatDate(trend.denial_date),
+          amount: formatCurrency(trend.amount)
+        })),
+        timeframe,
+        generatedAt: new Date().toISOString()
+      };
+
+    } catch (error) {
+      throw createDatabaseError('Failed to fetch denial analytics', {
+        originalError: error.message,
+        options
+      });
+    }
+  }
+}
+
+module.exports = RCMService;
