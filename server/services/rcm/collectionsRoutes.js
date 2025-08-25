@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const collectionsCtrl = require('./collectionsCtrl');
 const { verifyToken } = require('../../middleware/auth');
+const { ValidationMiddleware, sanitizationMiddleware, sqlInjectionPreventionMiddleware } = require('../../middleware/validation');
+const { asyncHandler } = require('../../middleware/errorHandler');
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
@@ -50,7 +52,10 @@ router.use(verifyToken);
  *                       priority:
  *                         type: string
  */
-router.get('/accounts', collectionsCtrl.getPatientAccounts);
+router.get('/accounts', 
+  ValidationMiddleware.validateGetCollectionsQuery,
+  asyncHandler(collectionsCtrl.getPatientAccounts)
+);
 
 /**
  * @swagger
@@ -97,8 +102,15 @@ router.get('/accounts', collectionsCtrl.getPatientAccounts);
  *       200:
  *         description: Payment plan created successfully
  */
-router.get('/payment-plans', collectionsCtrl.getPaymentPlans);
-router.post('/payment-plans', collectionsCtrl.createPaymentPlan);
+router.get('/payment-plans', 
+  ValidationMiddleware.validateGetCollectionsQuery,
+  asyncHandler(collectionsCtrl.getPaymentPlans)
+);
+router.post('/payment-plans', 
+  sanitizationMiddleware,
+  ValidationMiddleware.validateCreatePaymentPlan,
+  asyncHandler(collectionsCtrl.createPaymentPlan)
+);
 
 /**
  * @swagger
@@ -136,7 +148,12 @@ router.post('/payment-plans', collectionsCtrl.createPaymentPlan);
  *       200:
  *         description: Payment plan updated successfully
  */
-router.put('/payment-plans/:id', collectionsCtrl.updatePaymentPlan);
+router.put('/payment-plans/:id', 
+  ValidationMiddleware.validatePositiveIntegerParam('id'),
+  sanitizationMiddleware,
+  ValidationMiddleware.validateUpdatePaymentPlan,
+  asyncHandler(collectionsCtrl.updatePaymentPlan)
+);
 
 /**
  * @swagger
@@ -197,8 +214,15 @@ router.put('/payment-plans/:id', collectionsCtrl.updatePaymentPlan);
  *       200:
  *         description: Collection activity logged successfully
  */
-router.get('/activities', collectionsCtrl.getCollectionActivities);
-router.post('/activities', collectionsCtrl.logCollectionActivity);
+router.get('/activities', 
+  ValidationMiddleware.validateGetCollectionsQuery,
+  asyncHandler(collectionsCtrl.getCollectionActivities)
+);
+router.post('/activities', 
+  sanitizationMiddleware,
+  ValidationMiddleware.validateLogCollectionActivity,
+  asyncHandler(collectionsCtrl.logCollectionActivity)
+);
 
 /**
  * @swagger
@@ -230,6 +254,9 @@ router.post('/activities', collectionsCtrl.logCollectionActivity);
  *                     recentActivity:
  *                       type: array
  */
-router.get('/analytics', collectionsCtrl.getCollectionsAnalytics);
+router.get('/analytics', 
+  ValidationMiddleware.validateGetCollectionsQuery,
+  asyncHandler(collectionsCtrl.getCollectionsAnalytics)
+);
 
 module.exports = router;

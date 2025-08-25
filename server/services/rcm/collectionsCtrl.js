@@ -1,14 +1,19 @@
-const mysql = require('mysql2/promise');
-const dbConfig = require('../../config/db');
+const {
+  executeQuery,
+  executeTransaction,
+  executeQueryWithPagination
+} = require('../../utils/dbUtils');
+const {
+  ErrorTypes,
+  handleControllerError,
+  sendSuccessResponse,
+  formatDatabaseError
+} = require('../../middleware/errorHandler');
 
 // Get patient accounts for collections
 const getPatientAccounts = async (req, res) => {
-  let connection;
-  
   try {
-    connection = await mysql.createConnection(dbConfig);
-    
-    const query = `
+    const accounts = await executeQuery(`
       SELECT 
         pa.id,
         pa.patient_id as patientId,
@@ -39,36 +44,19 @@ const getPatientAccounts = async (req, res) => {
         END,
         pa.aging_91_plus DESC,
         pa.total_balance DESC
-    `;
+    `);
     
-    const [accounts] = await connection.execute(query);
-    
-    res.json({
-      success: true,
-      data: accounts
-    });
+    sendSuccessResponse(res, accounts, 'Patient accounts retrieved successfully');
     
   } catch (error) {
-    console.error('Error fetching patient accounts:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch patient accounts',
-      error: error.message
-    });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
+    const dbError = formatDatabaseError(error);
+    handleControllerError(dbError, res, req);
   }
 };
 
 // Get payment plans
 const getPaymentPlans = async (req, res) => {
-  let connection;
-  
   try {
-    connection = await mysql.createConnection(dbConfig);
-    
     const query = `
       SELECT 
         pp.id,
@@ -89,31 +77,18 @@ const getPaymentPlans = async (req, res) => {
       ORDER BY pp.next_payment_date ASC
     `;
     
-    const [plans] = await connection.execute(query);
+    const plans = await executeQuery(query);
     
-    res.json({
-      success: true,
-      data: plans
-    });
+    sendSuccessResponse(res, plans, 'Payment plans retrieved successfully');
     
   } catch (error) {
-    console.error('Error fetching payment plans:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch payment plans',
-      error: error.message
-    });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
+    const dbError = formatDatabaseError(error);
+    handleControllerError(dbError, res, req);
   }
 };
 
 // Create payment plan
 const createPaymentPlan = async (req, res) => {
-  let connection;
-  
   try {
     const {
       patientId,
@@ -125,110 +100,104 @@ const createPaymentPlan = async (req, res) => {
     } = req.body;
     
     if (!patientId || !totalAmount || !monthlyPayment || !startDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
+      const missingFields = [];
+      if (!patientId) missingFields.push('patientId');
+      if (!totalAmount) missingFields.push('totalAmount');
+      if (!monthlyPayment) missingFields.push('monthlyPayment');
+      if (!startDate) missingFields.push('startDate');
+      
+      throw ErrorTypes.MISSING_REQUIRED_FIELDS(missingFields);
     }
     
-    connection = await mysql.createConnection(dbConfig);
-    await connection.beginTransaction();
+    // Business logic validation
+    if (monthlyPayment > totalAmount) {
+      throw ErrorTypes.VALIDATION_ERROR('Monthly payment cannot exceed total amount', {
+        monthlyPayment,
+        totalAmount
+      });
+    }
     
     // Calculate payments remaining
     const paymentsRemaining = Math.ceil(totalAmount / monthlyPayment);
     
-    // Insert payment plan
-    const insertQuery = `
-      INSERT INTO payment_plans (
-        patient_id,
-        total_amount,
-        monthly_payment,
-        remaining_balance,
-        next_payment_date,
-        status,
-        payments_remaining,
-        auto_pay_enabled,
-        created_date,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW(), ?)
-    `;
+    // Prepare transaction queries
+    const queries = [
+      {
+        query: `
+          INSERT INTO payment_plans (
+            patient_id,
+            total_amount,
+            monthly_payment,
+            remaining_balance,
+            next_payment_date,
+            status,
+            payments_remaining,
+            auto_pay_enabled,
+            created_date,
+            notes
+          ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW(), ?)
+        `,
+        params: [
+          patientId,
+          totalAmount,
+          monthlyPayment,
+          totalAmount, // Initial remaining balance
+          startDate,
+          paymentsRemaining,
+          autoPayEnabled ? 1 : 0,
+          notes || null
+        ]
+      },
+      {
+        query: `
+          UPDATE patient_accounts 
+          SET collection_status = 'payment_plan',
+              updated_date = NOW()
+          WHERE patient_id = ?
+        `,
+        params: [patientId]
+      },
+      {
+        query: `
+          INSERT INTO collection_activities (
+            patient_id,
+            activity_type,
+            activity_date,
+            description,
+            outcome,
+            next_action,
+            performed_by
+          ) VALUES (?, 'payment_plan_setup', NOW(), ?, 'successful', 'monitor_payments', ?)
+        `,
+        params: [
+          patientId,
+          `Payment plan created: $${monthlyPayment}/month for ${paymentsRemaining} payments`,
+          req.user?.name || 'System'
+        ]
+      }
+    ];
     
-    const [result] = await connection.execute(insertQuery, [
-      patientId,
-      totalAmount,
-      monthlyPayment,
-      totalAmount, // Initial remaining balance
-      startDate,
-      paymentsRemaining,
-      autoPayEnabled ? 1 : 0,
-      notes || null
-    ]);
+    const results = await executeTransaction(queries);
     
-    // Update patient account status
-    const updateAccountQuery = `
-      UPDATE patient_accounts 
-      SET collection_status = 'payment_plan',
-          updated_date = NOW()
-      WHERE patient_id = ?
-    `;
-    
-    await connection.execute(updateAccountQuery, [patientId]);
-    
-    // Log collection activity
-    const activityQuery = `
-      INSERT INTO collection_activities (
-        patient_id,
-        activity_type,
-        activity_date,
-        description,
-        outcome,
-        next_action,
-        performed_by
-      ) VALUES (?, 'payment_plan_setup', NOW(), ?, 'successful', 'monitor_payments', ?)
-    `;
-    
-    const description = `Payment plan created: $${monthlyPayment}/month for ${paymentsRemaining} payments`;
-    await connection.execute(activityQuery, [
-      patientId,
-      description,
-      req.user?.name || 'System'
-    ]);
-    
-    await connection.commit();
-    
-    res.json({
-      success: true,
-      message: 'Payment plan created successfully',
-      data: { id: result.insertId }
-    });
+    sendSuccessResponse(res, { id: results[0].insertId }, 'Payment plan created successfully', 201);
     
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-    }
-    console.error('Error creating payment plan:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create payment plan',
-      error: error.message
-    });
-  } finally {
-    if (connection) {
-      await connection.end();
+    // Check if it's already a formatted error
+    if (error.isOperational) {
+      handleControllerError(error, res, req);
+    } else {
+      const dbError = formatDatabaseError(error);
+      handleControllerError(dbError, res, req);
     }
   }
 };
 
 // Get collection activities
 const getCollectionActivities = async (req, res) => {
-  let connection;
-  
   try {
-    connection = await mysql.createConnection(dbConfig);
+    const { patientId, page = 1, limit = 50 } = req.query;
     
-    const { patientId, limit = 50 } = req.query;
-    
-    let query = `
+    let baseQuery = `
       SELECT 
         ca.id,
         ca.patient_id as patientId,
@@ -243,21 +212,29 @@ const getCollectionActivities = async (req, res) => {
       FROM collection_activities ca
     `;
     
+    let countQuery = `SELECT COUNT(*) as total FROM collection_activities ca`;
     const params = [];
     
     if (patientId) {
-      query += ' WHERE ca.patient_id = ?';
+      const whereClause = ' WHERE ca.patient_id = ?';
+      baseQuery += whereClause;
+      countQuery += whereClause;
       params.push(patientId);
     }
     
-    query += ' ORDER BY ca.activity_date DESC LIMIT ?';
-    params.push(parseInt(limit));
+    baseQuery += ' ORDER BY ca.activity_date DESC';
     
-    const [activities] = await connection.execute(query, params);
+    const result = await executeQueryWithPagination(
+      baseQuery,
+      countQuery,
+      params,
+      { page: parseInt(page), limit: parseInt(limit) }
+    );
     
     res.json({
       success: true,
-      data: activities
+      data: result.data,
+      pagination: result.pagination
     });
     
   } catch (error) {
@@ -267,17 +244,11 @@ const getCollectionActivities = async (req, res) => {
       message: 'Failed to fetch collection activities',
       error: error.message
     });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 };
 
 // Log collection activity
 const logCollectionActivity = async (req, res) => {
-  let connection;
-  
   try {
     const {
       patientId,
@@ -296,86 +267,78 @@ const logCollectionActivity = async (req, res) => {
       });
     }
     
-    connection = await mysql.createConnection(dbConfig);
-    await connection.beginTransaction();
+    // Prepare transaction queries
+    const queries = [
+      {
+        query: `
+          INSERT INTO collection_activities (
+            patient_id,
+            activity_type,
+            activity_date,
+            description,
+            outcome,
+            next_action,
+            next_action_date,
+            performed_by,
+            notes
+          ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)
+        `,
+        params: [
+          patientId,
+          activityType,
+          description,
+          outcome || null,
+          nextAction || null,
+          nextActionDate || null,
+          req.user?.name || 'System',
+          notes || null
+        ]
+      },
+      {
+        query: `
+          UPDATE patient_accounts 
+          SET contact_attempts = contact_attempts + 1,
+              last_contact_date = NOW(),
+              updated_date = NOW()
+          WHERE patient_id = ?
+        `,
+        params: [patientId]
+      }
+    ];
     
-    // Insert activity
-    const insertQuery = `
-      INSERT INTO collection_activities (
-        patient_id,
-        activity_type,
-        activity_date,
-        description,
-        outcome,
-        next_action,
-        next_action_date,
-        performed_by,
-        notes
-      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)
-    `;
-    
-    const [result] = await connection.execute(insertQuery, [
-      patientId,
-      activityType,
-      description,
-      outcome || null,
-      nextAction || null,
-      nextActionDate || null,
-      req.user?.name || 'System',
-      notes || null
-    ]);
-    
-    // Update patient account contact attempts
-    const updateQuery = `
-      UPDATE patient_accounts 
-      SET contact_attempts = contact_attempts + 1,
-          last_contact_date = NOW(),
-          updated_date = NOW()
-      WHERE patient_id = ?
-    `;
-    
-    await connection.execute(updateQuery, [patientId]);
-    
-    // Update collection status based on outcome
+    // Add conditional query for payment received outcome
     if (outcome === 'payment_received') {
-      const statusQuery = `
-        UPDATE patient_accounts 
-        SET collection_status = 'resolved',
-            updated_date = NOW()
-        WHERE patient_id = ? AND total_balance <= 0
-      `;
-      await connection.execute(statusQuery, [patientId]);
+      queries.push({
+        query: `
+          UPDATE patient_accounts 
+          SET collection_status = 'resolved',
+              updated_date = NOW()
+          WHERE patient_id = ? AND total_balance <= 0
+        `,
+        params: [patientId]
+      });
     }
     
-    await connection.commit();
+    const results = await executeTransaction(queries);
     
     res.json({
       success: true,
       message: 'Collection activity logged successfully',
-      data: { id: result.insertId }
+      data: { id: results[0].insertId }
     });
     
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-    }
     console.error('Error logging collection activity:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to log collection activity',
       error: error.message
     });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 };
 
 // Update payment plan
 const updatePaymentPlan = async (req, res) => {
-  let connection;
-  
   try {
     const { id } = req.params;
     const {
@@ -385,8 +348,6 @@ const updatePaymentPlan = async (req, res) => {
       status,
       notes
     } = req.body;
-    
-    connection = await mysql.createConnection(dbConfig);
     
     const updateQuery = `
       UPDATE payment_plans 
@@ -399,7 +360,7 @@ const updatePaymentPlan = async (req, res) => {
       WHERE id = ?
     `;
     
-    await connection.execute(updateQuery, [
+    await executeQuery(updateQuery, [
       monthlyPayment,
       nextPaymentDate,
       autoPayEnabled !== undefined ? (autoPayEnabled ? 1 : 0) : null,
@@ -420,77 +381,64 @@ const updatePaymentPlan = async (req, res) => {
       message: 'Failed to update payment plan',
       error: error.message
     });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 };
 
 // Get collections analytics
 const getCollectionsAnalytics = async (req, res) => {
-  let connection;
-  
   try {
-    connection = await mysql.createConnection(dbConfig);
-    
-    // Get aging summary
-    const agingQuery = `
-      SELECT 
-        COUNT(*) as total_accounts,
-        SUM(total_balance) as total_balance,
-        SUM(aging_0_30) as aging_30,
-        SUM(aging_31_60) as aging_60,
-        SUM(aging_61_90) as aging_90,
-        SUM(aging_91_plus) as aging_120_plus
-      FROM patient_accounts 
-      WHERE total_balance > 0
-    `;
-    
-    const [agingData] = await connection.execute(agingQuery);
-    
-    // Get collection performance
-    const performanceQuery = `
-      SELECT 
-        collection_status,
-        COUNT(*) as count,
-        SUM(total_balance) as balance
-      FROM patient_accounts 
-      WHERE total_balance > 0
-      GROUP BY collection_status
-    `;
-    
-    const [performanceData] = await connection.execute(performanceQuery);
-    
-    // Get payment plan stats
-    const paymentPlanQuery = `
-      SELECT 
-        status,
-        COUNT(*) as count,
-        SUM(remaining_balance) as total_remaining
-      FROM payment_plans
-      GROUP BY status
-    `;
-    
-    const [paymentPlanData] = await connection.execute(paymentPlanQuery);
-    
-    // Get recent activity summary
-    const activityQuery = `
-      SELECT 
-        activity_type,
-        outcome,
-        COUNT(*) as count
-      FROM collection_activities 
-      WHERE activity_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      GROUP BY activity_type, outcome
-    `;
-    
-    const [activityData] = await connection.execute(activityQuery);
+    // Execute all queries in parallel for better performance
+    const [agingData, performanceData, paymentPlanData, activityData] = await Promise.all([
+      // Get aging summary
+      executeQuery(`
+        SELECT 
+          COUNT(*) as total_accounts,
+          SUM(total_balance) as total_balance,
+          SUM(aging_0_30) as aging_30,
+          SUM(aging_31_60) as aging_60,
+          SUM(aging_61_90) as aging_90,
+          SUM(aging_91_plus) as aging_120_plus
+        FROM patient_accounts 
+        WHERE total_balance > 0
+      `),
+      
+      // Get collection performance
+      executeQuery(`
+        SELECT 
+          collection_status,
+          COUNT(*) as count,
+          SUM(total_balance) as balance
+        FROM patient_accounts 
+        WHERE total_balance > 0
+        GROUP BY collection_status
+      `),
+      
+      // Get payment plan stats
+      executeQuery(`
+        SELECT 
+          status,
+          COUNT(*) as count,
+          SUM(remaining_balance) as total_remaining
+        FROM payment_plans
+        GROUP BY status
+      `),
+      
+      // Get recent activity summary
+      executeQuery(`
+        SELECT 
+          activity_type,
+          outcome,
+          COUNT(*) as count
+        FROM collection_activities 
+        WHERE activity_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY activity_type, outcome
+      `)
+    ]);
     
     res.json({
       success: true,
       data: {
-        aging: agingData[0],
+        aging: agingData[0] || {},
         performance: performanceData,
         paymentPlans: paymentPlanData,
         recentActivity: activityData
@@ -504,10 +452,6 @@ const getCollectionsAnalytics = async (req, res) => {
       message: 'Failed to fetch collections analytics',
       error: error.message
     });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 };
 

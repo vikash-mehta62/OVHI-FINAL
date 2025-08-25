@@ -1,0 +1,1147 @@
+openapi: 3.0.3
+info:
+  title: RCM (Revenue Cycle Management) API
+  description: |
+    Comprehensive API for Revenue Cycle Management system providing healthcare billing, 
+    claims processing, payment management, and analytics capabilities.
+    
+    ## Features
+    - Claims management and processing
+    - Payment processing and reconciliation
+    - A/R aging and collections
+    - Revenue analytics and reporting
+    - Patient account management
+    - Provider and insurance management
+    
+    ## Authentication
+    This API uses JWT (JSON Web Tokens) for authentication. Include the token in the 
+    Authorization header as `Bearer <token>`.
+    
+    ## Rate Limiting
+    API requests are rate limited to prevent abuse:
+    - General endpoints: 100 requests per 15 minutes
+    - Authentication endpoints: 5 requests per 15 minutes
+    - Create operations: 10 requests per minute
+    
+    ## Error Handling
+    The API returns standardized error responses with appropriate HTTP status codes
+    and detailed error messages.
+  version: 1.0.0
+  contact:
+    name: RCM API Support
+    email: support@rcm-system.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.rcm-system.com/v1
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Authentication Endpoints
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and return JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: securePassword123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh JWT token
+      description: Refresh an expired JWT token using refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+                  example: refresh_token_here
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Claims Management Endpoints
+  /rcm/claims:
+    get:
+      tags:
+        - Claims
+      summary: Get claims list
+      description: Retrieve a paginated list of claims with optional filtering
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by claim status
+          schema:
+            type: string
+            enum: [pending, approved, denied, paid, cancelled]
+        - name: patientId
+          in: query
+          description: Filter by patient ID
+          schema:
+            type: string
+        - name: providerId
+          in: query
+          description: Filter by provider ID
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Filter claims from this date
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Filter claims until this date
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Claims retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      claims:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Claim'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Claims
+      summary: Create new claim
+      description: Create a new insurance claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClaimRequest'
+      responses:
+        '201':
+          description: Claim created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Claim'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rcm/claims/{claimId}:
+    get:
+      tags:
+        - Claims
+      summary: Get claim by ID
+      description: Retrieve detailed information about a specific claim
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          description: Unique claim identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Claim retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Claim'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags:
+        - Claims
+      summary: Update claim
+      description: Update an existing claim
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          description: Unique claim identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClaimRequest'
+      responses:
+        '200':
+          description: Claim updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Claim'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - Claims
+      summary: Delete claim
+      description: Delete a claim (admin only)
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          description: Unique claim identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Claim deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Claim deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # Payment Management Endpoints
+  /rcm/payments:
+    get:
+      tags:
+        - Payments
+      summary: Get payments list
+      description: Retrieve a paginated list of payments
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: claimId
+          in: query
+          description: Filter by claim ID
+          schema:
+            type: string
+        - name: paymentMethod
+          in: query
+          description: Filter by payment method
+          schema:
+            type: string
+            enum: [insurance, patient, adjustment, refund]
+      responses:
+        '200':
+          description: Payments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      payments:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payment'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Payments
+      summary: Process payment
+      description: Process a payment for a claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Payment'
+
+  # Dashboard and Analytics Endpoints
+  /rcm/dashboard:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard data
+      description: Retrieve comprehensive dashboard data including KPIs and charts
+      parameters:
+        - name: startDate
+          in: query
+          description: Start date for data range
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: End date for data range
+          schema:
+            type: string
+            format: date
+        - name: providerId
+          in: query
+          description: Filter by provider ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dashboard data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/DashboardData'
+
+  /rcm/ar-aging:
+    get:
+      tags:
+        - Analytics
+      summary: Get A/R aging data
+      description: Retrieve accounts receivable aging analysis
+      parameters:
+        - name: providerId
+          in: query
+          description: Filter by provider ID
+          schema:
+            type: string
+        - name: asOfDate
+          in: query
+          description: A/R aging as of specific date
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: A/R aging data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ARAgingData'
+
+  # Monitoring Endpoints
+  /monitoring/health:
+    get:
+      tags:
+        - Monitoring
+      summary: Health check
+      description: Check system health status
+      security: []
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: healthy
+                      timestamp:
+                        type: string
+                        format: date-time
+                      components:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            status:
+                              type: string
+                              enum: [healthy, unhealthy, error]
+                            responseTime:
+                              type: number
+                            message:
+                              type: string
+        '503':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: System unhealthy
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: user_123
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+        role:
+          type: string
+          enum: [admin, provider, billing, user]
+          example: provider
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Claim:
+      type: object
+      properties:
+        id:
+          type: string
+          example: claim_123
+        claimNumber:
+          type: string
+          example: CLM-2023-001234
+        patientId:
+          type: string
+          example: patient_456
+        providerId:
+          type: string
+          example: provider_789
+        status:
+          type: string
+          enum: [pending, approved, denied, paid, cancelled]
+          example: pending
+        serviceDate:
+          type: string
+          format: date
+          example: '2023-12-01'
+        submissionDate:
+          type: string
+          format: date-time
+        totalAmount:
+          type: number
+          format: decimal
+          example: 150.00
+        paidAmount:
+          type: number
+          format: decimal
+          example: 120.00
+        balanceAmount:
+          type: number
+          format: decimal
+          example: 30.00
+        diagnosis:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                example: Z00.00
+              description:
+                type: string
+                example: Encounter for general adult medical examination without abnormal findings
+        procedures:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                example: '99213'
+              description:
+                type: string
+                example: Office or other outpatient visit
+              amount:
+                type: number
+                format: decimal
+                example: 150.00
+        insurance:
+          type: object
+          properties:
+            primary:
+              $ref: '#/components/schemas/Insurance'
+            secondary:
+              $ref: '#/components/schemas/Insurance'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateClaimRequest:
+      type: object
+      required:
+        - patientId
+        - providerId
+        - serviceDate
+        - totalAmount
+        - diagnosis
+        - procedures
+      properties:
+        patientId:
+          type: string
+          example: patient_456
+        providerId:
+          type: string
+          example: provider_789
+        serviceDate:
+          type: string
+          format: date
+          example: '2023-12-01'
+        totalAmount:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 150.00
+        diagnosis:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+            properties:
+              code:
+                type: string
+                example: Z00.00
+              description:
+                type: string
+                example: Encounter for general adult medical examination
+        procedures:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+              - amount
+            properties:
+              code:
+                type: string
+                example: '99213'
+              description:
+                type: string
+                example: Office or other outpatient visit
+              amount:
+                type: number
+                format: decimal
+                minimum: 0
+                example: 150.00
+        insurance:
+          type: object
+          properties:
+            primary:
+              $ref: '#/components/schemas/InsuranceRequest'
+            secondary:
+              $ref: '#/components/schemas/InsuranceRequest'
+
+    UpdateClaimRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, denied, paid, cancelled]
+        totalAmount:
+          type: number
+          format: decimal
+          minimum: 0
+        diagnosis:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              description:
+                type: string
+        procedures:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              description:
+                type: string
+              amount:
+                type: number
+                format: decimal
+                minimum: 0
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          example: payment_123
+        claimId:
+          type: string
+          example: claim_456
+        amount:
+          type: number
+          format: decimal
+          example: 120.00
+        paymentMethod:
+          type: string
+          enum: [insurance, patient, adjustment, refund]
+          example: insurance
+        paymentDate:
+          type: string
+          format: date
+          example: '2023-12-15'
+        referenceNumber:
+          type: string
+          example: REF123456
+        notes:
+          type: string
+          example: Primary insurance payment
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatePaymentRequest:
+      type: object
+      required:
+        - claimId
+        - amount
+        - paymentMethod
+        - paymentDate
+      properties:
+        claimId:
+          type: string
+          example: claim_456
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 120.00
+        paymentMethod:
+          type: string
+          enum: [insurance, patient, adjustment, refund]
+          example: insurance
+        paymentDate:
+          type: string
+          format: date
+          example: '2023-12-15'
+        referenceNumber:
+          type: string
+          example: REF123456
+        notes:
+          type: string
+          example: Primary insurance payment
+
+    Insurance:
+      type: object
+      properties:
+        id:
+          type: string
+          example: insurance_123
+        name:
+          type: string
+          example: Blue Cross Blue Shield
+        policyNumber:
+          type: string
+          example: BCBS123456789
+        groupNumber:
+          type: string
+          example: GRP001
+        subscriberId:
+          type: string
+          example: SUB123456
+        relationship:
+          type: string
+          enum: [self, spouse, child, other]
+          example: self
+
+    InsuranceRequest:
+      type: object
+      required:
+        - name
+        - policyNumber
+      properties:
+        name:
+          type: string
+          example: Blue Cross Blue Shield
+        policyNumber:
+          type: string
+          example: BCBS123456789
+        groupNumber:
+          type: string
+          example: GRP001
+        subscriberId:
+          type: string
+          example: SUB123456
+        relationship:
+          type: string
+          enum: [self, spouse, child, other]
+          example: self
+
+    DashboardData:
+      type: object
+      properties:
+        kpis:
+          type: object
+          properties:
+            totalRevenue:
+              type: number
+              format: decimal
+              example: 150000.00
+            totalClaims:
+              type: integer
+              example: 500
+            pendingClaims:
+              type: integer
+              example: 50
+            deniedClaims:
+              type: integer
+              example: 25
+            collectionRate:
+              type: number
+              format: decimal
+              example: 85.5
+            averageReimbursement:
+              type: number
+              format: decimal
+              example: 300.00
+        charts:
+          type: object
+          properties:
+            revenueByMonth:
+              type: array
+              items:
+                type: object
+                properties:
+                  month:
+                    type: string
+                    example: '2023-12'
+                  revenue:
+                    type: number
+                    format: decimal
+                    example: 12000.00
+            claimsByStatus:
+              type: array
+              items:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: approved
+                  count:
+                    type: integer
+                    example: 400
+            topDenialReasons:
+              type: array
+              items:
+                type: object
+                properties:
+                  reason:
+                    type: string
+                    example: Missing documentation
+                  count:
+                    type: integer
+                    example: 15
+
+    ARAgingData:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            totalBalance:
+              type: number
+              format: decimal
+              example: 50000.00
+            totalClaims:
+              type: integer
+              example: 200
+        buckets:
+          type: object
+          properties:
+            '0-30':
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: decimal
+                  example: 20000.00
+                count:
+                  type: integer
+                  example: 80
+                percentage:
+                  type: number
+                  format: decimal
+                  example: 40.0
+            '31-60':
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: decimal
+                  example: 15000.00
+                count:
+                  type: integer
+                  example: 60
+                percentage:
+                  type: number
+                  format: decimal
+                  example: 30.0
+            '61-90':
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: decimal
+                  example: 10000.00
+                count:
+                  type: integer
+                  example: 40
+                percentage:
+                  type: number
+                  format: decimal
+                  example: 20.0
+            '90+':
+              type: object
+              properties:
+                amount:
+                  type: number
+                  format: decimal
+                  example: 5000.00
+                count:
+                  type: integer
+                  example: 20
+                percentage:
+                  type: number
+                  format: decimal
+                  example: 10.0
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 500
+        totalPages:
+          type: integer
+          example: 25
+        hasNext:
+          type: boolean
+          example: true
+        hasPrev:
+          type: boolean
+          example: false
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Error message
+        code:
+          type: string
+          example: ERROR_CODE
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Invalid input parameters
+            code: BAD_REQUEST
+            details:
+              field: email
+              message: Invalid email format
+
+    Unauthorized:
+      description: Unauthorized - Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Authentication required
+            code: UNAUTHORIZED
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Insufficient permissions
+            code: FORBIDDEN
+
+    NotFound:
+      description: Not found - Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Resource not found
+            code: NOT_FOUND
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Internal server error
+            code: INTERNAL_SERVER_ERROR
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: Rate limit exceeded
+            code: RATE_LIMIT_EXCEEDED
+      headers:
+        X-RateLimit-Limit:
+          description: Request limit per time window
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          description: Remaining requests in current window
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          description: Time when rate limit resets
+          schema:
+            type: string
+            format: date-time
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Claims
+    description: Insurance claims management
+  - name: Payments
+    description: Payment processing and management
+  - name: Dashboard
+    description: Dashboard and KPI data
+  - name: Analytics
+    description: Revenue and performance analytics
+  - name: Monitoring
+    description: System monitoring and health checks

@@ -1,0 +1,75 @@
+# MySQL Configuration for RCM Application - Production
+
+[mysqld]
+# Basic settings
+default-storage-engine = InnoDB
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Connection settings
+max_connections = 200
+max_connect_errors = 10000
+wait_timeout = 28800
+interactive_timeout = 28800
+connect_timeout = 10
+
+# Buffer settings (optimized for production)
+innodb_buffer_pool_size = 1G
+innodb_log_file_size = 256M
+innodb_log_buffer_size = 64M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+
+# Query cache disabled for better performance
+query_cache_type = 0
+query_cache_size = 0
+
+# Logging (minimal for production)
+general_log = 0
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 1
+
+# Binary logging
+log-bin = mysql-bin
+binlog_format = ROW
+expire_logs_days = 7
+sync_binlog = 1
+
+# Security
+local_infile = 0
+skip-symbolic-links
+
+# Performance optimizations
+tmp_table_size = 64M
+max_heap_table_size = 64M
+sort_buffer_size = 4M
+read_buffer_size = 256K
+read_rnd_buffer_size = 512K
+join_buffer_size = 4M
+
+# InnoDB optimizations
+innodb_file_per_table = 1
+innodb_open_files = 400
+innodb_io_capacity = 400
+innodb_flush_neighbors = 0
+innodb_read_io_threads = 4
+innodb_write_io_threads = 4
+
+# Thread settings
+thread_cache_size = 50
+thread_stack = 256K
+
+# Table settings
+table_open_cache = 400
+table_definition_cache = 400
+
+# MyISAM settings (if needed)
+key_buffer_size = 32M
+myisam_sort_buffer_size = 64M
+
+[mysql]
+default-character-set = utf8mb4
+
+[client]
+default-character-set = utf8mb4

@@ -443,13 +443,7 @@ export const calculateBillingTotal = (procedures: ProcedureCode[]): number => {
   return procedures.reduce((sum, proc) => sum + (proc.fee * proc.quantity), 0);
 };
 
-// Format currency
-export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(amount);
-};
+
 
 // Utility: Get all bills for a given patientId
 export const getBillsForPatient = (patientId: string): BillingDetails[] => {

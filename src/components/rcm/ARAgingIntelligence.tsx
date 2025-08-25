@@ -30,6 +30,7 @@ import {
   Brain,
   Zap
 } from 'lucide-react';
+import { formatCurrency } from '@/utils/rcmFormatters';
 
 interface ARAccount {
   account_id: number;
@@ -130,12 +131,7 @@ const ARAgingIntelligence: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+
 
   const getRiskColor = (risk: string) => {
     switch (risk) {

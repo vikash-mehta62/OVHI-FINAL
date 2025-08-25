@@ -27,6 +27,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { apiConnector } from '@/services/apiConnector';
+import { formatCurrency } from '@/utils/rcmFormatters';
 
 interface EligibilityResult {
   eligibilityId: number;
@@ -155,12 +156,7 @@ const EligibilityChecker: React.FC<EligibilityCheckerProps> = ({
     );
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+
 
   return (
     <div className="space-y-6">

@@ -53,6 +53,7 @@ import {
   getPatientStatementsAPI, 
   sendPatientStatementAPI 
 } from '@/services/operations/rcm';
+import { formatCurrency, formatDate } from '@/utils/rcmFormatters';
 
 interface PatientStatement {
   statement_id: number;
@@ -191,16 +192,7 @@ const PatientStatements: React.FC = () => {
     );
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
 
   return (
     <div className="space-y-6">

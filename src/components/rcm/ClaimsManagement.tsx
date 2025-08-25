@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { getClaimsStatusAPI, getClaimDetailsAPI, updateClaimStatusAPI } from '@/services/operations/rcm';
 import PaymentForm from '@/components/payments/PaymentForm';
+import { formatCurrency, formatDate } from '@/utils/rcmFormatters';
 
 interface Claim {
   claim_id: number;
@@ -156,17 +157,6 @@ const ClaimsManagement: React.FC = () => {
       return <Badge className="bg-yellow-500 text-white">Normal</Badge>;
     }
     return <Badge className="bg-green-500 text-white">Recent</Badge>;
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
   };
 
   const handlePaymentSuccess = (paymentData: any) => {
@@ -441,17 +431,6 @@ const ClaimDetailsView: React.FC<ClaimDetailsViewProps> = ({
   onPaymentRequest 
 }) => {
   const [newStatus, setNewStatus] = useState(claim.claim.status);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
 
   return (
     <div className="space-y-6">

@@ -34,7 +34,7 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
-import { formatCurrency } from '@/utils/billingUtils';
+import { formatCurrency } from '@/utils/rcmFormatters';
 
 interface PatientAccount {
   id: number;

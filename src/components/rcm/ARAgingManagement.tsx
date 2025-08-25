@@ -42,6 +42,7 @@ import {
   FileText
 } from 'lucide-react';
 import { getARAgingReportAPI } from '@/services/operations/rcm';
+import { formatCurrency, formatDate } from '@/utils/rcmFormatters';
 
 const ARAgingManagement: React.FC = () => {
   const { token } = useSelector((state: any) => state.auth);
@@ -66,16 +67,7 @@ const ARAgingManagement: React.FC = () => {
     fetchARData();
   }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
 
   const getCollectabilityColor = (score: number) => {
     if (score >= 80) return 'text-green-600';

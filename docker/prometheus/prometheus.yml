@@ -1,0 +1,51 @@
+# Prometheus Configuration for RCM Application - Development
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # RCM Application
+  - job_name: 'rcm-app'
+    static_configs:
+      - targets: ['rcm-app:3000']
+    metrics_path: '/api/v1/monitoring/metrics'
+    scrape_interval: 30s
+
+  # MySQL Database
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['rcm-db:3306']
+    scrape_interval: 30s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['rcm-redis:6379']
+    scrape_interval: 30s
+
+  # Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['rcm-nginx:80']
+    metrics_path: '/nginx_status'
+    scrape_interval: 30s
+
+  # Node Exporter (if available)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
