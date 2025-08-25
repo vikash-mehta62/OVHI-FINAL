@@ -1,2 +1,836 @@
-/**\n * CMS1500FormViewer Component\n * Comprehensive interface for viewing, generating, and managing CMS-1500 forms\n */\n\nimport React, { useState, useEffect, useCallback } from 'react';\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';\nimport { Button } from '@/components/ui/button';\nimport { Badge } from '@/components/ui/badge';\nimport { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';\nimport { Alert, AlertDescription } from '@/components/ui/alert';\nimport { Progress } from '@/components/ui/progress';\nimport { Separator } from '@/components/ui/separator';\nimport { ScrollArea } from '@/components/ui/scroll-area';\nimport {\n  Dialog,\n  DialogContent,\n  DialogDescription,\n  DialogHeader,\n  DialogTitle,\n  DialogTrigger,\n} from '@/components/ui/dialog';\nimport {\n  DropdownMenu,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuTrigger,\n} from '@/components/ui/dropdown-menu';\nimport {\n  Table,\n  TableBody,\n  TableCell,\n  TableHead,\n  TableHeader,\n  TableRow,\n} from '@/components/ui/table';\nimport {\n  FileText,\n  Download,\n  Eye,\n  AlertCircle,\n  CheckCircle,\n  Clock,\n  Printer,\n  RefreshCw,\n  Settings,\n  History,\n  FileCheck,\n  AlertTriangle,\n  Loader2,\n  ExternalLink,\n  Copy,\n  Share2\n} from 'lucide-react';\nimport { toast } from 'sonner';\n\n// Types\ninterface CMS1500FormViewerProps {\n  claimId: number;\n  onFormGenerated?: (formData: any) => void;\n  onError?: (error: string) => void;\n  className?: string;\n}\n\ninterface FormValidation {\n  isValid: boolean;\n  errors: string[];\n  warnings: string[];\n}\n\ninterface FormPreview {\n  claimId: number;\n  validation: FormValidation;\n  formData: Record<string, any>;\n  fieldCount: number;\n  estimatedSize: string;\n}\n\ninterface GenerationHistory {\n  id: number;\n  timestamp: string;\n  user_name: string;\n  success: boolean;\n  options: Record<string, any>;\n  error?: string;\n}\n\ninterface BatchGenerationResult {\n  claimId: number;\n  success: boolean;\n  error?: string;\n  size?: number;\n}\n\nconst CMS1500FormViewer: React.FC<CMS1500FormViewerProps> = ({\n  claimId,\n  onFormGenerated,\n  onError,\n  className\n}) => {\n  // State management\n  const [activeTab, setActiveTab] = useState('preview');\n  const [isLoading, setIsLoading] = useState(false);\n  const [isGenerating, setIsGenerating] = useState(false);\n  const [formPreview, setFormPreview] = useState<FormPreview | null>(null);\n  const [generationHistory, setGenerationHistory] = useState<GenerationHistory[]>([]);\n  const [validationResult, setValidationResult] = useState<FormValidation | null>(null);\n  const [generationOptions, setGenerationOptions] = useState({\n    includeFormBackground: true,\n    isDraft: false,\n    format: 'pdf'\n  });\n  const [showBatchDialog, setShowBatchDialog] = useState(false);\n  const [batchClaimIds, setBatchClaimIds] = useState<string>('');\n  const [batchResults, setBatchResults] = useState<BatchGenerationResult[]>([]);\n  const [isBatchGenerating, setIsBatchGenerating] = useState(false);\n\n  // Load initial data\n  useEffect(() => {\n    if (claimId) {\n      loadFormPreview();\n      loadValidation();\n      loadGenerationHistory();\n    }\n  }, [claimId]);\n\n  /**\n   * Load form preview data\n   */\n  const loadFormPreview = useCallback(async () => {\n    try {\n      setIsLoading(true);\n      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/preview`, {\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n        },\n      });\n\n      if (!response.ok) {\n        throw new Error('Failed to load form preview');\n      }\n\n      const data = await response.json();\n      setFormPreview(data.data);\n    } catch (error) {\n      console.error('Error loading form preview:', error);\n      onError?.(error instanceof Error ? error.message : 'Failed to load form preview');\n      toast.error('Failed to load form preview');\n    } finally {\n      setIsLoading(false);\n    }\n  }, [claimId, onError]);\n\n  /**\n   * Load validation results\n   */\n  const loadValidation = useCallback(async () => {\n    try {\n      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/validate`, {\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n        },\n      });\n\n      if (!response.ok) {\n        throw new Error('Failed to validate form data');\n      }\n\n      const data = await response.json();\n      setValidationResult(data.data.validation);\n    } catch (error) {\n      console.error('Error validating form:', error);\n      toast.error('Failed to validate form data');\n    }\n  }, [claimId]);\n\n  /**\n   * Load generation history\n   */\n  const loadGenerationHistory = useCallback(async () => {\n    try {\n      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/history`, {\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n        },\n      });\n\n      if (!response.ok) {\n        throw new Error('Failed to load generation history');\n      }\n\n      const data = await response.json();\n      setGenerationHistory(data.data.activities || []);\n    } catch (error) {\n      console.error('Error loading history:', error);\n      toast.error('Failed to load generation history');\n    }\n  }, [claimId]);\n\n  /**\n   * Generate CMS-1500 form\n   */\n  const generateForm = async (options = generationOptions) => {\n    try {\n      setIsGenerating(true);\n      \n      const params = new URLSearchParams({\n        includeFormBackground: options.includeFormBackground.toString(),\n        isDraft: options.isDraft.toString(),\n        format: options.format\n      });\n\n      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/generate?${params}`, {\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n        },\n      });\n\n      if (!response.ok) {\n        const errorData = await response.json();\n        throw new Error(errorData.message || 'Failed to generate form');\n      }\n\n      // Handle PDF download\n      const blob = await response.blob();\n      const url = window.URL.createObjectURL(blob);\n      const link = document.createElement('a');\n      link.href = url;\n      link.download = `CMS1500-${claimId}.pdf`;\n      document.body.appendChild(link);\n      link.click();\n      document.body.removeChild(link);\n      window.URL.revokeObjectURL(url);\n\n      toast.success('CMS-1500 form generated successfully');\n      onFormGenerated?.({\n        claimId,\n        success: true,\n        options,\n        size: blob.size\n      });\n\n      // Refresh history\n      await loadGenerationHistory();\n    } catch (error) {\n      console.error('Error generating form:', error);\n      const errorMessage = error instanceof Error ? error.message : 'Failed to generate form';\n      onError?.(errorMessage);\n      toast.error(errorMessage);\n    } finally {\n      setIsGenerating(false);\n    }\n  };\n\n  /**\n   * Batch generate forms\n   */\n  const batchGenerateForms = async () => {\n    try {\n      setIsBatchGenerating(true);\n      setBatchResults([]);\n      \n      const claimIds = batchClaimIds\n        .split(',')\n        .map(id => parseInt(id.trim()))\n        .filter(id => !isNaN(id));\n\n      if (claimIds.length === 0) {\n        toast.error('Please enter valid claim IDs');\n        return;\n      }\n\n      if (claimIds.length > 50) {\n        toast.error('Maximum 50 claims can be processed at once');\n        return;\n      }\n\n      const response = await fetch('/api/v1/rcm/forms/cms1500/batch', {\n        method: 'POST',\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n          'Content-Type': 'application/json',\n        },\n        body: JSON.stringify({\n          claimIds,\n          options: generationOptions\n        }),\n      });\n\n      if (!response.ok) {\n        throw new Error('Failed to generate batch forms');\n      }\n\n      const data = await response.json();\n      setBatchResults(data.data.results);\n      \n      const { successful, failed } = data.data.summary;\n      toast.success(`Batch generation completed: ${successful} successful, ${failed} failed`);\n    } catch (error) {\n      console.error('Error in batch generation:', error);\n      toast.error('Failed to generate batch forms');\n    } finally {\n      setIsBatchGenerating(false);\n    }\n  };\n\n  /**\n   * Print form\n   */\n  const printForm = async () => {\n    try {\n      const params = new URLSearchParams({\n        includeFormBackground: 'true',\n        isDraft: 'false'\n      });\n\n      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/generate?${params}`, {\n        headers: {\n          'Authorization': `Bearer ${localStorage.getItem('token')}`,\n        },\n      });\n\n      if (!response.ok) {\n        throw new Error('Failed to generate form for printing');\n      }\n\n      const blob = await response.blob();\n      const url = window.URL.createObjectURL(blob);\n      \n      // Open in new window for printing\n      const printWindow = window.open(url, '_blank');\n      if (printWindow) {\n        printWindow.onload = () => {\n          printWindow.print();\n        };\n      }\n    } catch (error) {\n      console.error('Error printing form:', error);\n      toast.error('Failed to print form');\n    }\n  };\n\n  /**\n   * Copy claim ID to clipboard\n   */\n  const copyClaimId = () => {\n    navigator.clipboard.writeText(claimId.toString());\n    toast.success('Claim ID copied to clipboard');\n  };\n\n  /**\n   * Refresh all data\n   */\n  const refreshData = async () => {\n    await Promise.all([\n      loadFormPreview(),\n      loadValidation(),\n      loadGenerationHistory()\n    ]);\n    toast.success('Data refreshed');\n  };\n\n  // Render validation status\n  const renderValidationStatus = () => {\n    if (!validationResult) return null;\n\n    const { isValid, errors, warnings } = validationResult;\n\n    return (\n      <div className=\"space-y-2\">\n        <div className=\"flex items-center gap-2\">\n          {isValid ? (\n            <CheckCircle className=\"h-5 w-5 text-green-500\" />\n          ) : (\n            <AlertCircle className=\"h-5 w-5 text-red-500\" />\n          )}\n          <span className=\"font-medium\">\n            {isValid ? 'Form data is valid' : 'Form data has issues'}\n          </span>\n          <Badge variant={isValid ? 'default' : 'destructive'}>\n            {isValid ? 'Ready to generate' : 'Needs attention'}\n          </Badge>\n        </div>\n\n        {errors.length > 0 && (\n          <Alert variant=\"destructive\">\n            <AlertCircle className=\"h-4 w-4\" />\n            <AlertDescription>\n              <div className=\"font-medium mb-1\">Errors ({errors.length}):</div>\n              <ul className=\"list-disc list-inside space-y-1\">\n                {errors.map((error, index) => (\n                  <li key={index} className=\"text-sm\">{error}</li>\n                ))}\n              </ul>\n            </AlertDescription>\n          </Alert>\n        )}\n\n        {warnings.length > 0 && (\n          <Alert>\n            <AlertTriangle className=\"h-4 w-4\" />\n            <AlertDescription>\n              <div className=\"font-medium mb-1\">Warnings ({warnings.length}):</div>\n              <ul className=\"list-disc list-inside space-y-1\">\n                {warnings.map((warning, index) => (\n                  <li key={index} className=\"text-sm\">{warning}</li>\n                ))}\n              </ul>\n            </AlertDescription>\n          </Alert>\n        )}\n      </div>\n    );\n  };"  /
-/ Render form preview\n  const renderFormPreview = () => {\n    if (!formPreview) return null;\n\n    const { formData, fieldCount, estimatedSize } = formPreview;\n    const formFields = Object.entries(formData);\n\n    return (\n      <div className=\"space-y-4\">\n        <div className=\"flex items-center justify-between\">\n          <div className=\"flex items-center gap-4\">\n            <Badge variant=\"outline\">{fieldCount} fields</Badge>\n            <Badge variant=\"outline\">{estimatedSize}</Badge>\n          </div>\n          <Button\n            variant=\"outline\"\n            size=\"sm\"\n            onClick={refreshData}\n            disabled={isLoading}\n          >\n            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />\n            Refresh\n          </Button>\n        </div>\n\n        <ScrollArea className=\"h-96 border rounded-md p-4\">\n          <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n            {formFields.map(([fieldName, value]) => (\n              <div key={fieldName} className=\"flex flex-col space-y-1\">\n                <label className=\"text-sm font-medium text-gray-600\">\n                  {formatFieldLabel(fieldName)}\n                </label>\n                <div className=\"text-sm bg-gray-50 p-2 rounded border\">\n                  {value === 'X' ? (\n                    <span className=\"font-bold text-blue-600\">☑ Checked</span>\n                  ) : (\n                    <span className=\"font-mono\">{value || '(empty)'}</span>\n                  )}\n                </div>\n              </div>\n            ))}\n          </div>\n        </ScrollArea>\n      </div>\n    );\n  };\n\n  // Render generation history\n  const renderGenerationHistory = () => {\n    if (generationHistory.length === 0) {\n      return (\n        <div className=\"text-center py-8 text-gray-500\">\n          <FileText className=\"h-12 w-12 mx-auto mb-4 opacity-50\" />\n          <p>No generation history available</p>\n        </div>\n      );\n    }\n\n    return (\n      <div className=\"space-y-4\">\n        <Table>\n          <TableHeader>\n            <TableRow>\n              <TableHead>Date & Time</TableHead>\n              <TableHead>User</TableHead>\n              <TableHead>Status</TableHead>\n              <TableHead>Options</TableHead>\n              <TableHead>Actions</TableHead>\n            </TableRow>\n          </TableHeader>\n          <TableBody>\n            {generationHistory.map((entry) => (\n              <TableRow key={entry.id}>\n                <TableCell>\n                  <div className=\"flex items-center gap-2\">\n                    <Clock className=\"h-4 w-4 text-gray-400\" />\n                    {new Date(entry.timestamp).toLocaleString()}\n                  </div>\n                </TableCell>\n                <TableCell>{entry.user_name}</TableCell>\n                <TableCell>\n                  <Badge variant={entry.success ? 'default' : 'destructive'}>\n                    {entry.success ? 'Success' : 'Failed'}\n                  </Badge>\n                </TableCell>\n                <TableCell>\n                  <div className=\"text-sm text-gray-600\">\n                    {entry.options.isDraft && <Badge variant=\"outline\" className=\"mr-1\">Draft</Badge>}\n                    {entry.options.includeFormBackground && <Badge variant=\"outline\">Background</Badge>}\n                  </div>\n                </TableCell>\n                <TableCell>\n                  {entry.success ? (\n                    <Button\n                      variant=\"ghost\"\n                      size=\"sm\"\n                      onClick={() => generateForm(entry.options)}\n                    >\n                      <Download className=\"h-4 w-4\" />\n                    </Button>\n                  ) : (\n                    <span className=\"text-sm text-red-600\">{entry.error}</span>\n                  )}\n                </TableCell>\n              </TableRow>\n            ))}\n          </TableBody>\n        </Table>\n      </div>\n    );\n  };\n\n  // Render batch generation dialog\n  const renderBatchDialog = () => (\n    <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>\n      <DialogContent className=\"max-w-2xl\">\n        <DialogHeader>\n          <DialogTitle>Batch Generate CMS-1500 Forms</DialogTitle>\n          <DialogDescription>\n            Generate multiple CMS-1500 forms at once. Enter claim IDs separated by commas.\n          </DialogDescription>\n        </DialogHeader>\n        \n        <div className=\"space-y-4\">\n          <div>\n            <label className=\"text-sm font-medium mb-2 block\">\n              Claim IDs (comma-separated, max 50)\n            </label>\n            <textarea\n              className=\"w-full p-3 border rounded-md resize-none\"\n              rows={4}\n              placeholder=\"123, 124, 125, 126...\"\n              value={batchClaimIds}\n              onChange={(e) => setBatchClaimIds(e.target.value)}\n              disabled={isBatchGenerating}\n            />\n          </div>\n\n          <div className=\"flex items-center gap-4\">\n            <Button\n              onClick={batchGenerateForms}\n              disabled={isBatchGenerating || !batchClaimIds.trim()}\n            >\n              {isBatchGenerating ? (\n                <Loader2 className=\"h-4 w-4 mr-2 animate-spin\" />\n              ) : (\n                <FileText className=\"h-4 w-4 mr-2\" />\n              )}\n              Generate Forms\n            </Button>\n            <Button\n              variant=\"outline\"\n              onClick={() => setShowBatchDialog(false)}\n              disabled={isBatchGenerating}\n            >\n              Cancel\n            </Button>\n          </div>\n\n          {batchResults.length > 0 && (\n            <div className=\"mt-6\">\n              <h4 className=\"font-medium mb-3\">Generation Results</h4>\n              <div className=\"max-h-60 overflow-y-auto border rounded-md\">\n                <Table>\n                  <TableHeader>\n                    <TableRow>\n                      <TableHead>Claim ID</TableHead>\n                      <TableHead>Status</TableHead>\n                      <TableHead>Size</TableHead>\n                      <TableHead>Error</TableHead>\n                    </TableRow>\n                  </TableHeader>\n                  <TableBody>\n                    {batchResults.map((result) => (\n                      <TableRow key={result.claimId}>\n                        <TableCell>{result.claimId}</TableCell>\n                        <TableCell>\n                          <Badge variant={result.success ? 'default' : 'destructive'}>\n                            {result.success ? 'Success' : 'Failed'}\n                          </Badge>\n                        </TableCell>\n                        <TableCell>\n                          {result.size ? `${(result.size / 1024).toFixed(1)} KB` : '-'}\n                        </TableCell>\n                        <TableCell className=\"text-sm text-red-600\">\n                          {result.error || '-'}\n                        </TableCell>\n                      </TableRow>\n                    ))}\n                  </TableBody>\n                </Table>\n              </div>\n            </div>\n          )}\n        </div>\n      </DialogContent>\n    </Dialog>\n  );\n\n  // Format field labels for display\n  const formatFieldLabel = (fieldName: string): string => {\n    const labelMap: Record<string, string> = {\n      '1_medicare': 'Box 1 - Medicare',\n      '1_medicaid': 'Box 1 - Medicaid',\n      '1_tricare': 'Box 1 - Tricare',\n      '1_champva': 'Box 1 - CHAMPVA',\n      '1_group_health': 'Box 1 - Group Health Plan',\n      '1_feca': 'Box 1 - FECA',\n      '1_other': 'Box 1 - Other',\n      '1a_insured_id': 'Box 1a - Insured ID Number',\n      '2_patient_name': 'Box 2 - Patient Name',\n      '3_birth_date': 'Box 3 - Patient Birth Date',\n      '3_sex_male': 'Box 3 - Sex: Male',\n      '3_sex_female': 'Box 3 - Sex: Female',\n      '4_insured_name': 'Box 4 - Insured Name',\n      '5_patient_address': 'Box 5 - Patient Address',\n      '5_patient_city': 'Box 5 - Patient City',\n      '5_patient_state': 'Box 5 - Patient State',\n      '5_patient_zip': 'Box 5 - Patient ZIP',\n      '6_self': 'Box 6 - Relationship: Self',\n      '6_spouse': 'Box 6 - Relationship: Spouse',\n      '6_child': 'Box 6 - Relationship: Child',\n      '6_other': 'Box 6 - Relationship: Other',\n      '11_insured_policy': 'Box 11 - Insured Policy/Group Number',\n      '12_signature': 'Box 12 - Patient Signature',\n      '12_date': 'Box 12 - Signature Date',\n      '13_signature': 'Box 13 - Insured Signature',\n      '25_federal_tax_id': 'Box 25 - Federal Tax ID',\n      '26_patient_account_no': 'Box 26 - Patient Account Number',\n      '27_accept_assignment_yes': 'Box 27 - Accept Assignment: Yes',\n      '27_accept_assignment_no': 'Box 27 - Accept Assignment: No',\n      '28_total_charge': 'Box 28 - Total Charge',\n      '29_amount_paid': 'Box 29 - Amount Paid',\n      '31_signature_date': 'Box 31 - Signature Date',\n      '32_service_facility_name': 'Box 32 - Service Facility Name',\n      '32a_service_facility_npi': 'Box 32a - Service Facility NPI',\n      '33_billing_provider_name': 'Box 33 - Billing Provider Name',\n      '33_billing_provider_address': 'Box 33 - Billing Provider Address',\n      '33a_billing_provider_npi': 'Box 33a - Billing Provider NPI'\n    };\n\n    // Handle diagnosis codes\n    if (fieldName.startsWith('21_diagnosis_')) {\n      const letter = fieldName.split('_')[2];\n      return `Box 21${letter} - Diagnosis Code`;\n    }\n\n    // Handle service lines\n    if (fieldName.includes('_1') || fieldName.includes('_2') || fieldName.includes('_3') ||\n        fieldName.includes('_4') || fieldName.includes('_5') || fieldName.includes('_6')) {\n      const parts = fieldName.split('_');\n      const lineNum = parts[parts.length - 1];\n      const fieldType = parts.slice(0, -1).join('_');\n      \n      const serviceFieldMap: Record<string, string> = {\n        '14_date_from': 'Service Date From',\n        '14_date_to': 'Service Date To',\n        '15_place_of_service': 'Place of Service',\n        '16_emg': 'Emergency',\n        '17_procedure_code': 'Procedure Code',\n        '17_modifier1': 'Modifier 1',\n        '17_modifier2': 'Modifier 2',\n        '18_diagnosis_pointer': 'Diagnosis Pointer',\n        '19_charges': 'Charges',\n        '20_days_units': 'Days/Units',\n        '21_epsdt': 'EPSDT'\n      };\n      \n      const fieldLabel = serviceFieldMap[fieldType] || fieldType;\n      return `Line ${lineNum} - ${fieldLabel}`;\n    }\n\n    return labelMap[fieldName] || fieldName.replace(/_/g, ' ').toUpperCase();\n  };\n\n  if (isLoading) {\n    return (\n      <Card className={className}>\n        <CardContent className=\"flex items-center justify-center py-12\">\n          <Loader2 className=\"h-8 w-8 animate-spin\" />\n          <span className=\"ml-2\">Loading form data...</span>\n        </CardContent>\n      </Card>\n    );\n  }\n\n  return (\n    <div className={className}>\n      <Card>\n        <CardHeader>\n          <div className=\"flex items-center justify-between\">\n            <div>\n              <CardTitle className=\"flex items-center gap-2\">\n                <FileText className=\"h-5 w-5\" />\n                CMS-1500 Form Generator\n              </CardTitle>\n              <div className=\"flex items-center gap-2 mt-2\">\n                <span className=\"text-sm text-gray-600\">Claim ID: {claimId}</span>\n                <Button\n                  variant=\"ghost\"\n                  size=\"sm\"\n                  onClick={copyClaimId}\n                >\n                  <Copy className=\"h-3 w-3\" />\n                </Button>\n              </div>\n            </div>\n            \n            <div className=\"flex items-center gap-2\">\n              <DropdownMenu>\n                <DropdownMenuTrigger asChild>\n                  <Button variant=\"outline\" size=\"sm\">\n                    <Settings className=\"h-4 w-4 mr-2\" />\n                    Options\n                  </Button>\n                </DropdownMenuTrigger>\n                <DropdownMenuContent align=\"end\">\n                  <DropdownMenuLabel>Generation Options</DropdownMenuLabel>\n                  <DropdownMenuSeparator />\n                  <DropdownMenuItem\n                    onClick={() => setGenerationOptions(prev => ({\n                      ...prev,\n                      includeFormBackground: !prev.includeFormBackground\n                    }))}\n                  >\n                    <FileCheck className=\"h-4 w-4 mr-2\" />\n                    {generationOptions.includeFormBackground ? '✓' : ''} Form Background\n                  </DropdownMenuItem>\n                  <DropdownMenuItem\n                    onClick={() => setGenerationOptions(prev => ({\n                      ...prev,\n                      isDraft: !prev.isDraft\n                    }))}\n                  >\n                    <AlertTriangle className=\"h-4 w-4 mr-2\" />\n                    {generationOptions.isDraft ? '✓' : ''} Draft Watermark\n                  </DropdownMenuItem>\n                </DropdownMenuContent>\n              </DropdownMenu>\n              \n              <Button\n                variant=\"outline\"\n                size=\"sm\"\n                onClick={printForm}\n                disabled={!validationResult?.isValid}\n              >\n                <Printer className=\"h-4 w-4 mr-2\" />\n                Print\n              </Button>\n              \n              <Button\n                onClick={() => generateForm()}\n                disabled={isGenerating || !validationResult?.isValid}\n              >\n                {isGenerating ? (\n                  <Loader2 className=\"h-4 w-4 mr-2 animate-spin\" />\n                ) : (\n                  <Download className=\"h-4 w-4 mr-2\" />\n                )}\n                Generate PDF\n              </Button>\n            </div>\n          </div>\n        </CardHeader>\n        \n        <CardContent>\n          <Tabs value={activeTab} onValueChange={setActiveTab}>\n            <TabsList className=\"grid w-full grid-cols-4\">\n              <TabsTrigger value=\"preview\">Preview</TabsTrigger>\n              <TabsTrigger value=\"validation\">Validation</TabsTrigger>\n              <TabsTrigger value=\"history\">History</TabsTrigger>\n              <TabsTrigger value=\"batch\">Batch</TabsTrigger>\n            </TabsList>\n            \n            <TabsContent value=\"preview\" className=\"mt-6\">\n              {renderFormPreview()}\n            </TabsContent>\n            \n            <TabsContent value=\"validation\" className=\"mt-6\">\n              {renderValidationStatus()}\n            </TabsContent>\n            \n            <TabsContent value=\"history\" className=\"mt-6\">\n              {renderGenerationHistory()}\n            </TabsContent>\n            \n            <TabsContent value=\"batch\" className=\"mt-6\">\n              <div className=\"space-y-4\">\n                <div className=\"flex items-center justify-between\">\n                  <div>\n                    <h3 className=\"text-lg font-medium\">Batch Generation</h3>\n                    <p className=\"text-sm text-gray-600\">\n                      Generate CMS-1500 forms for multiple claims simultaneously\n                    </p>\n                  </div>\n                  <Button onClick={() => setShowBatchDialog(true)}>\n                    <FileText className=\"h-4 w-4 mr-2\" />\n                    Start Batch Generation\n                  </Button>\n                </div>\n                \n                <Alert>\n                  <AlertCircle className=\"h-4 w-4\" />\n                  <AlertDescription>\n                    Batch generation allows you to create up to 50 CMS-1500 forms at once.\n                    Each claim will be validated before generation.\n                  </AlertDescription>\n                </Alert>\n              </div>\n            </TabsContent>\n          </Tabs>\n        </CardContent>\n      </Card>\n      \n      {renderBatchDialog()}\n    </div>\n  );\n};\n\nexport default CMS1500FormViewer;"
+/**
+ * CMS1500FormViewer Component
+ * Comprehensive interface for viewing, generating, and managing CMS-1500 forms
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  FileText,
+  Download,
+  Eye,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Printer,
+  RefreshCw,
+  Settings,
+  History,
+  FileCheck,
+  AlertTriangle,
+  Loader2,
+  ExternalLink,
+  Copy,
+  Share2
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+// Types
+interface CMS1500FormViewerProps {
+  claimId: number;
+  onFormGenerated?: (formData: any) => void;
+  onError?: (error: string) => void;
+  className?: string;
+}
+
+interface FormValidation {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+interface FormPreview {
+  claimId: number;
+  validation: FormValidation;
+  formData: Record<string, any>;
+  fieldCount: number;
+  estimatedSize: string;
+}
+
+interface GenerationHistory {
+  id: number;
+  timestamp: string;
+  user_name: string;
+  success: boolean;
+  options: Record<string, any>;
+  error?: string;
+}
+
+interface BatchGenerationResult {
+  claimId: number;
+  success: boolean;
+  error?: string;
+  size?: number;
+}
+
+const CMS1500FormViewer: React.FC<CMS1500FormViewerProps> = ({
+  claimId,
+  onFormGenerated,
+  onError,
+  className
+}) => {
+  // State management
+  const [activeTab, setActiveTab] = useState('preview');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [formPreview, setFormPreview] = useState<FormPreview | null>(null);
+  const [generationHistory, setGenerationHistory] = useState<GenerationHistory[]>([]);
+  const [validationResult, setValidationResult] = useState<FormValidation | null>(null);
+  const [generationOptions, setGenerationOptions] = useState({
+    includeFormBackground: true,
+    isDraft: false,
+    format: 'pdf'
+  });
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchClaimIds, setBatchClaimIds] = useState<string>('');
+  const [batchResults, setBatchResults] = useState<BatchGenerationResult[]>([]);
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+
+  // Load initial data
+  useEffect(() => {
+    if (claimId) {
+      loadFormPreview();
+      loadValidation();
+      loadGenerationHistory();
+    }
+  }, [claimId]);
+
+  /**
+   * Load form preview data
+   */
+  const loadFormPreview = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/preview`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load form preview');
+      }
+
+      const data = await response.json();
+      setFormPreview(data.data);
+    } catch (error) {
+      console.error('Error loading form preview:', error);
+      onError?.(error instanceof Error ? error.message : 'Failed to load form preview');
+      toast.error('Failed to load form preview');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [claimId, onError]);
+
+  /**
+   * Load validation results
+   */
+  const loadValidation = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/validate`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to validate form data');
+      }
+
+      const data = await response.json();
+      setValidationResult(data.data.validation);
+    } catch (error) {
+      console.error('Error validating form:', error);
+      toast.error('Failed to validate form data');
+    }
+  }, [claimId]);
+
+  /**
+   * Load generation history
+   */
+  const loadGenerationHistory = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/history`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load generation history');
+      }
+
+      const data = await response.json();
+      setGenerationHistory(data.data.activities || []);
+    } catch (error) {
+      console.error('Error loading history:', error);
+      toast.error('Failed to load generation history');
+    }
+  }, [claimId]);
+
+  /**
+   * Generate CMS-1500 form
+   */
+  const generateForm = async (options = generationOptions) => {
+    try {
+      setIsGenerating(true);
+      
+      const params = new URLSearchParams({
+        includeFormBackground: options.includeFormBackground.toString(),
+        isDraft: options.isDraft.toString(),
+        format: options.format
+      });
+
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/generate?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate form');
+      }
+
+      // Handle PDF download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CMS1500-${claimId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('CMS-1500 form generated successfully');
+      onFormGenerated?.({
+        claimId,
+        success: true,
+        options,
+        size: blob.size
+      });
+
+      // Refresh history
+      await loadGenerationHistory();
+    } catch (error) {
+      console.error('Error generating form:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate form';
+      onError?.(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  /**
+   * Batch generate forms
+   */
+  const batchGenerateForms = async () => {
+    try {
+      setIsBatchGenerating(true);
+      setBatchResults([]);
+      
+      const claimIds = batchClaimIds
+        .split(',')
+        .map(id => parseInt(id.trim()))
+        .filter(id => !isNaN(id));
+
+      if (claimIds.length === 0) {
+        toast.error('Please enter valid claim IDs');
+        return;
+      }
+
+      if (claimIds.length > 50) {
+        toast.error('Maximum 50 claims can be processed at once');
+        return;
+      }
+
+      const response = await fetch('/api/v1/rcm/forms/cms1500/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          claimIds,
+          options: generationOptions
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate batch forms');
+      }
+
+      const data = await response.json();
+      setBatchResults(data.data.results);
+      
+      const { successful, failed } = data.data.summary;
+      toast.success(`Batch generation completed: ${successful} successful, ${failed} failed`);
+    } catch (error) {
+      console.error('Error in batch generation:', error);
+      toast.error('Failed to generate batch forms');
+    } finally {
+      setIsBatchGenerating(false);
+    }
+  };
+
+  /**
+   * Print form
+   */
+  const printForm = async () => {
+    try {
+      const params = new URLSearchParams({
+        includeFormBackground: 'true',
+        isDraft: 'false'
+      });
+
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/cms1500/generate?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate form for printing');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      // Open in new window for printing
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.onload = () => {
+          printWindow.print();
+        };
+      }
+    } catch (error) {
+      console.error('Error printing form:', error);
+      toast.error('Failed to print form');
+    }
+  };
+
+  /**
+   * Copy claim ID to clipboard
+   */
+  const copyClaimId = () => {
+    navigator.clipboard.writeText(claimId.toString());
+    toast.success('Claim ID copied to clipboard');
+  };
+
+  /**
+   * Refresh all data
+   */
+  const refreshData = async () => {
+    await Promise.all([
+      loadFormPreview(),
+      loadValidation(),
+      loadGenerationHistory()
+    ]);
+    toast.success('Data refreshed');
+  };
+
+  // Render validation status
+  const renderValidationStatus = () => {
+    if (!validationResult) return null;
+
+    const { isValid, errors, warnings } = validationResult;
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          {isValid ? (
+            <CheckCircle className="h-5 w-5 text-green-500" />
+          ) : (
+            <AlertCircle className="h-5 w-5 text-red-500" />
+          )}
+          <span className="font-medium">
+            {isValid ? 'Form data is valid' : 'Form data has issues'}
+          </span>
+          <Badge variant={isValid ? 'default' : 'destructive'}>
+            {isValid ? 'Ready to generate' : 'Needs attention'}
+          </Badge>
+        </div>
+
+        {errors.length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="font-medium mb-1">Errors ({errors.length}):</div>
+              <ul className="list-disc list-inside space-y-1">
+                {errors.map((error, index) => (
+                  <li key={index} className="text-sm">{error}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {warnings.length > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="font-medium mb-1">Warnings ({warnings.length}):</div>
+              <ul className="list-disc list-inside space-y-1">
+                {warnings.map((warning, index) => (
+                  <li key={index} className="text-sm">{warning}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+    );
+  };
+  // Render form preview
+  const renderFormPreview = () => {
+    if (!formPreview) return null;
+
+    const { formData, fieldCount, estimatedSize } = formPreview;
+    const formFields = Object.entries(formData);
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Badge variant="outline">{fieldCount} fields</Badge>
+            <Badge variant="outline">{estimatedSize}</Badge>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshData}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+
+        <ScrollArea className="h-96 border rounded-md p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {formFields.map(([fieldName, value]) => (
+              <div key={fieldName} className="flex flex-col space-y-1">
+                <label className="text-sm font-medium text-gray-600">
+                  {formatFieldLabel(fieldName)}
+                </label>
+                <div className="text-sm bg-gray-50 p-2 rounded border">
+                  {value === 'X' ? (
+                    <span className="font-bold text-blue-600">☑ Checked</span>
+                  ) : (
+                    <span className="font-mono">{value || '(empty)'}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
+
+  // Render generation history
+  const renderGenerationHistory = () => {
+    if (generationHistory.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>No generation history available</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date & Time</TableHead>
+              <TableHead>User</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Options</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {generationHistory.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-gray-400" />
+                    {new Date(entry.timestamp).toLocaleString()}
+                  </div>
+                </TableCell>
+                <TableCell>{entry.user_name}</TableCell>
+                <TableCell>
+                  <Badge variant={entry.success ? 'default' : 'destructive'}>
+                    {entry.success ? 'Success' : 'Failed'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm text-gray-600">
+                    {entry.options.isDraft && <Badge variant="outline" className="mr-1">Draft</Badge>}
+                    {entry.options.includeFormBackground && <Badge variant="outline">Background</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {entry.success ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => generateForm(entry.options)}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <span className="text-sm text-red-600">{entry.error}</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  // Render batch generation dialog
+  const renderBatchDialog = () => (
+    <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Batch Generate CMS-1500 Forms</DialogTitle>
+          <DialogDescription>
+            Generate multiple CMS-1500 forms at once. Enter claim IDs separated by commas.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Claim IDs (comma-separated, max 50)
+            </label>
+            <textarea
+              className="w-full p-3 border rounded-md resize-none"
+              rows={4}
+              placeholder="123, 124, 125, 126..."
+              value={batchClaimIds}
+              onChange={(e) => setBatchClaimIds(e.target.value)}
+              disabled={isBatchGenerating}
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={batchGenerateForms}
+              disabled={isBatchGenerating || !batchClaimIds.trim()}
+            >
+              {isBatchGenerating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              Generate Forms
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowBatchDialog(false)}
+              disabled={isBatchGenerating}
+            >
+              Cancel
+            </Button>
+          </div>
+
+          {batchResults.length > 0 && (
+            <div className="mt-6">
+              <h4 className="font-medium mb-3">Generation Results</h4>
+              <div className="max-h-60 overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim ID</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Error</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {batchResults.map((result) => (
+                      <TableRow key={result.claimId}>
+                        <TableCell>{result.claimId}</TableCell>
+                        <TableCell>
+                          <Badge variant={result.success ? 'default' : 'destructive'}>
+                            {result.success ? 'Success' : 'Failed'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {result.size ? `${(result.size / 1024).toFixed(1)} KB` : '-'}
+                        </TableCell>
+                        <TableCell className="text-sm text-red-600">
+                          {result.error || '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Format field labels for display
+  const formatFieldLabel = (fieldName: string): string => {
+    const labelMap: Record<string, string> = {
+      '1_medicare': 'Box 1 - Medicare',
+      '1_medicaid': 'Box 1 - Medicaid',
+      '1_tricare': 'Box 1 - Tricare',
+      '1_champva': 'Box 1 - CHAMPVA',
+      '1_group_health': 'Box 1 - Group Health Plan',
+      '1_feca': 'Box 1 - FECA',
+      '1_other': 'Box 1 - Other',
+      '1a_insured_id': 'Box 1a - Insured ID Number',
+      '2_patient_name': 'Box 2 - Patient Name',
+      '3_birth_date': 'Box 3 - Patient Birth Date',
+      '3_sex_male': 'Box 3 - Sex: Male',
+      '3_sex_female': 'Box 3 - Sex: Female',
+      '4_insured_name': 'Box 4 - Insured Name',
+      '5_patient_address': 'Box 5 - Patient Address',
+      '5_patient_city': 'Box 5 - Patient City',
+      '5_patient_state': 'Box 5 - Patient State',
+      '5_patient_zip': 'Box 5 - Patient ZIP',
+      '6_self': 'Box 6 - Relationship: Self',
+      '6_spouse': 'Box 6 - Relationship: Spouse',
+      '6_child': 'Box 6 - Relationship: Child',
+      '6_other': 'Box 6 - Relationship: Other',
+      '11_insured_policy': 'Box 11 - Insured Policy/Group Number',
+      '12_signature': 'Box 12 - Patient Signature',
+      '12_date': 'Box 12 - Signature Date',
+      '13_signature': 'Box 13 - Insured Signature',
+      '25_federal_tax_id': 'Box 25 - Federal Tax ID',
+      '26_patient_account_no': 'Box 26 - Patient Account Number',
+      '27_accept_assignment_yes': 'Box 27 - Accept Assignment: Yes',
+      '27_accept_assignment_no': 'Box 27 - Accept Assignment: No',
+      '28_total_charge': 'Box 28 - Total Charge',
+      '29_amount_paid': 'Box 29 - Amount Paid',
+      '31_signature_date': 'Box 31 - Signature Date',
+      '32_service_facility_name': 'Box 32 - Service Facility Name',
+      '32a_service_facility_npi': 'Box 32a - Service Facility NPI',
+      '33_billing_provider_name': 'Box 33 - Billing Provider Name',
+      '33_billing_provider_address': 'Box 33 - Billing Provider Address',
+      '33a_billing_provider_npi': 'Box 33a - Billing Provider NPI'
+    };
+
+    // Handle diagnosis codes
+    if (fieldName.startsWith('21_diagnosis_')) {
+      const letter = fieldName.split('_')[2];
+      return `Box 21${letter} - Diagnosis Code`;
+    }
+
+    // Handle service lines
+    if (fieldName.includes('_1') || fieldName.includes('_2') || fieldName.includes('_3') ||
+        fieldName.includes('_4') || fieldName.includes('_5') || fieldName.includes('_6')) {
+      const parts = fieldName.split('_');
+      const lineNum = parts[parts.length - 1];
+      const fieldType = parts.slice(0, -1).join('_');
+      
+      const serviceFieldMap: Record<string, string> = {
+        '14_date_from': 'Service Date From',
+        '14_date_to': 'Service Date To',
+        '15_place_of_service': 'Place of Service',
+        '16_emg': 'Emergency',
+        '17_procedure_code': 'Procedure Code',
+        '17_modifier1': 'Modifier 1',
+        '17_modifier2': 'Modifier 2',
+        '18_diagnosis_pointer': 'Diagnosis Pointer',
+        '19_charges': 'Charges',
+        '20_days_units': 'Days/Units',
+        '21_epsdt': 'EPSDT'
+      };
+      
+      const fieldLabel = serviceFieldMap[fieldType] || fieldType;
+      return `Line ${lineNum} - ${fieldLabel}`;
+    }
+
+    return labelMap[fieldName] || fieldName.replace(/_/g, ' ').toUpperCase();
+  };
+
+  if (isLoading) {
+    return (
+      <Card className={className}>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2">Loading form data...</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className={className}>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                CMS-1500 Form Generator
+              </CardTitle>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-600">Claim ID: {claimId}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={copyClaimId}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Options
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Generation Options</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setGenerationOptions(prev => ({
+                      ...prev,
+                      includeFormBackground: !prev.includeFormBackground
+                    }))}
+                  >
+                    <FileCheck className="h-4 w-4 mr-2" />
+                    {generationOptions.includeFormBackground ? '✓' : ''} Form Background
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setGenerationOptions(prev => ({
+                      ...prev,
+                      isDraft: !prev.isDraft
+                    }))}
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    {generationOptions.isDraft ? '✓' : ''} Draft Watermark
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={printForm}
+                disabled={!validationResult?.isValid}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+              
+              <Button
+                onClick={() => generateForm()}
+                disabled={isGenerating || !validationResult?.isValid}
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Generate PDF
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="validation">Validation</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="batch">Batch</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="preview" className="mt-6">
+              {renderFormPreview()}
+            </TabsContent>
+            
+            <TabsContent value="validation" className="mt-6">
+              {renderValidationStatus()}
+            </TabsContent>
+            
+            <TabsContent value="history" className="mt-6">
+              {renderGenerationHistory()}
+            </TabsContent>
+            
+            <TabsContent value="batch" className="mt-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Batch Generation</h3>
+                    <p className="text-sm text-gray-600">
+                      Generate CMS-1500 forms for multiple claims simultaneously
+                    </p>
+                  </div>
+                  <Button onClick={() => setShowBatchDialog(true)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Start Batch Generation
+                  </Button>
+                </div>
+                
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Batch generation allows you to create up to 50 CMS-1500 forms at once.
+                    Each claim will be validated before generation.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+      
+      {renderBatchDialog()}
+    </div>
+  );
+};
+
+export default CMS1500FormViewer;
