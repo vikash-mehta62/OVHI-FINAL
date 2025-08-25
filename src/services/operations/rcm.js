@@ -940,3 +940,9 @@ export const exportToCSV = (data, filename) => {
   link.click();
   document.body.removeChild(link);
 };
+export const validateClaimDataAPI = (token,data,options) =>{
+return true;
+}
+export const validateNPIAPI = (token,npi) =>{
+return true;
+}
