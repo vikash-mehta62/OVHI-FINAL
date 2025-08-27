@@ -96,6 +96,45 @@ const ValidationSchemas = {
     notes: ValidationPatterns.optionalString
   }),
 
+  // Eligibility validation schemas
+  eligibilityCheck: Joi.object({
+    patientId: ValidationPatterns.positiveInteger.required(),
+    memberId: ValidationPatterns.nonEmptyString.required(),
+    firstName: ValidationPatterns.optionalString,
+    lastName: ValidationPatterns.optionalString,
+    dateOfBirth: ValidationPatterns.optionalDateString,
+    serviceDate: ValidationPatterns.optionalDateString,
+    insuranceId: ValidationPatterns.optionalPositiveInteger
+  }),
+
+  eligibilityVerify: Joi.object({
+    patientId: ValidationPatterns.positiveInteger.required(),
+    serviceDate: ValidationPatterns.optionalDateString
+  }),
+
+  eligibilityHistoryQuery: Joi.object({
+    patientId: ValidationPatterns.positiveInteger.required(),
+    limit: ValidationPatterns.page.optional().default(10),
+    offset: ValidationPatterns.page.optional().default(0)
+  }),
+
+  claimValidation: Joi.object({
+    patientId: ValidationPatterns.positiveInteger.required(),
+    serviceDate: ValidationPatterns.optionalDateString,
+    procedureCodes: Joi.array().items(ValidationPatterns.cptCode).min(1).required(),
+    diagnosisCodes: Joi.array().items(ValidationPatterns.icdCode).optional(),
+    providerId: ValidationPatterns.optionalPositiveInteger,
+    placeOfService: ValidationPatterns.optionalString,
+    units: ValidationPatterns.optionalPositiveInteger,
+    charges: ValidationPatterns.optionalMonetaryAmount
+  }),
+
+  benefitsCheck: Joi.object({
+    patientId: ValidationPatterns.positiveInteger.required(),
+    serviceDate: ValidationPatterns.optionalDateString,
+    procedureCodes: Joi.array().items(ValidationPatterns.cptCode).optional()
+  }),
+
   // Claims query parameters
   getClaimsQuery: Joi.object({
     page: ValidationPatterns.page,
@@ -489,6 +528,13 @@ const sanitizeObject = (obj, context = 'general') => {
  * Pre-built validation middleware for common RCM endpoints
  */
 const ValidationMiddleware = {
+  // Eligibility validations
+  validateEligibilityCheck: createValidationMiddleware(ValidationSchemas.eligibilityCheck, 'body'),
+  validateEligibilityVerify: createValidationMiddleware(ValidationSchemas.eligibilityVerify, 'body'),
+  validateEligibilityHistoryQuery: createValidationMiddleware(ValidationSchemas.eligibilityHistoryQuery, 'query'),
+  validateClaimValidation: createValidationMiddleware(ValidationSchemas.claimValidation, 'body'),
+  validateBenefitsCheck: createValidationMiddleware(ValidationSchemas.benefitsCheck, 'body'),
+
   // Claim validations
   validateCreateClaim: createValidationMiddleware(ValidationSchemas.createClaim, 'body'),
   validateUpdateClaim: createValidationMiddleware(ValidationSchemas.updateClaim, 'body'),
@@ -553,6 +599,38 @@ const ValidationMiddleware = {
     Joi.object({ [paramName]: Joi.string().required() }), 
     'params'
   ),
+
+  // Required query parameter validation
+  validateRequiredQuery: (paramName) => createValidationMiddleware(
+    Joi.object({ [paramName]: Joi.string().required() }), 
+    'query'
+  ),
+
+  // Flexible parameter validation (checks both params and query)
+  validateRequiredField: (fieldName) => (req, res, next) => {
+    const value = req.params[fieldName] || req.query[fieldName] || req.body[fieldName];
+    
+    if (!value || (typeof value === 'string' && value.trim() === '')) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `${fieldName} is required`,
+          details: [{
+            field: fieldName,
+            message: `${fieldName} is required and cannot be empty`
+          }],
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    // Add the validated field to req for consistency
+    req.validatedFields = req.validatedFields || {};
+    req.validatedFields[fieldName] = value.toString().trim();
+    
+    next();
+  },
 
   // ClaimMD configuration validation
   validateClaimMDConfiguration: createValidationMiddleware(Joi.object({
