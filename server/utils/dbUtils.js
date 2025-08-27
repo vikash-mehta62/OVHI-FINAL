@@ -467,9 +467,64 @@ const executeQueryWithAnalysis = async (query, params = []) => {
   }
 };
 
+/**
+ * Execute query and return single result
+ * @param {string} query - SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<Object|null>} Single result or null
+ */
+const executeQuerySingle = async (query, params = []) => {
+  try {
+    const results = await executeQuery(query, params);
+    return results && results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error('Execute query single error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Log audit trail for database operations
+ * @param {Object} auditData - Audit data
+ * @returns {Promise<void>}
+ */
+const auditLog = async (auditData) => {
+  try {
+    const {
+      table_name,
+      record_id,
+      action,
+      old_values,
+      new_values,
+      user_id,
+      timestamp = new Date()
+    } = auditData;
+
+    await executeQuery(`
+      INSERT INTO audit_logs (
+        table_name, record_id, action, old_values, 
+        new_values, user_id, timestamp
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      table_name,
+      record_id,
+      action,
+      old_values,
+      new_values,
+      user_id,
+      timestamp
+    ]);
+
+  } catch (error) {
+    // Don't throw error for audit logging to prevent breaking main operations
+    console.error('Audit log error:', error);
+  }
+};
+
 module.exports = {
   getConnection,
   executeQuery,
+  executeQuerySingle,
   executeTransaction,
   executeQueryWithPagination,
   executeQueryWithRetry,
@@ -478,6 +533,7 @@ module.exports = {
   getHealthStatus,
   executeStoredProcedure,
   batchInsert,
+  auditLog,
   
   // Performance monitoring functions
   getQueryMetrics,

@@ -83,7 +83,7 @@ import RCMManagement from "./pages/RCMManagement";
 // RCM Components
 import DenialManagement from "./components/rcm/DenialManagement";
 import CollectionsManagement from "./components/rcm/CollectionsManagement";
-import RCMAnalyticsDashboard from "./components/rcm/RCMAnalyticsDashboard";
+import RCMAnalyticsDashboard from "./components/rcm/UnifiedRCMDashboard";
 
 // Settings Components
 import PrivacySettings from "./components/settings/PrivacySettings";

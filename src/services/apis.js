@@ -1,5 +1,5 @@
-const BASE_URL = "https://api.varnaamedicalbillingsolutions.com/api/v1"
-// const BASE_URL = "http://localhost:8000/api/v1"
+// const BASE_URL = "https://api.varnaamedicalbillingsolutions.com/api/v1"
+const BASE_URL = "http://localhost:3000/api/v1"
 // const BASE_URL = import.meta.env.VITE_APP_BASE_URL;
 
 export const endpoints = {
@@ -99,7 +99,7 @@ export const settings = {
   GET_PDF_HEADER_API: BASE_URL + "/settings/get-pdf-header",
   ADD_SERVICE: BASE_URL + "/physician/addService",
   ADD_INSURANCE_NETWORK: BASE_URL + "/physician/addInsuranceNetwork",
-  
+
   // Enhanced Settings APIs
   NOTIFICATION_SETTINGS_API: BASE_URL + "/settings/enhanced/notifications",
   PRIVACY_SETTINGS_API: BASE_URL + "/settings/enhanced/privacy",
@@ -200,13 +200,60 @@ export const intake = {
 }
 
 export const rcm = {
+  // Dashboard and Analytics
   RCM_DASHBOARD_API: BASE_URL + "/rcm/dashboard",
-  RCM_CLAIMS_API: BASE_URL + "/rcm/claims",
-  RCM_AR_AGING_API: BASE_URL + "/rcm/ar-aging",
-  RCM_DENIALS_API: BASE_URL + "/rcm/denials",
-  RCM_PAYMENTS_API: BASE_URL + "/rcm/payments",
-  RCM_FORECASTING_API: BASE_URL + "/rcm/revenue-forecasting",
-  RCM_COLLECTIONS_API: BASE_URL + "/rcm/collections",
   RCM_ANALYTICS_API: BASE_URL + "/rcm/analytics",
+  RCM_PERFORMANCE_API: BASE_URL + "/rcm/performance/metrics",
+
+  // Claims Management
+  RCM_CLAIMS_API: BASE_URL + "/rcm/claims",
+  RCM_CLAIMS_CREATE_API: BASE_URL + "/rcm/claims",
+  RCM_CLAIMS_UPDATE_API: (claimId) => BASE_URL + `/rcm/claims/${claimId}`,
+  RCM_CLAIMS_STATUS_API: (claimId) => BASE_URL + `/rcm/claims/${claimId}/status`,
+  RCM_CLAIMS_BULK_UPDATE_API: BASE_URL + "/rcm/claims/bulk-update",
+
+  // A/R Aging and Collections
+  RCM_AR_AGING_API: BASE_URL + "/rcm/ar-aging",
+  RCM_COLLECTIONS_API: BASE_URL + "/rcm/collections",
+  RCM_COLLECTIONS_UPDATE_API: (accountId) => BASE_URL + `/rcm/collections/${accountId}/status`,
+
+  // Payment Processing
+  RCM_PAYMENTS_API: BASE_URL + "/rcm/payments",
+  RCM_PAYMENTS_POST_API: BASE_URL + "/rcm/payments/post",
+  RCM_ERA_PROCESS_API: BASE_URL + "/rcm/payments/era/process",
+
+  // Denial Management
+  RCM_DENIALS_API: BASE_URL + "/rcm/denials/analytics",
+
+  // Patient Statements
+  RCM_STATEMENTS_API: BASE_URL + "/rcm/statements",
+  RCM_STATEMENTS_GENERATE_API: (patientId) => BASE_URL + `/rcm/patients/${patientId}/statements/generate`,
+
+  // Reports
+  RCM_REPORTS_GENERATE_API: BASE_URL + "/rcm/reports/generate",
+
+  // ClaimMD Integration
   RCM_CLAIMMD_API: BASE_URL + "/rcm/claimmd",
+  RCM_CLAIMMD_CONFIG_API: BASE_URL + "/rcm/claimmd/configuration",
+  RCM_CLAIMMD_TEST_API: BASE_URL + "/rcm/claimmd/test-connection",
+  RCM_CLAIMMD_ERA_STATUS_API: (referenceId) => BASE_URL + `/rcm/claimmd/era-status/${referenceId}`,
+
+  // Cache and Performance
+  RCM_CACHE_STATS_API: BASE_URL + "/rcm/cache/stats",
+  RCM_CACHE_CLEAR_API: BASE_URL + "/rcm/cache/clear",
+  RCM_CACHE_INVALIDATE_API: BASE_URL + "/rcm/cache/invalidate",
+
+  // Eligibility and Validation
+  RCM_ELIGIBILITY_CHECK_API: BASE_URL + "/rcm/eligibility/check",
+  RCM_ELIGIBILITY_VERIFY_API: BASE_URL + "/rcm/eligibility/verify",
+  RCM_ELIGIBILITY_HISTORY_API: BASE_URL + "/rcm/eligibility/history",
+  RCM_CLAIM_VALIDATE_API: BASE_URL + "/rcm/claims/validate",
+  RCM_CLAIM_SCRUB_API: BASE_URL + "/rcm/claims/scrub",
+  RCM_CLAIM_ESTIMATE_API: BASE_URL + "/rcm/claims/estimate",
+  RCM_BENEFITS_CHECK_API: BASE_URL + "/rcm/benefits/check",
+  RCM_PRIOR_AUTH_API: BASE_URL + "/rcm/prior-authorization",
+  RCM_COPAY_ESTIMATE_API: BASE_URL + "/rcm/copay/estimate",
+
+  // Legacy endpoints for backward compatibility
+  RCM_FORECASTING_API: BASE_URL + "/rcm/analytics", // Maps to analytics
 }

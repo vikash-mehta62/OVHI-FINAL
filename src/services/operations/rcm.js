@@ -10,7 +10,17 @@ const {
   RCM_PAYMENTS_API,
   RCM_FORECASTING_API,
   RCM_COLLECTIONS_API,
-  RCM_ANALYTICS_API
+  RCM_ANALYTICS_API,
+  RCM_PERFORMANCE_API,
+  RCM_CLAIMS_CREATE_API,
+  RCM_CLAIMS_UPDATE_API,
+  RCM_CLAIMS_STATUS_API,
+  RCM_PAYMENTS_POST_API,
+  RCM_ERA_PROCESS_API,
+  RCM_CLAIMMD_API,
+  RCM_CLAIMMD_CONFIG_API,
+  RCM_CLAIMMD_TEST_API,
+  RCM_CLAIMMD_ERA_STATUS_API
 } = rcm;
 
 // Dashboard Data
@@ -946,3 +956,370 @@ return true;
 export const validateNPIAPI = (token,npi) =>{
 return true;
 }
+// =====================================================
+// CLAIMMD INTEGRATION API FUNCTIONS
+// =====================================================
+
+// Get ClaimMD Configuration
+export const getClaimMDConfigurationAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMMD_API}/configuration`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch ClaimMD configuration");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("ClaimMD Configuration API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch ClaimMD configuration");
+    return null;
+  }
+};
+
+// Update ClaimMD Configuration
+export const updateClaimMDConfigurationAPI = async (token, configData) => {
+  try {
+    const response = await apiConnector(
+      "PUT",
+      `${RCM_CLAIMMD_API}/configuration`,
+      configData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to update ClaimMD configuration");
+    }
+
+    toast.success("ClaimMD configuration updated successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Update ClaimMD Configuration API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to update ClaimMD configuration");
+    return null;
+  }
+};
+
+// Test ClaimMD Connection
+export const testClaimMDConnectionAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMMD_API}/test-connection`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "ClaimMD connection test failed");
+    }
+
+    toast.success("ClaimMD connection test successful");
+    return response.data;
+  } catch (error) {
+    console.error("ClaimMD Connection Test API Error:", error);
+    toast.error(error?.response?.data?.message || "ClaimMD connection test failed");
+    return null;
+  }
+};
+
+// Check ClaimMD ERA Status
+export const checkClaimMDERAStatusAPI = async (token, referenceId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMMD_API}/era/${referenceId}/status`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to check ClaimMD ERA status");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("ClaimMD ERA Status API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to check ClaimMD ERA status");
+    return null;
+  }
+};
+
+// =====================================================
+// ENHANCED PAYMENT PROCESSING API FUNCTIONS
+// =====================================================
+
+// Post Payment with Advanced Options
+export const postPaymentAPI = async (token, paymentData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_PAYMENTS_API}/post`,
+      paymentData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to post payment");
+    }
+
+    toast.success("Payment posted successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Post Payment API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to post payment");
+    return null;
+  }
+};
+
+// =====================================================
+// PERFORMANCE MONITORING API FUNCTIONS
+// =====================================================
+
+// Get Performance Metrics
+export const getPerformanceMetricsAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${BASE_URL}/rcm/performance/metrics`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch performance metrics");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Performance Metrics API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch performance metrics");
+    return null;
+  }
+};
+
+// Get Cache Statistics
+export const getCacheStatsAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${BASE_URL}/rcm/cache/stats`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch cache statistics");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Cache Stats API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch cache statistics");
+    return null;
+  }
+};
+
+// Clear Cache
+export const clearCacheAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${BASE_URL}/rcm/cache/clear`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to clear cache");
+    }
+
+    toast.success("Cache cleared successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Clear Cache API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to clear cache");
+    return null;
+  }
+};
+
+// =====================================================
+// ENHANCED CLAIMS MANAGEMENT API FUNCTIONS
+// =====================================================
+
+// Create Claim with Enhanced Validation
+export const createClaimEnhancedAPI = async (token, claimData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}`,
+      claimData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to create claim");
+    }
+
+    toast.success("Claim created successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Create Claim Enhanced API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to create claim");
+    return null;
+  }
+};
+
+// Update Claim with Enhanced Features
+export const updateClaimEnhancedAPI = async (token, claimId, claimData) => {
+  try {
+    const response = await apiConnector(
+      "PUT",
+      `${RCM_CLAIMS_API}/${claimId}`,
+      claimData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to update claim");
+    }
+
+    toast.success("Claim updated successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Update Claim Enhanced API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to update claim");
+    return null;
+  }
+};
+
+// =====================================================
+// HEALTH CHECK API FUNCTION
+// =====================================================
+
+// RCM Health Check
+export const rcmHealthCheckAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${BASE_URL}/rcm/health`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "RCM health check failed");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("RCM Health Check API Error:", error);
+    return {
+      success: false,
+      error: error?.response?.data?.message || "RCM health check failed"
+    };
+  }
+};
+
+// =====================================================
+// UTILITY FUNCTIONS FOR ENHANCED FEATURES
+// =====================================================
+
+// Format ClaimMD Reference ID
+export const formatClaimMDReference = (referenceId) => {
+  if (!referenceId) return 'N/A';
+  return referenceId.length > 20 ? `${referenceId.substring(0, 20)}...` : referenceId;
+};
+
+// Get Processing Status Color
+export const getProcessingStatusColor = (status) => {
+  const statusColors = {
+    'submitted': 'blue',
+    'processing': 'yellow',
+    'completed': 'green',
+    'error': 'red',
+    'pending': 'gray'
+  };
+  return statusColors[status] || 'gray';
+};
+
+// Calculate Processing Time
+export const calculateProcessingTime = (startTime, endTime) => {
+  if (!startTime || !endTime) return 'N/A';
+  const diff = new Date(endTime) - new Date(startTime);
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  return `${seconds}s`;
+};
+
+// Validate ERA File Format
+export const validateERAFile = (file) => {
+  const validExtensions = ['.835', '.txt'];
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  
+  const errors = [];
+  
+  if (!file) {
+    errors.push('No file selected');
+    return { isValid: false, errors };
+  }
+  
+  const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+  if (!validExtensions.includes(extension)) {
+    errors.push('Invalid file format. Please select a .835 or .txt file');
+  }
+  
+  if (file.size > maxSize) {
+    errors.push('File size exceeds 10MB limit');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+};
+
+// Parse ERA Processing Result
+export const parseERAResult = (result) => {
+  if (!result) return null;
+  
+  return {
+    ...result,
+    successRate: result.processedCount > 0 ? 
+      ((result.autoPostedCount / result.processedCount) * 100).toFixed(1) : 0,
+    totalAmount: result.totalPayments + result.totalAdjustments,
+    hasClaimMDIntegration: result.claimMdIntegration?.enabled || false,
+    claimMDStatus: result.claimMdIntegration?.status || 'unknown'
+  };
+};

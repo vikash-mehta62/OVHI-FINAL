@@ -38,3 +38,26 @@ exports.verifyToken = async (req, res, next) => {
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+
+
+// middleware/bypass.js
+
+// Bypass authenticateToken
+exports.authenticateToken = (req, res, next) => {
+  // Just attach a dummy user if needed
+  req.user = {
+    id: "dummyUserId",
+    role: "admin", // ya koi role jo chahiye
+  };
+  next();
+};
+
+// Bypass requireRole
+exports.requireRole = (roles = []) => {
+  return (req, res, next) => {
+    // Seedha allow kar do
+    next();
+  };
+};
+

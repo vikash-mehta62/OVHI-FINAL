@@ -29,7 +29,7 @@ const { asyncHandler } = require('../../middleware/errorHandler');
 const { cacheMiddleware } = require('../../utils/cacheUtils');
 
 // Import controllers
-const rcmController = require('./rcmController');
+const rcmController = require('./unifiedRCMController');
 
 // Apply global security middleware to all RCM routes
 router.use(enhancedSecurityHeaders);

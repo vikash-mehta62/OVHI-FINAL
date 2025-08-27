@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 // Import RCM components
-import RCMDashboard from '@/components/rcm/RCMDashboard';
+import RCMDashboard from '@/components/rcm/UnifiedRCMDashboard';
 import ClaimsManagement from '@/components/rcm/ClaimsManagement';
 import PaymentHistory from '@/components/payments/PaymentHistory';
 import PaymentGatewaySettings from '@/components/payments/PaymentGatewaySettings';

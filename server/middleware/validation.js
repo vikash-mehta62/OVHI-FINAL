@@ -534,7 +534,56 @@ const ValidationMiddleware = {
   validatePositiveIntegerParam: (paramName) => createValidationMiddleware(
     Joi.object({ [paramName]: ValidationPatterns.positiveInteger.required() }), 
     'params'
-  )
+  ),
+
+  // Payment validations
+  validatePostPayment: createValidationMiddleware(Joi.object({
+    claim_id: ValidationPatterns.positiveInteger.required(),
+    payment_amount: ValidationPatterns.monetaryAmount.required(),
+    payment_date: ValidationPatterns.dateString.required(),
+    payment_method: ValidationPatterns.optionalString,
+    check_number: ValidationPatterns.optionalString,
+    adjustment_amount: ValidationPatterns.optionalMonetaryAmount,
+    adjustment_reason: ValidationPatterns.optionalString,
+    notes: ValidationPatterns.optionalString
+  }), 'body'),
+
+  // Required parameter validation
+  validateRequiredParam: (paramName) => createValidationMiddleware(
+    Joi.object({ [paramName]: Joi.string().required() }), 
+    'params'
+  ),
+
+  // ClaimMD configuration validation
+  validateClaimMDConfiguration: createValidationMiddleware(Joi.object({
+    api_key: ValidationPatterns.nonEmptyString.required(),
+    base_url: Joi.string().uri().optional(),
+    provider_id: ValidationPatterns.nonEmptyString.required(),
+    is_active: Joi.boolean().optional(),
+    configuration_data: Joi.object().optional()
+  }), 'body')
+};
+
+// Additional validation functions for compatibility
+const validateClaimData = (req, res, next) => {
+  const schema = ValidationSchemas.createClaim;
+  const { error } = schema.validate(req.body);
+  
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid claim data',
+        details: error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }))
+      }
+    });
+  }
+  
+  next();
 };
 
 module.exports = {
@@ -544,5 +593,6 @@ module.exports = {
   Sanitizers,
   sanitizationMiddleware,
   sqlInjectionPreventionMiddleware,
-  createValidationMiddleware
+  createValidationMiddleware,
+  validateClaimData
 };

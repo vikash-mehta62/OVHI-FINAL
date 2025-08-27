@@ -5,13 +5,13 @@
 
 const request = require('supertest');
 const express = require('express');
-const rcmRoutes = require('../rcmRoutes');
+const unifiedRCMRoutes = require('../../../routes/unifiedRCMRoutes');
 const dbUtils = require('../../../utils/dbUtils');
 
 // Create test app
 const app = express();
 app.use(express.json());
-app.use('/api/rcm', rcmRoutes);
+app.use('/api/rcm', unifiedRCMRoutes);
 
 // Mock database
 jest.mock('../../../utils/dbUtils');

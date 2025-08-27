@@ -24,8 +24,8 @@ const devicesRoutes = require("./devices/devicesRoutes");
 const { getConsentDetails, submitConsentForm,uploadConsentForms } = require("./patients/patientCtrl2");
 const thirdPartyApiRoutes = require("./third-party-apis/api-routes");
 const generalRoutes = require("./general-apis/generalRoutes");
-const rcmRoutes = require("./rcm/rcmRoutes");
-const rcmAdvancedWorkflowRoutes = require("../routes/rcmAdvancedWorkflowRoutes");
+const unifiedRCMRoutes = require("../routes/unifiedRCMRoutes");
+const secureRcmRoutes = require("./rcm/secureRcmRoutes");
 const paymentRoutes = require("./payments/paymentRoutes");
 const analyticsRoutes = require("./analytics/analyticsRoutes");
 const rpmRoutes = require("./rpm/rpmRoutes");
@@ -62,11 +62,11 @@ router.post('/ehr/upload-consent-form', uploadConsentForms);
 router.use("/client",thirdPartyApiRoutes);
 //for Testing
 router.use("/general",generalRoutes);
-// RCM Routes
-router.use("/rcm", verifyToken, rcmRoutes);
+// Unified RCM Routes
+router.use("/rcm", verifyToken, unifiedRCMRoutes);
 
-// RCM Advanced Workflow Routes
-router.use("/rcm-advanced", verifyToken, rcmAdvancedWorkflowRoutes);
+// Secure RCM Routes
+router.use("/rcm-secure", verifyToken, secureRcmRoutes);
 
 // Payment Routes
 router.use("/payments", verifyToken, paymentRoutes);
@@ -83,8 +83,8 @@ router.use("/encounters/smart-templates", verifyToken, require("./encounters/sma
 // MIPS Routes
 router.use("/mips", verifyToken, mipsRoutes);
 
-// RCM Critical Features Routes
-router.use("/rcm", verifyToken, require("../routes/rcmCriticalRoutes"));
+// RCM Critical Features Routes (integrated into unified routes)
+// router.use("/rcm", verifyToken, require("../routes/rcmCriticalRoutes"));
 
 
 

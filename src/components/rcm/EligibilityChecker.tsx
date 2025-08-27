@@ -1,534 +1,538 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, CheckCircle, XCircle, AlertTriangle, Search, FileText, DollarSign } from 'lucide-react';
+import { toast } from 'react-toastify';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Clock,
-  Shield,
-  DollarSign,
-  FileText,
-  RefreshCw,
-  Search,
-  Calendar
-} from 'lucide-react';
-import { apiConnector } from '@/services/apiConnector';
-import { formatCurrency } from '@/utils/rcmFormatters';
-
-interface EligibilityResult {
-  eligibilityId: number;
-  eligibilityStatus: string;
-  benefitInformation: any;
-  priorAuthRequired: boolean;
-  issues: any[];
-  riskLevel: string;
-  recommendations: any[];
-}
+  checkEligibilityAPI,
+  verifyEligibilityAPI,
+  getEligibilityHistoryAPI,
+  validateClaimAPI,
+  scrubClaimAPI,
+  getClaimEstimateAPI,
+  checkBenefitsAPI,
+  getCopayEstimateAPI,
+  formatEligibilityStatus,
+  formatCurrency,
+  formatDeductible,
+  calculateClaimConfidence
+} from '@/services/operations/eligibility';
 
 interface EligibilityCheckerProps {
-  patientId?: number;
-  onEligibilityChecked?: (result: EligibilityResult) => void;
+  patientId?: string;
+  onEligibilityCheck?: (result: any) => void;
+  onClaimValidation?: (result: any) => void;
 }
 
 const EligibilityChecker: React.FC<EligibilityCheckerProps> = ({
-  patientId: propPatientId,
-  onEligibilityChecked
+  patientId,
+  onEligibilityCheck,
+  onClaimValidation
 }) => {
-  const { token } = useSelector((state: any) => state.auth);
-  const [patientId, setPatientId] = useState(propPatientId || '');
-  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [serviceTypes, setServiceTypes] = useState<string[]>(['30']); // Default: General health benefit
+  const [activeTab, setActiveTab] = useState('eligibility');
   const [loading, setLoading] = useState(false);
-  const [eligibilityResult, setEligibilityResult] = useState<EligibilityResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [eligibilityHistory, setEligibilityHistory] = useState<any[]>([]);
+  const [eligibilityData, setEligibilityData] = useState<any>(null);
+  const [claimValidationData, setClaimValidationData] = useState<any>(null);
+  const [benefitsData, setBenefitsData] = useState<any>(null);
 
-  useEffect(() => {
-    if (propPatientId) {
-      loadEligibilityHistory(propPatientId);
-    }
-  }, [propPatientId]);
+  // Eligibility Form State
+  const [eligibilityForm, setEligibilityForm] = useState({
+    patientId: patientId || '',
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    memberId: '',
+    insuranceId: '',
+    serviceDate: new Date().toISOString().split('T')[0]
+  });
 
-  const checkEligibility = async () => {
-    if (!patientId || !serviceDate) {
-      setError('Patient ID and service date are required');
+  // Claim Validation Form State
+  const [claimForm, setClaimForm] = useState({
+    patientId: patientId || '',
+    serviceDate: new Date().toISOString().split('T')[0],
+    procedureCodes: '',
+    diagnosisCodes: '',
+    providerId: '',
+    placeOfService: '11',
+    units: '1',
+    charges: ''
+  });
+
+  const token = localStorage.getItem('token');
+
+  // Handle Eligibility Check
+  const handleEligibilityCheck = async () => {
+    if (!eligibilityForm.patientId || !eligibilityForm.memberId) {
+      toast.error('Please fill in required fields');
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      const response = await apiConnector(
-        'POST',
-        '/api/v1/rcm/eligibility/check',
-        {
-          patientId: parseInt(patientId.toString()),
-          serviceDate,
-          serviceTypes
-        },
-        {
-          Authorization: `Bearer ${token}`,
-        }
-      );
-
-      if (response.data.success) {
-        const result = response.data.data;
-        setEligibilityResult(result);
-        onEligibilityChecked?.(result);
-        
-        // Refresh history if checking for the same patient
-        if (propPatientId) {
-          loadEligibilityHistory(propPatientId);
-        }
-      } else {
-        setError(response.data.error || 'Eligibility check failed');
+      const result = await checkEligibilityAPI(token, eligibilityForm);
+      if (result) {
+        setEligibilityData(result.data);
+        onEligibilityCheck?.(result.data);
       }
-
-    } catch (error: any) {
-      console.error('Eligibility check error:', error);
-      setError(error.response?.data?.message || 'Failed to check eligibility');
+    } catch (error) {
+      console.error('Eligibility check failed:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadEligibilityHistory = async (patientIdToLoad: number) => {
-    try {
-      const response = await apiConnector(
-        'GET',
-        `/api/v1/rcm/eligibility/history/${patientIdToLoad}?limit=10`,
-        null,
-        {
-          Authorization: `Bearer ${token}`,
-        }
-      );
+  // Handle Real-time Verification
+  const handleRealTimeVerification = async () => {
+    if (!eligibilityForm.patientId) {
+      toast.error('Patient ID is required');
+      return;
+    }
 
-      if (response.data.success) {
-        setEligibilityHistory(response.data.data);
+    setLoading(true);
+    try {
+      const result = await verifyEligibilityAPI(token, {
+        patientId: eligibilityForm.patientId,
+        serviceDate: eligibilityForm.serviceDate
+      });
+      if (result) {
+        setEligibilityData(result.data);
       }
     } catch (error) {
-      console.error('Error loading eligibility history:', error);
+      console.error('Real-time verification failed:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'eligible':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'inactive':
-      case 'not_eligible':
-        return <XCircle className="h-5 w-5 text-red-600" />;
-      case 'pending':
-        return <Clock className="h-5 w-5 text-yellow-600" />;
-      default:
-        return <AlertTriangle className="h-5 w-5 text-gray-600" />;
+  // Handle Claim Validation
+  const handleClaimValidation = async () => {
+    if (!claimForm.patientId || !claimForm.procedureCodes) {
+      toast.error('Please fill in required fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await validateClaimAPI(token, {
+        ...claimForm,
+        procedureCodes: claimForm.procedureCodes.split(',').map(code => code.trim()),
+        diagnosisCodes: claimForm.diagnosisCodes.split(',').map(code => code.trim())
+      });
+      if (result) {
+        setClaimValidationData(result.data);
+        onClaimValidation?.(result.data);
+      }
+    } catch (error) {
+      console.error('Claim validation failed:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getRiskBadge = (riskLevel: string) => {
-    const variants = {
-      LOW: 'bg-green-100 text-green-800',
-      MEDIUM: 'bg-yellow-100 text-yellow-800',
-      HIGH: 'bg-red-100 text-red-800',
-      CRITICAL: 'bg-red-600 text-white'
-    };
+  // Handle Claim Scrubbing
+  const handleClaimScrub = async () => {
+    if (!claimForm.patientId || !claimForm.procedureCodes) {
+      toast.error('Please fill in required fields');
+      return;
+    }
 
+    setLoading(true);
+    try {
+      const result = await scrubClaimAPI(token, {
+        ...claimForm,
+        procedureCodes: claimForm.procedureCodes.split(',').map(code => code.trim()),
+        diagnosisCodes: claimForm.diagnosisCodes.split(',').map(code => code.trim())
+      });
+      if (result) {
+        setClaimValidationData(result.data);
+      }
+    } catch (error) {
+      console.error('Claim scrub failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Benefits Check
+  const handleBenefitsCheck = async () => {
+    if (!eligibilityForm.patientId) {
+      toast.error('Patient ID is required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await checkBenefitsAPI(token, {
+        patientId: eligibilityForm.patientId,
+        serviceDate: eligibilityForm.serviceDate,
+        procedureCodes: claimForm.procedureCodes.split(',').map(code => code.trim()).filter(Boolean)
+      });
+      if (result) {
+        setBenefitsData(result.data);
+      }
+    } catch (error) {
+      console.error('Benefits check failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Render Eligibility Status
+  const renderEligibilityStatus = (status: string) => {
+    const statusInfo = formatEligibilityStatus(status);
     return (
-      <Badge className={variants[riskLevel as keyof typeof variants] || variants.MEDIUM}>
-        {riskLevel} Risk
+      <Badge variant={statusInfo.color === 'green' ? 'default' : 'destructive'}>
+        {statusInfo.icon} {statusInfo.text}
       </Badge>
     );
   };
 
+  // Render Validation Results
+  const renderValidationResults = (validationData: any) => {
+    if (!validationData) return null;
 
+    const { errors = [], warnings = [], suggestions = [] } = validationData;
+    const confidence = calculateClaimConfidence(validationData);
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Validation Results</h3>
+          <Badge variant={confidence.color === 'green' ? 'default' : 'destructive'}>
+            Confidence: {confidence.score}%
+          </Badge>
+        </div>
+
+        {errors.length > 0 && (
+          <Alert variant="destructive">
+            <XCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Errors ({errors.length}):</strong>
+              <ul className="mt-2 list-disc list-inside">
+                {errors.map((error: any, index: number) => (
+                  <li key={index}>{error.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {warnings.length > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Warnings ({warnings.length}):</strong>
+              <ul className="mt-2 list-disc list-inside">
+                {warnings.map((warning: any, index: number) => (
+                  <li key={index}>{warning.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {suggestions.length > 0 && (
+          <Alert>
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Suggestions ({suggestions.length}):</strong>
+              <ul className="mt-2 list-disc list-inside">
+                {suggestions.map((suggestion: any, index: number) => (
+                  <li key={index}>{suggestion.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Eligibility Check Form */}
+    <div className="w-full max-w-6xl mx-auto p-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Real-Time Eligibility Verification
+            <Search className="h-5 w-5" />
+            Eligibility & Claim Validation
           </CardTitle>
-          <CardDescription>
-            Verify patient insurance eligibility and benefits before service
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="patientId">Patient ID</Label>
-              <Input
-                id="patientId"
-                type="number"
-                value={patientId}
-                onChange={(e) => setPatientId(e.target.value)}
-                placeholder="Enter patient ID"
-                disabled={!!propPatientId}
-              />
-            </div>
-            <div>
-              <Label htmlFor="serviceDate">Service Date</Label>
-              <Input
-                id="serviceDate"
-                type="date"
-                value={serviceDate}
-                onChange={(e) => setServiceDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="serviceType">Service Type</Label>
-              <Select
-                value={serviceTypes[0]}
-                onValueChange={(value) => setServiceTypes([value])}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select service type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">General Health Benefit</SelectItem>
-                  <SelectItem value="1">Medical Care</SelectItem>
-                  <SelectItem value="33">Chiropractic</SelectItem>
-                  <SelectItem value="35">Dental Care</SelectItem>
-                  <SelectItem value="47">Hospital</SelectItem>
-                  <SelectItem value="86">Emergency Services</SelectItem>
-                  <SelectItem value="88">Pharmacy</SelectItem>
-                  <SelectItem value="98">Professional Physician Visit</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="eligibility">Eligibility Check</TabsTrigger>
+              <TabsTrigger value="validation">Claim Validation</TabsTrigger>
+              <TabsTrigger value="benefits">Benefits & Coverage</TabsTrigger>
+            </TabsList>
 
-          {error && (
-            <Alert className="border-red-500">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-red-700">
-                {error}
-              </AlertDescription>
-            </Alert>
-          )}
+            {/* Eligibility Check Tab */}
+            <TabsContent value="eligibility" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Patient Eligibility Verification</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="patientId">Patient ID *</Label>
+                      <Input
+                        id="patientId"
+                        value={eligibilityForm.patientId}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, patientId: e.target.value }))}
+                        placeholder="Enter patient ID"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="memberId">Member ID *</Label>
+                      <Input
+                        id="memberId"
+                        value={eligibilityForm.memberId}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, memberId: e.target.value }))}
+                        placeholder="Enter insurance member ID"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={eligibilityForm.firstName}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="Enter first name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={eligibilityForm.lastName}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Enter last name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                      <Input
+                        id="dateOfBirth"
+                        type="date"
+                        value={eligibilityForm.dateOfBirth}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="serviceDate">Service Date</Label>
+                      <Input
+                        id="serviceDate"
+                        type="date"
+                        value={eligibilityForm.serviceDate}
+                        onChange={(e) => setEligibilityForm(prev => ({ ...prev, serviceDate: e.target.value }))}
+                      />
+                    </div>
+                  </div>
 
-          <Button 
-            onClick={checkEligibility} 
-            disabled={loading || !patientId || !serviceDate}
-            className="w-full md:w-auto"
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Checking Eligibility...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4 mr-2" />
-                Check Eligibility
-              </>
-            )}
-          </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handleEligibilityCheck} disabled={loading}>
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                      Check Eligibility
+                    </Button>
+                    <Button variant="outline" onClick={handleRealTimeVerification} disabled={loading}>
+                      Real-time Verify
+                    </Button>
+                    <Button variant="outline" onClick={handleBenefitsCheck} disabled={loading}>
+                      Check Benefits
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Eligibility Results */}
+              {eligibilityData && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Eligibility Results</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div>
+                        <Label>Status</Label>
+                        <div className="mt-1">
+                          {renderEligibilityStatus(eligibilityData.status)}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Coverage</Label>
+                        <p className="text-lg font-semibold">{eligibilityData.coveragePercentage || 'N/A'}%</p>
+                      </div>
+                      <div>
+                        <Label>Effective Date</Label>
+                        <p>{eligibilityData.effectiveDate || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <Label>Deductible</Label>
+                        <p>{formatCurrency(eligibilityData.deductible)}</p>
+                      </div>
+                      <div>
+                        <Label>Copay</Label>
+                        <p>{formatCurrency(eligibilityData.copay)}</p>
+                      </div>
+                      <div>
+                        <Label>Out of Pocket Max</Label>
+                        <p>{formatCurrency(eligibilityData.outOfPocketMax)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* Claim Validation Tab */}
+            <TabsContent value="validation" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Claim Validation & Scrubbing</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="claimPatientId">Patient ID *</Label>
+                      <Input
+                        id="claimPatientId"
+                        value={claimForm.patientId}
+                        onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value }))}
+                        placeholder="Enter patient ID"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="claimServiceDate">Service Date</Label>
+                      <Input
+                        id="claimServiceDate"
+                        type="date"
+                        value={claimForm.serviceDate}
+                        onChange={(e) => setClaimForm(prev => ({ ...prev, serviceDate: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="procedureCodes">Procedure Codes (CPT) *</Label>
+                      <Input
+                        id="procedureCodes"
+                        value={claimForm.procedureCodes}
+                        onChange={(e) => setClaimForm(prev => ({ ...prev, procedureCodes: e.target.value }))}
+                        placeholder="99213, 99214 (comma separated)"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="diagnosisCodes">Diagnosis Codes (ICD-10)</Label>
+                      <Input
+                        id="diagnosisCodes"
+                        value={claimForm.diagnosisCodes}
+                        onChange={(e) => setClaimForm(prev => ({ ...prev, diagnosisCodes: e.target.value }))}
+                        placeholder="Z00.00, M79.3 (comma separated)"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="placeOfService">Place of Service</Label>
+                      <Select value={claimForm.placeOfService} onValueChange={(value) => setClaimForm(prev => ({ ...prev, placeOfService: value }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="11">Office</SelectItem>
+                          <SelectItem value="21">Inpatient Hospital</SelectItem>
+                          <SelectItem value="22">Outpatient Hospital</SelectItem>
+                          <SelectItem value="23">Emergency Room</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="charges">Total Charges</Label>
+                      <Input
+                        id="charges"
+                        type="number"
+                        step="0.01"
+                        value={claimForm.charges}
+                        onChange={(e) => setClaimForm(prev => ({ ...prev, charges: e.target.value }))}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleClaimValidation} disabled={loading}>
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                      Validate Claim
+                    </Button>
+                    <Button variant="outline" onClick={handleClaimScrub} disabled={loading}>
+                      Scrub Claim
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Validation Results */}
+              {claimValidationData && renderValidationResults(claimValidationData)}
+            </TabsContent>
+
+            {/* Benefits & Coverage Tab */}
+            <TabsContent value="benefits" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Benefits & Coverage Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {benefitsData ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div>
+                          <Label>Plan Type</Label>
+                          <p className="font-semibold">{benefitsData.planType || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label>Network Status</Label>
+                          <Badge variant={benefitsData.inNetwork ? 'default' : 'destructive'}>
+                            {benefitsData.inNetwork ? 'In-Network' : 'Out-of-Network'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label>Prior Auth Required</Label>
+                          <Badge variant={benefitsData.priorAuthRequired ? 'destructive' : 'default'}>
+                            {benefitsData.priorAuthRequired ? 'Required' : 'Not Required'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {benefitsData.benefits && (
+                        <div>
+                          <h4 className="font-semibold mb-2">Coverage Details</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {benefitsData.benefits.map((benefit: any, index: number) => (
+                              <div key={index} className="border rounded p-3">
+                                <h5 className="font-medium">{benefit.serviceType}</h5>
+                                <p>Coverage: {benefit.coveragePercentage}%</p>
+                                <p>Copay: {formatCurrency(benefit.copay)}</p>
+                                <p>Deductible: {formatCurrency(benefit.deductible)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <DollarSign className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-500">Run an eligibility check to see benefits information</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
-
-      {/* Eligibility Results */}
-      {eligibilityResult && (
-        <Tabs defaultValue="summary" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="benefits">Benefits</TabsTrigger>
-            <TabsTrigger value="issues">Issues & Recommendations</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="summary">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    {getStatusIcon(eligibilityResult.eligibilityStatus)}
-                    Eligibility Status
-                  </span>
-                  {getRiskBadge(eligibilityResult.riskLevel)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h4 className="font-semibold mb-2">Coverage Status</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span>Eligibility:</span>
-                        <Badge variant={eligibilityResult.eligibilityStatus === 'active' ? 'default' : 'destructive'}>
-                          {eligibilityResult.eligibilityStatus}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Prior Auth Required:</span>
-                        <Badge variant={eligibilityResult.priorAuthRequired ? 'destructive' : 'secondary'}>
-                          {eligibilityResult.priorAuthRequired ? 'Yes' : 'No'}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Denial Risk:</span>
-                        {getRiskBadge(eligibilityResult.riskLevel)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold mb-2">Quick Actions</h4>
-                    <div className="space-y-2">
-                      {eligibilityResult.priorAuthRequired && (
-                        <Alert>
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            Prior authorization required before service
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                      {eligibilityResult.riskLevel === 'HIGH' && (
-                        <Alert className="border-red-500">
-                          <XCircle className="h-4 w-4" />
-                          <AlertDescription className="text-red-700">
-                            High denial risk - verify insurance before service
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="benefits">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Benefit Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {eligibilityResult.benefitInformation ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Deductible Information */}
-                    {eligibilityResult.benefitInformation.deductible && (
-                      <div>
-                        <h4 className="font-semibold mb-3">Deductible</h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span>Individual:</span>
-                            <span>{formatCurrency(eligibilityResult.benefitInformation.deductible.individual || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Family:</span>
-                            <span>{formatCurrency(eligibilityResult.benefitInformation.deductible.family || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Remaining:</span>
-                            <span className="font-semibold">
-                              {formatCurrency(eligibilityResult.benefitInformation.deductible.remaining || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Copay Information */}
-                    {eligibilityResult.benefitInformation.copay && (
-                      <div>
-                        <h4 className="font-semibold mb-3">Copayments</h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span>Primary Care:</span>
-                            <span>{formatCurrency(eligibilityResult.benefitInformation.copay.primaryCare || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Specialist:</span>
-                            <span>{formatCurrency(eligibilityResult.benefitInformation.copay.specialist || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Emergency:</span>
-                            <span>{formatCurrency(eligibilityResult.benefitInformation.copay.emergency || 0)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Out-of-Pocket Information */}
-                    <div>
-                      <h4 className="font-semibold mb-3">Out-of-Pocket</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Maximum:</span>
-                          <span>{formatCurrency(eligibilityResult.benefitInformation.outOfPocketMax || 0)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Remaining:</span>
-                          <span className="font-semibold">
-                            {formatCurrency(eligibilityResult.benefitInformation.outOfPocketRemaining || 0)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Coinsurance */}
-                    <div>
-                      <h4 className="font-semibold mb-3">Coinsurance</h4>
-                      <div className="text-2xl font-bold">
-                        {eligibilityResult.benefitInformation.coinsurance || 0}%
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Patient responsibility after deductible
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-muted-foreground">No benefit information available</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="issues">
-            <div className="space-y-4">
-              {/* Issues */}
-              {eligibilityResult.issues && eligibilityResult.issues.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                      Identified Issues
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {eligibilityResult.issues.map((issue, index) => (
-                        <Alert key={index} className={
-                          issue.severity === 'HIGH' ? 'border-red-500' :
-                          issue.severity === 'MEDIUM' ? 'border-yellow-500' :
-                          'border-blue-500'
-                        }>
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            <div className="font-medium">{issue.message}</div>
-                            <div className="text-sm mt-1">{issue.recommendation}</div>
-                          </AlertDescription>
-                        </Alert>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Recommendations */}
-              {eligibilityResult.recommendations && eligibilityResult.recommendations.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                      Recommendations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {eligibilityResult.recommendations.map((rec, index) => (
-                        <div key={index} className="border rounded-lg p-3">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="font-medium">{rec.message}</div>
-                              <div className="text-sm text-muted-foreground mt-1">{rec.action}</div>
-                            </div>
-                            <Badge variant={
-                              rec.type === 'URGENT' ? 'destructive' :
-                              rec.type === 'REQUIRED' ? 'default' :
-                              'secondary'
-                            }>
-                              {rec.type}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {(!eligibilityResult.issues || eligibilityResult.issues.length === 0) &&
-               (!eligibilityResult.recommendations || eligibilityResult.recommendations.length === 0) && (
-                <Card>
-                  <CardContent className="text-center py-8">
-                    <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Issues Found</h3>
-                    <p className="text-muted-foreground">
-                      Eligibility verification completed successfully with no issues or recommendations.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="history">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Eligibility History
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {eligibilityHistory.length > 0 ? (
-                  <div className="space-y-3">
-                    {eligibilityHistory.map((entry, index) => (
-                      <div key={index} className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {getStatusIcon(entry.eligibility_status)}
-                            <div>
-                              <div className="font-medium">
-                                {new Date(entry.request_date).toLocaleDateString()}
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                Status: {entry.eligibility_status}
-                              </div>
-                            </div>
-                          </div>
-                          {getRiskBadge(entry.denial_risk_level)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-muted-foreground">No eligibility history available</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      )}
     </div>
   );
 };
