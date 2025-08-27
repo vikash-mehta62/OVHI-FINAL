@@ -136,23 +136,23 @@ class UnifiedRCMService {
 
       // Calculate KPIs
       const collectionRate = calculateCollectionRate(
-        dashboardData.total_collected || 0,
-        dashboardData.total_billed || 0
+        dashboardData?.total_collected || 0,
+        dashboardData?.total_billed || 0
       );
 
       const denialRate = calculateDenialRate(
-        dashboardData.denied_claims || 0,
-        dashboardData.total_claims || 0
+        dashboardData?.denied_claims || 0,
+        dashboardData?.total_claims || 0
       );
 
-      const totalAR = (dashboardData.aging_0_30 || 0) + (dashboardData.aging_31_60 || 0) + 
-                     (dashboardData.aging_61_90 || 0) + (dashboardData.aging_90_plus || 0);
+      const totalAR = (dashboardData?.aging_0_30 || 0) + (dashboardData?.aging_31_60 || 0) + 
+                     (dashboardData?.aging_61_90 || 0) + (dashboardData?.aging_90_plus || 0);
 
       const result = {
         summary: {
-          totalClaims: dashboardData.total_claims || 0,
-          totalBilled: formatCurrency(dashboardData.total_billed || 0),
-          totalCollected: formatCurrency(dashboardData.total_collected || 0),
+          totalClaims: dashboardData?.total_claims || 0,
+          totalBilled: formatCurrency(dashboardData?.total_billed || 0),
+          totalCollected: formatCurrency(dashboardData?.total_collected || 0),
           totalAR: formatCurrency(totalAR),
           collectionRate: collectionRate,
           denialRate: denialRate,
@@ -165,21 +165,21 @@ class UnifiedRCMService {
           firstPassRate: this.calculateFirstPassRate(dashboardData)
         },
         claimsBreakdown: {
-          draft: dashboardData.draft_claims || 0,
-          submitted: dashboardData.submitted_claims || 0,
-          paid: dashboardData.paid_claims || 0,
-          denied: dashboardData.denied_claims || 0
+          draft: dashboardData?.draft_claims || 0,
+          submitted: dashboardData?.submitted_claims || 0,
+          paid: dashboardData?.paid_claims || 0,
+          denied: dashboardData?.denied_claims || 0
         },
         arAging: {
-          aging_0_30: formatCurrency(dashboardData.aging_0_30 || 0),
-          aging_31_60: formatCurrency(dashboardData.aging_31_60 || 0),
-          aging_61_90: formatCurrency(dashboardData.aging_61_90 || 0),
-          aging_90_plus: formatCurrency(dashboardData.aging_90_plus || 0)
+          aging_0_30: formatCurrency(dashboardData?.aging_0_30 || 0),
+          aging_31_60: formatCurrency(dashboardData?.aging_31_60 || 0),
+          aging_61_90: formatCurrency(dashboardData?.aging_61_90 || 0),
+          aging_90_plus: formatCurrency(dashboardData?.aging_90_plus || 0)
         },
         denialAnalytics: {
-          totalDenials: dashboardData.denied_claims || 0,
-          deniedAmount: formatCurrency(dashboardData.denied_amount || 0),
-          avgDenialAmount: formatCurrency(dashboardData.avg_denial_amount || 0)
+          totalDenials: dashboardData?.denied_claims || 0,
+          deniedAmount: formatCurrency(dashboardData?.denied_amount || 0),
+          avgDenialAmount: formatCurrency(dashboardData?.avg_denial_amount || 0)
         },
         trends: {
           monthlyRevenue: this.processRevenueData(recentActivity),
@@ -233,7 +233,7 @@ class UnifiedRCMService {
       const claimNumber = `CLM${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
       const result = await executeQuery(`
-        INSERT INTO billings (
+          const chartData = useMemo(() => { (
           claim_number, patient_id, provider_id, procedure_code, 
           diagnosis_code, total_amount, service_date, notes, 
           status, created_at, updated_at
