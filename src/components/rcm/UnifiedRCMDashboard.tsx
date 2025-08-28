@@ -160,10 +160,10 @@ const UnifiedRCMDashboard: React.FC = () => {
       
       const response = await getRCMDashboardDataAPI(token, timeframe);
       
-      if (response.success) {
+      if (response?.success) {
         setDashboardData(response.data);
       } else {
-        setError(response.error || 'Failed to load dashboard data');
+        setError(response?.error || 'Failed to load dashboard data');
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -393,10 +393,10 @@ const UnifiedRCMDashboard: React.FC = () => {
     );// Provide a default empty array if claimsBreakdown is null/undefined
 
     const agingData = [
-      { name: '0-30 Days', value: parseFloat(dashboardData.arAging.aging_0_30.replace(/[$,]/g, '')) },
-      { name: '31-60 Days', value: parseFloat(dashboardData.arAging.aging_31_60.replace(/[$,]/g, '')) },
-      { name: '61-90 Days', value: parseFloat(dashboardData.arAging.aging_61_90.replace(/[$,]/g, '')) },
-      { name: '90+ Days', value: parseFloat(dashboardData.arAging.aging_90_plus.replace(/[$,]/g, '')) }
+      { name: '0-30 Days', value: parseFloat(dashboardData?.arAging?.aging_0_30.replace(/[$,]/g, '')) },
+      { name: '31-60 Days', value: parseFloat(dashboardData?.arAging?.aging_31_60.replace(/[$,]/g, '')) },
+      { name: '61-90 Days', value: parseFloat(dashboardData?.arAging?.aging_61_90.replace(/[$,]/g, '')) },
+      { name: '90+ Days', value: parseFloat(dashboardData?.arAging?.aging_90_plus.replace(/[$,]/g, '')) }
     ];
 
     return { revenueData, claimsData, agingData };
@@ -552,19 +552,19 @@ const UnifiedRCMDashboard: React.FC = () => {
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Total Billed</span>
-                  <span className="font-medium">{dashboardData.summary.totalBilled}</span>
+                  <span className="font-medium">{dashboardData?.summary?.totalBilled}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Total Collected</span>
-                  <span className="font-medium">{dashboardData.summary.totalCollected}</span>
+                  <span className="font-medium">{dashboardData?.summary?.totalCollected}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Total A/R</span>
-                  <span className="font-medium">{dashboardData.summary.totalAR}</span>
+                  <span className="font-medium">{dashboardData?.summary?.totalAR}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Avg Claim Amount</span>
-                  <span className="font-medium">{dashboardData.summary.avgClaimAmount}</span>
+                  <span className="font-medium">{dashboardData?.summary?.avgClaimAmount}</span>
                 </div>
               </CardContent>
             </Card>
@@ -577,22 +577,33 @@ const UnifiedRCMDashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {Object.entries(dashboardData.claimsBreakdown).map(([status, count]) => (
-                    <div key={status} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${
-                          status === 'paid' ? 'bg-green-500' :
-                          status === 'denied' ? 'bg-red-500' :
-                          status === 'submitted' ? 'bg-blue-500' : 'bg-gray-400'
-                        }`}></div>
-                        <span className="capitalize text-sm">{status}</span>
-                      </div>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
+  <div className="space-y-3">
+    {dashboardData?.claimsBreakdown && Object.keys(dashboardData.claimsBreakdown).length > 0 ? (
+      Object.entries(dashboardData.claimsBreakdown).map(([status, count]) => (
+        <div key={status} className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div
+              className={`w-3 h-3 rounded-full ${
+                status === "paid"
+                  ? "bg-green-500"
+                  : status === "denied"
+                  ? "bg-red-500"
+                  : status === "submitted"
+                  ? "bg-blue-500"
+                  : "bg-gray-400"
+              }`}
+            ></div>
+            <span className="capitalize text-sm">{status}</span>
+          </div>
+          <Badge variant="outline">{count}</Badge>
+        </div>
+      ))
+    ) : (
+      <p>No data available</p>
+    )}
+  </div>
+</CardContent>
+
             </Card>
 
             <Card>
@@ -605,15 +616,15 @@ const UnifiedRCMDashboard: React.FC = () => {
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Total Denials</span>
-                  <span className="font-medium">{dashboardData.denialAnalytics.totalDenials}</span>
+                  <span className="font-medium">{dashboardData?.denialAnalytics?.totalDenials}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Denied Amount</span>
-                  <span className="font-medium">{dashboardData.denialAnalytics.deniedAmount}</span>
+                  <span className="font-medium">{dashboardData?.denialAnalytics?.deniedAmount}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Avg Denial</span>
-                  <span className="font-medium">{dashboardData.denialAnalytics.avgDenialAmount}</span>
+                  <span className="font-medium">{dashboardData?.denialAnalytics?.avgDenialAmount}</span>
                 </div>
               </CardContent>
             </Card>

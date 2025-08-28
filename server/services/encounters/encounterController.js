@@ -403,7 +403,7 @@ const createClaimFromEncounter = async (req, res) => {
 
   try {
     // Start transaction
-    await connection.beginTransaction();
+    // await connection.beginTransaction();
 
     // Create encounter record
     const [encounterResult] = await connection.query(
@@ -508,7 +508,7 @@ const createClaimFromEncounter = async (req, res) => {
     });
 
   } catch (error) {
-    await connection.rollback();
+    // await connection.rollback();
     console.error('Error creating claim from encounter:', error);
     res.status(500).json({
       success: false,
