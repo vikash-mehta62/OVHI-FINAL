@@ -61,6 +61,9 @@ import EncounterToClaim from './EncounterToClaim';
 import PaymentPostingEngine from './PaymentPostingEngine';
 import DenialManagement from './DenialManagement';
 import RevenueForecasting from './RevenueForecasting';
+import ClaimsManagement from './ClaimsManagement';
+import ARAgingManagement from './ARAgingManagement';
+import PatientStatements from './PatientStatements';
 import {
   checkEligibilityAPI,
   validateClaimAPI,
@@ -154,9 +157,9 @@ const UnifiedRCMDashboard: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await getRCMDashboardDataAPI(token, timeframe);
-      
+
       if (response?.success) {
         setDashboardData(response.data);
       } else {
@@ -235,10 +238,10 @@ const UnifiedRCMDashboard: React.FC = () => {
         { patientId: 'PAT002', memberId: 'MEM002' },
         { patientId: 'PAT003', memberId: 'MEM003' },
       ];
-      
+
       // Simulate batch processing
       console.log('Processing batch eligibility check for', mockPatients.length, 'patients');
-      
+
       // Update stats after batch processing
       await fetchEligibilityStats();
     } catch (error) {
@@ -258,10 +261,10 @@ const UnifiedRCMDashboard: React.FC = () => {
         { patientId: 'PAT002', procedureCodes: ['99214'], diagnosisCodes: ['M79.3'] },
         { patientId: 'PAT003', procedureCodes: ['99215'], diagnosisCodes: ['I10'] },
       ];
-      
+
       // Simulate batch processing
       console.log('Processing batch claim validation for', mockClaims.length, 'claims');
-      
+
       // Update stats after batch processing
       await fetchClaimValidationStats();
     } catch (error) {
@@ -506,9 +509,8 @@ const UnifiedRCMDashboard: React.FC = () => {
               </div>
               <p className="text-2xl font-bold">{kpi.value}</p>
               <p className="text-sm text-muted-foreground">{kpi.title}</p>
-              <div className={`flex items-center gap-1 text-sm ${
-                kpi.trend === 'up' ? 'text-green-600' : 'text-red-600'
-              }`}>
+              <div className={`flex items-center gap-1 text-sm ${kpi.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                }`}>
                 {kpi.trend === 'up' ? (
                   <TrendingUp className="h-3 w-3" />
                 ) : (
@@ -528,12 +530,12 @@ const UnifiedRCMDashboard: React.FC = () => {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="encounter">Encounter to Claim</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility</TabsTrigger>
-          <TabsTrigger value="claims">Claims Validation</TabsTrigger>
+          <TabsTrigger value="claims">Claims Management</TabsTrigger>
           <TabsTrigger value="payments">Payment Posting</TabsTrigger>
           <TabsTrigger value="aging">A/R Aging</TabsTrigger>
           <TabsTrigger value="denials">Denials</TabsTrigger>
+          <TabsTrigger value="statements">Patient Statements</TabsTrigger>
           <TabsTrigger value="forecasting">Revenue Forecasting</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -574,32 +576,31 @@ const UnifiedRCMDashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-  <div className="space-y-3">
-    {dashboardData?.claimsBreakdown && Object.keys(dashboardData.claimsBreakdown).length > 0 ? (
-      Object.entries(dashboardData.claimsBreakdown).map(([status, count]) => (
-        <div key={status} className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div
-              className={`w-3 h-3 rounded-full ${
-                status === "paid"
-                  ? "bg-green-500"
-                  : status === "denied"
-                  ? "bg-red-500"
-                  : status === "submitted"
-                  ? "bg-blue-500"
-                  : "bg-gray-400"
-              }`}
-            ></div>
-            <span className="capitalize text-sm">{status}</span>
-          </div>
-          <Badge variant="outline">{count}</Badge>
-        </div>
-      ))
-    ) : (
-      <p>No data available</p>
-    )}
-  </div>
-</CardContent>
+                <div className="space-y-3">
+                  {dashboardData?.claimsBreakdown && Object.keys(dashboardData.claimsBreakdown).length > 0 ? (
+                    Object.entries(dashboardData.claimsBreakdown).map(([status, count]) => (
+                      <div key={status} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div
+                            className={`w-3 h-3 rounded-full ${status === "paid"
+                                ? "bg-green-500"
+                                : status === "denied"
+                                  ? "bg-red-500"
+                                  : status === "submitted"
+                                    ? "bg-blue-500"
+                                    : "bg-gray-400"
+                              }`}
+                          ></div>
+                          <span className="capitalize text-sm">{status}</span>
+                        </div>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <p>No data available</p>
+                  )}
+                </div>
+              </CardContent>
 
             </Card>
 
@@ -694,32 +695,32 @@ const UnifiedRCMDashboard: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-20 flex flex-col gap-2"
                   onClick={() => setActiveTab('eligibility')}
                 >
                   <CheckCircle className="h-6 w-6 text-green-500" />
                   <span className="text-sm">Check Eligibility</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-20 flex flex-col gap-2"
                   onClick={() => setActiveTab('claims')}
                 >
                   <FileText className="h-6 w-6 text-blue-500" />
                   <span className="text-sm">Validate Claims</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-20 flex flex-col gap-2"
                   onClick={() => setActiveTab('aging')}
                 >
                   <Clock className="h-6 w-6 text-orange-500" />
                   <span className="text-sm">A/R Aging</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-20 flex flex-col gap-2"
                   onClick={() => setActiveTab('denials')}
                 >
@@ -763,14 +764,14 @@ const UnifiedRCMDashboard: React.FC = () => {
                       15% increase in collections this month
                     </p>
                   </div>
-                  
+
                   <div className="p-3 bg-green-50 rounded-lg">
                     <h4 className="font-medium text-green-900">Compliance Improvement</h4>
                     <p className="text-green-700 text-sm mt-1">
                       CMS compliance rate improved to 96.5%
                     </p>
                   </div>
-                  
+
                   <div className="p-3 bg-yellow-50 rounded-lg">
                     <h4 className="font-medium text-yellow-900">Denial Reduction</h4>
                     <p className="text-yellow-700 text-sm mt-1">
@@ -801,7 +802,7 @@ const UnifiedRCMDashboard: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <QuickEligibilityCheck 
+                <QuickEligibilityCheck
                   compact={true}
                   onResult={(result) => {
                     // Handle eligibility result
@@ -872,7 +873,7 @@ const UnifiedRCMDashboard: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <EligibilityChecker 
+              <EligibilityChecker
                 onEligibilityCheck={(result) => {
                   // Handle comprehensive eligibility result
                   console.log('Comprehensive eligibility:', result);
@@ -887,140 +888,50 @@ const UnifiedRCMDashboard: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="claims" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Claim Validation Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  Claim Validation Summary
-                </CardTitle>
-                <CardDescription>Today's claim validation statistics</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 border rounded">
-                      <div className="text-2xl font-bold text-green-600">{claimValidationStats.validClaims}</div>
-                      <div className="text-sm text-gray-500">Valid Claims</div>
-                    </div>
-                    <div className="text-center p-4 border rounded">
-                      <div className="text-2xl font-bold text-red-600">{claimValidationStats.invalidClaims}</div>
-                      <div className="text-sm text-gray-500">Invalid Claims</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm">Validation Rate</span>
-                      <span className="text-sm font-semibold">{claimValidationStats.validationRate}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${claimValidationStats.validationRate}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Common Validation Errors */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Common Validation Issues</CardTitle>
-                <CardDescription>Most frequent claim validation errors</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {claimValidationStats.commonErrors.map((error, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{error.error}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge 
-                            variant={
-                              error.severity === 'high' ? 'destructive' : 
-                              error.severity === 'medium' ? 'default' : 'outline'
-                            }
-                            className="text-xs"
-                          >
-                            {error.severity}
-                          </Badge>
-                          <span className="text-xs text-gray-500">{error.count} occurrences</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Claim Validation Trends */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation Trends</CardTitle>
-              <CardDescription>Claim validation success rate over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={[
-                    { date: '2024-01-01', validClaims: 145, invalidClaims: 25, successRate: 85.3 },
-                    { date: '2024-01-02', validClaims: 162, invalidClaims: 18, successRate: 90.0 },
-                    { date: '2024-01-03', validClaims: 138, invalidClaims: 32, successRate: 81.2 },
-                    { date: '2024-01-04', validClaims: 156, invalidClaims: 24, successRate: 86.7 },
-                    { date: '2024-01-05', validClaims: 171, invalidClaims: 19, successRate: 90.0 },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="successRate" 
-                      stroke="#10b981" 
-                      strokeWidth={2}
-                      name="Success Rate (%)"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Batch Operations */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Batch Operations</CardTitle>
-              <CardDescription>Validate multiple claims at once</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <Button 
-                    onClick={handleBatchEligibilityCheck}
-                    disabled={loading}
-                    className="flex-1"
-                  >
-                    {loading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Users className="h-4 w-4 mr-2" />}
-                    Batch Eligibility Check
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={handleBatchClaimValidation}
-                    disabled={loading}
-                    className="flex-1"
-                  >
-                    {loading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                    Batch Claim Validation
-                  </Button>
-                </div>
-                <div className="text-sm text-gray-500 text-center">
-                  Upload CSV files or select multiple records for batch processing
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <ClaimsManagement />
         </TabsContent>
+
+        <TabsContent value="aging" className="space-y-6">
+          <ARAgingManagement />
+        </TabsContent>
+
+        <TabsContent value="statements" className="space-y-6">
+          <PatientStatements />
+        </TabsContent>
+
+        <TabsContent value="payments" className="space-y-6">
+          <PaymentPostingEngine />
+        </TabsContent>
+
+        <TabsContent value="denials" className="space-y-6">
+          <DenialManagement />
+        </TabsContent>
+
+        <TabsContent value="forecasting" className="space-y-6">
+          <RevenueForecasting />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+export default UnifiedRCMDashboard;
+variant = "outline"
+onClick = { handleBatchClaimValidation }
+disabled = { loading }
+className = "flex-1"
+  >
+  { loading?<RefreshCw className = "h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                    Batch Claim Validation
+                  </Button >
+                </div >
+  <div className="text-sm text-gray-500 text-center">
+    Upload CSV files or select multiple records for batch processing
+  </div>
+              </div >
+            </CardContent >
+          </Card >
+        </TabsContent >
 
         <TabsContent value="aging">
           <Card>
@@ -1078,14 +989,14 @@ const UnifiedRCMDashboard: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+      </Tabs >
 
-      {/* Footer */}
-      <div className="text-center text-sm text-gray-500">
-        Last updated: {new Date(dashboardData.generatedAt).toLocaleString()}
-        {dashboardData.cached && ' (from cache)'}
-      </div>
-    </div>
+  {/* Footer */ }
+  < div className = "text-center text-sm text-gray-500" >
+    Last updated: { new Date(dashboardData.generatedAt).toLocaleString() }
+{ dashboardData.cached && ' (from cache)' }
+      </div >
+    </div >
   );
 };
 
