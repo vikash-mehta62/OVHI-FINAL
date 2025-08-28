@@ -61,6 +61,9 @@ import EncounterToClaim from './EncounterToClaim';
 import PaymentPostingEngine from './PaymentPostingEngine';
 import DenialManagement from './DenialManagement';
 import RevenueForecasting from './RevenueForecasting';
+import ClaimsManagement from './ClaimsManagement';
+import ARAgingManagement from './ARAgingManagement';
+import PatientStatements from './PatientStatements';
 import {
   checkEligibilityAPI,
   validateClaimAPI,
@@ -528,12 +531,12 @@ const UnifiedRCMDashboard: React.FC = () => {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="encounter">Encounter to Claim</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility</TabsTrigger>
-          <TabsTrigger value="claims">Claims Validation</TabsTrigger>
+          <TabsTrigger value="claims">Claims Management</TabsTrigger>
           <TabsTrigger value="payments">Payment Posting</TabsTrigger>
           <TabsTrigger value="aging">A/R Aging</TabsTrigger>
           <TabsTrigger value="denials">Denials</TabsTrigger>
+          <TabsTrigger value="statements">Patient Statements</TabsTrigger>
           <TabsTrigger value="forecasting">Revenue Forecasting</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -876,75 +879,16 @@ const UnifiedRCMDashboard: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="claims" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Claim Validation Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  Claim Validation Summary
-                </CardTitle>
-                <CardDescription>Today's claim validation statistics</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 border rounded">
-                      <div className="text-2xl font-bold text-green-600">{claimValidationStats.validClaims}</div>
-                      <div className="text-sm text-gray-500">Valid Claims</div>
-                    </div>
-                    <div className="text-center p-4 border rounded">
-                      <div className="text-2xl font-bold text-red-600">{claimValidationStats.invalidClaims}</div>
-                      <div className="text-sm text-gray-500">Invalid Claims</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm">Validation Rate</span>
-                      <span className="text-sm font-semibold">{claimValidationStats.validationRate}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${claimValidationStats.validationRate}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <ClaimsManagement />
+        </TabsContent>
 
-            {/* Common Validation Errors */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Common Validation Issues</CardTitle>
-                <CardDescription>Most frequent claim validation errors</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {claimValidationStats.commonErrors.map((error, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{error.error}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge 
-                            variant={
-                              error.severity === 'high' ? 'destructive' : 
-                              error.severity === 'medium' ? 'default' : 'outline'
-                            }
-                            className="text-xs"
-                          >
-                            {error.severity}
-                          </Badge>
-                          <span className="text-xs text-gray-500">{error.count} occurrences</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="aging" className="space-y-6">
+          <ARAgingManagement />
+        </TabsContent>
 
-          {/* Claim Validation Trends */}
-          <Card>
+        <TabsContent value="statements" className="space-y-6">
+          <PatientStatements />
+        </TabsContent>
             <CardHeader>
               <CardTitle>Validation Trends</CardTitle>
               <CardDescription>Claim validation success rate over time</CardDescription>
