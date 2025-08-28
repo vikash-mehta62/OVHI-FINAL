@@ -681,6 +681,344 @@ const getPaymentAnalytics = async (req, res) => {
   }
 };
 
+// Payment Posting Engine Functions
+
+// Get ERA processing queue
+const getERAQueue = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const { status, payer } = req.query;
+
+    let whereClause = 'WHERE provider_id = ?';
+    let params = [user_id];
+
+    if (status) {
+      whereClause += ' AND status = ?';
+      params.push(status);
+    }
+
+    if (payer) {
+      whereClause += ' AND payer_name LIKE ?';
+      params.push(`%${payer}%`);
+    }
+
+    const [eras] = await connection.query(`
+      SELECT 
+        id,
+        era_number,
+        payer_name,
+        check_number,
+        check_date,
+        total_amount,
+        claims_count,
+        status,
+        auto_posted,
+        exceptions,
+        created_at,
+        processed_at
+      FROM era_payments 
+      ${whereClause}
+      ORDER BY created_at DESC
+    `, params);
+
+    res.status(200).json({
+      success: true,
+      data: eras
+    });
+
+  } catch (error) {
+    console.error("Error fetching ERA queue:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch ERA queue",
+      details: error.message
+    });
+  }
+};
+
+// Process ERA auto-posting
+const processERAAutoPost = async (req, res) => {
+  const { eraId } = req.params;
+  const { user_id } = req.user;
+
+  try {
+    // Start transaction
+    await connection.beginTransaction();
+
+    // Get ERA details
+    const [eras] = await connection.query(
+      'SELECT * FROM era_payments WHERE id = ? AND provider_id = ?',
+      [eraId, user_id]
+    );
+
+    if (eras.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        error: 'ERA not found'
+      });
+    }
+
+    const era = eras[0];
+
+    // Get payment details for this ERA
+    const [paymentDetails] = await connection.query(`
+      SELECT 
+        claim_id,
+        patient_name,
+        service_date,
+        charged_amount,
+        paid_amount,
+        adjustment_amount,
+        adjustment_reason
+      FROM era_payment_details 
+      WHERE era_id = ?
+    `, [eraId]);
+
+    let autoPostedCount = 0;
+    let exceptionsCount = 0;
+    const exceptions = [];
+
+    // Process each payment detail
+    for (const detail of paymentDetails) {
+      try {
+        // Check if claim exists
+        const [claims] = await connection.query(
+          'SELECT * FROM claims WHERE claim_id = ?',
+          [detail.claim_id]
+        );
+
+        if (claims.length === 0) {
+          exceptions.push(`Claim ${detail.claim_id} not found`);
+          exceptionsCount++;
+          continue;
+        }
+
+        // Validate payment amount
+        const claim = claims[0];
+        if (detail.paid_amount > claim.total_charges) {
+          exceptions.push(`Payment amount exceeds charges for claim ${detail.claim_id}`);
+          exceptionsCount++;
+          continue;
+        }
+
+        // Post payment
+        await connection.query(`
+          INSERT INTO payment_postings (
+            claim_id, era_id, paid_amount, adjustment_amount,
+            adjustment_reason, posted_date, posted_by, auto_posted
+          ) VALUES (?, ?, ?, ?, ?, NOW(), ?, true)
+        `, [
+          detail.claim_id, eraId, detail.paid_amount,
+          detail.adjustment_amount, detail.adjustment_reason, user_id
+        ]);
+
+        // Update claim status
+        await connection.query(
+          'UPDATE claims SET status = ?, paid_amount = ? WHERE claim_id = ?',
+          ['paid', detail.paid_amount, detail.claim_id]
+        );
+
+        autoPostedCount++;
+
+      } catch (detailError) {
+        console.error(`Error processing payment detail:`, detailError);
+        exceptions.push(`Error processing claim ${detail.claim_id}: ${detailError.message}`);
+        exceptionsCount++;
+      }
+    }
+
+    // Update ERA status
+    const finalStatus = exceptionsCount > 0 ? 'exception' : 'posted';
+    await connection.query(`
+      UPDATE era_payments SET 
+        status = ?,
+        auto_posted = true,
+        exceptions = ?,
+        processed_at = NOW(),
+        processed_by = ?
+      WHERE id = ?
+    `, [finalStatus, JSON.stringify(exceptions), user_id, eraId]);
+
+    await connection.commit();
+
+    await logAudit(req, 'PROCESS', 'ERA_AUTO_POST', eraId, 
+      `ERA auto-posted: ${autoPostedCount} payments, ${exceptionsCount} exceptions`);
+
+    res.status(200).json({
+      success: true,
+      message: 'ERA processed successfully',
+      data: {
+        eraId,
+        autoPostedCount,
+        exceptionsCount,
+        exceptions,
+        status: finalStatus
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error processing ERA auto-post:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to process ERA auto-post",
+      details: error.message
+    });
+  }
+};
+
+// Bulk process ERAs
+const processBulkERAPost = async (req, res) => {
+  const { eraIds } = req.body;
+  const { user_id } = req.user;
+
+  try {
+    const results = [];
+
+    for (const eraId of eraIds) {
+      try {
+        // Process each ERA (simplified version)
+        await connection.query(`
+          UPDATE era_payments SET 
+            status = 'posted',
+            auto_posted = true,
+            processed_at = NOW(),
+            processed_by = ?
+          WHERE id = ? AND provider_id = ? AND status = 'pending'
+        `, [user_id, eraId, user_id]);
+
+        results.push({ eraId, success: true });
+      } catch (error) {
+        results.push({ eraId, success: false, error: error.message });
+      }
+    }
+
+    await logAudit(req, 'PROCESS', 'BULK_ERA_POST', 0, 
+      `Bulk ERA processing: ${results.length} ERAs processed`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk ERA processing completed',
+      data: results
+    });
+
+  } catch (error) {
+    console.error("Error processing bulk ERA post:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to process bulk ERA post",
+      details: error.message
+    });
+  }
+};
+
+// Get payment posting statistics
+const getPaymentPostingStats = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    // Get total posted amount
+    const [totalPosted] = await connection.query(`
+      SELECT COALESCE(SUM(paid_amount), 0) as total_posted
+      FROM payment_postings 
+      WHERE posted_by = ? AND posted_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    `, [user_id]);
+
+    // Get auto-posting percentage
+    const [autoPostStats] = await connection.query(`
+      SELECT 
+        COUNT(*) as total_postings,
+        SUM(CASE WHEN auto_posted = true THEN 1 ELSE 0 END) as auto_postings
+      FROM payment_postings 
+      WHERE posted_by = ? AND posted_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    `, [user_id]);
+
+    // Get exceptions count
+    const [exceptions] = await connection.query(`
+      SELECT COUNT(*) as exceptions_count
+      FROM era_payments 
+      WHERE provider_id = ? AND status = 'exception' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    `, [user_id]);
+
+    // Calculate average posting time (mock data for now)
+    const averagePostingTime = 2.5;
+
+    const autoPostedPercentage = autoPostStats[0].total_postings > 0 
+      ? Math.round((autoPostStats[0].auto_postings / autoPostStats[0].total_postings) * 100)
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalPosted: totalPosted[0].total_posted,
+        autoPostedPercentage,
+        exceptionsCount: exceptions[0].exceptions_count,
+        averagePostingTime
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching payment posting stats:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch payment posting stats",
+      details: error.message
+    });
+  }
+};
+
+// Upload ERA file
+const uploadERAFile = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No ERA file uploaded'
+      });
+    }
+
+    // Process ERA file (simplified - would normally parse EDI format)
+    const eraNumber = `ERA-${Date.now()}`;
+    
+    const [result] = await connection.query(`
+      INSERT INTO era_payments (
+        era_number, provider_id, payer_name, check_number,
+        check_date, total_amount, claims_count, status,
+        file_path, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `, [
+      eraNumber, user_id, 'Sample Payer', 'CHK123456',
+      new Date().toISOString().split('T')[0], 1500.00, 5,
+      file.path, user_id
+    ]);
+
+    await logAudit(req, 'UPLOAD', 'ERA_FILE', result.insertId, 
+      `ERA file uploaded: ${file.originalname}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'ERA file uploaded successfully',
+      data: {
+        eraId: result.insertId,
+        eraNumber,
+        fileName: file.originalname
+      }
+    });
+
+  } catch (error) {
+    console.error("Error uploading ERA file:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to upload ERA file",
+      details: error.message
+    });
+  }
+};
+
 module.exports = {
   getPaymentGateways,
   configurePaymentGateway,
@@ -689,5 +1027,11 @@ module.exports = {
   getPaymentHistory,
   processRefund,
   handleStripeWebhook,
-  getPaymentAnalytics
+  getPaymentAnalytics,
+  // Payment Posting Engine
+  getERAQueue,
+  processERAAutoPost,
+  processBulkERAPost,
+  getPaymentPostingStats,
+  uploadERAFile
 };

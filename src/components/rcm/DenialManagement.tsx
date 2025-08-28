@@ -48,6 +48,551 @@ interface DenialCase {
   daysOpen: number;
 }
 
+interface DenialStats {
+  totalDenials: number;
+  totalAmount: number;
+  averageResolutionTime: number;
+  resolutionRate: number;
+  topDenialReasons: Array<{ reason: string; count: number; percentage: number }>;
+}
+
+const DenialManagement: React.FC = () => {
+  const [denials, setDenials] = useState<DenialCase[]>([]);
+  const [stats, setStats] = useState<DenialStats>({
+    totalDenials: 0,
+    totalAmount: 0,
+    averageResolutionTime: 0,
+    resolutionRate: 0,
+    topDenialReasons: []
+  });
+  const [selectedDenial, setSelectedDenial] = useState<DenialCase | null>(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isWorkingCase, setIsWorkingCase] = useState(false);
+
+  // Sample data
+  useEffect(() => {
+    const sampleDenials: DenialCase[] = [
+      {
+        id: 1,
+        claimId: 12345,
+        claimNumber: 'CLM-2024-001',
+        patientName: 'John Smith',
+        denialDate: '2024-01-15',
+        denialCode: 'CO-97',
+        denialReason: 'Payment adjusted because the benefit for this service is included in the payment/allowance for another service/procedure',
+        carcCode: 'CO-97',
+        rarcCode: 'N386',
+        denialCategory: 'Bundling/Unbundling',
+        rootCause: 'Incorrect coding',
+        denialAmount: 250.00,
+        caseStatus: 'Open',
+        priority: 'High',
+        assignedTo: 'Sarah Johnson',
+        daysOpen: 15
+      },
+      {
+        id: 2,
+        claimId: 12346,
+        claimNumber: 'CLM-2024-002',
+        patientName: 'Jane Doe',
+        denialDate: '2024-01-16',
+        denialCode: 'CO-16',
+        denialReason: 'Claim/service lacks information or has submission/billing error(s)',
+        carcCode: 'CO-16',
+        rarcCode: 'M15',
+        denialCategory: 'Missing Information',
+        rootCause: 'Missing documentation',
+        denialAmount: 180.00,
+        caseStatus: 'In Progress',
+        priority: 'Medium',
+        assignedTo: 'Mike Wilson',
+        daysOpen: 8
+      },
+      {
+        id: 3,
+        claimId: 12347,
+        claimNumber: 'CLM-2024-003',
+        patientName: 'Bob Johnson',
+        denialDate: '2024-01-10',
+        denialCode: 'CO-50',
+        denialReason: 'These are non-covered services because this is not deemed a medical necessity',
+        carcCode: 'CO-50',
+        rarcCode: 'N386',
+        denialCategory: 'Medical Necessity',
+        rootCause: 'Lack of prior authorization',
+        denialAmount: 450.00,
+        caseStatus: 'Appealed',
+        priority: 'High',
+        assignedTo: 'Lisa Chen',
+        daysOpen: 25
+      },
+      {
+        id: 4,
+        claimId: 12348,
+        claimNumber: 'CLM-2024-004',
+        patientName: 'Alice Brown',
+        denialDate: '2024-01-18',
+        denialCode: 'CO-11',
+        denialReason: 'The diagnosis is inconsistent with the procedure',
+        carcCode: 'CO-11',
+        rarcCode: 'N517',
+        denialCategory: 'Coding Error',
+        rootCause: 'Incorrect diagnosis code',
+        denialAmount: 320.00,
+        caseStatus: 'Resolved',
+        priority: 'Low',
+        assignedTo: 'Tom Davis',
+        daysOpen: 0
+      }
+    ];
+
+    const sampleStats: DenialStats = {
+      totalDenials: 156,
+      totalAmount: 45680.50,
+      averageResolutionTime: 12.5,
+      resolutionRate: 78.5,
+      topDenialReasons: [
+        { reason: 'Missing Information', count: 45, percentage: 28.8 },
+        { reason: 'Coding Error', count: 38, percentage: 24.4 },
+        { reason: 'Medical Necessity', count: 32, percentage: 20.5 },
+        { reason: 'Bundling/Unbundling', count: 25, percentage: 16.0 },
+        { reason: 'Authorization', count: 16, percentage: 10.3 }
+      ]
+    };
+
+    setDenials(sampleDenials);
+    setStats(sampleStats);
+  }, []);
+
+  const filteredDenials = denials.filter(denial => {
+    const matchesStatus = filterStatus === 'all' || denial.caseStatus.toLowerCase() === filterStatus.toLowerCase();
+    const matchesPriority = filterPriority === 'all' || denial.priority.toLowerCase() === filterPriority.toLowerCase();
+    const matchesSearch = searchTerm === '' || 
+      denial.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      denial.claimNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      denial.denialReason.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesStatus && matchesPriority && matchesSearch;
+  });
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'open': return 'bg-red-100 text-red-800';
+      case 'in progress': return 'bg-blue-100 text-blue-800';
+      case 'appealed': return 'bg-purple-100 text-purple-800';
+      case 'resolved': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleWorkCase = (denial: DenialCase) => {
+    setSelectedDenial(denial);
+    setIsWorkingCase(true);
+  };
+
+  const handleResolveCase = (denialId: number) => {
+    setDenials(prev => prev.map(denial => 
+      denial.id === denialId 
+        ? { ...denial, caseStatus: 'Resolved', daysOpen: 0 }
+        : denial
+    ));
+    setIsWorkingCase(false);
+    setSelectedDenial(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Denial Management</h2>
+          <p className="text-gray-600">Track, analyze, and resolve claim denials</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            Export Report
+          </Button>
+          <Button className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Add Manual Denial
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Denials</p>
+                <p className="text-2xl font-bold text-red-600">{stats.totalDenials}</p>
+              </div>
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Denied Amount</p>
+                <p className="text-2xl font-bold text-red-600">
+                  ${stats.totalAmount.toLocaleString()}
+                </p>
+              </div>
+              <DollarSign className="w-8 h-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Avg Resolution</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {stats.averageResolutionTime} days
+                </p>
+              </div>
+              <Clock className="w-8 h-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Resolution Rate</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {stats.resolutionRate}%
+                </p>
+              </div>
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="denials" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="denials">Active Denials</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="workflow">Workflow</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="denials" className="space-y-4">
+          {/* Filters */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Search by patient, claim number, or reason..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="in progress">In Progress</SelectItem>
+                    <SelectItem value="appealed">Appealed</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Priority</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Denials Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Denial Cases ({filteredDenials.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim #</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Denial Date</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Days Open</TableHead>
+                      <TableHead>Assigned To</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDenials.map((denial) => (
+                      <TableRow key={denial.id}>
+                        <TableCell className="font-medium">{denial.claimNumber}</TableCell>
+                        <TableCell>{denial.patientName}</TableCell>
+                        <TableCell>{denial.denialDate}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={denial.denialReason}>
+                          {denial.denialReason}
+                        </TableCell>
+                        <TableCell>${denial.denialAmount.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(denial.caseStatus)}>
+                            {denial.caseStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getPriorityColor(denial.priority)}>
+                            {denial.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={denial.daysOpen > 30 ? 'text-red-600 font-bold' : ''}>
+                            {denial.daysOpen}
+                          </span>
+                        </TableCell>
+                        <TableCell>{denial.assignedTo}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleWorkCase(denial)}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Top Denial Reasons */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Denial Reasons</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {stats.topDenialReasons.map((reason, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">{reason.reason}</span>
+                          <span className="text-sm text-gray-600">{reason.count} cases</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full"
+                            style={{ width: `${reason.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Resolution Trends */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Resolution Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div>
+                      <p className="text-sm text-gray-600">This Month</p>
+                      <p className="text-lg font-bold text-green-600">85% Resolved</p>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-green-500" />
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div>
+                      <p className="text-sm text-gray-600">Avg Resolution Time</p>
+                      <p className="text-lg font-bold text-blue-600">8.5 Days</p>
+                    </div>
+                    <Clock className="w-8 h-8 text-blue-500" />
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                    <div>
+                      <p className="text-sm text-gray-600">Pending Appeals</p>
+                      <p className="text-lg font-bold text-yellow-600">12 Cases</p>
+                    </div>
+                    <RefreshCw className="w-8 h-8 text-yellow-500" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="workflow" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Denial Workflow Management</CardTitle>
+              <CardDescription>
+                Configure automated workflows and escalation rules
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Auto-Assignment Rules</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">High Priority → Senior Staff</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">Coding Errors → Coding Team</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">Auth Issues → Auth Specialist</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Escalation Rules</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">Open > 30 days → Manager</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">High Value > $500 → Director</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <span className="text-sm">Multiple Appeals → Legal</span>
+                        <Badge variant="secondary">Active</Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Work Case Dialog */}
+      <Dialog open={isWorkingCase} onOpenChange={setIsWorkingCase}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Work Denial Case</DialogTitle>
+            <DialogDescription>
+              {selectedDenial && `Claim ${selectedDenial.claimNumber} - ${selectedDenial.patientName}`}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDenial && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Denial Code</Label>
+                  <Input value={selectedDenial.denialCode} readOnly />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Input value={selectedDenial.denialCategory} readOnly />
+                </div>
+              </div>
+              <div>
+                <Label>Denial Reason</Label>
+                <Textarea value={selectedDenial.denialReason} readOnly rows={3} />
+              </div>
+              <div>
+                <Label>Resolution Notes</Label>
+                <Textarea placeholder="Enter resolution notes..." rows={4} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Action Taken</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="corrected">Corrected and Resubmitted</SelectItem>
+                      <SelectItem value="appealed">Filed Appeal</SelectItem>
+                      <SelectItem value="documented">Added Documentation</SelectItem>
+                      <SelectItem value="writeoff">Write-off</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Follow-up Date</Label>
+                  <Input type="date" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsWorkingCase(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => handleResolveCase(selectedDenial.id)}>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Resolve Case
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default DenialManagement;
+
 interface AppealTask {
   id: number;
   denialCaseId: number;

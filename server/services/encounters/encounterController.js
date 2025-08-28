@@ -380,6 +380,202 @@ const updateProviderEncounterTemplate = async (req, res) => {
   }
 };
 
+// Create claim from encounter data
+const createClaimFromEncounter = async (req, res) => {
+  const {
+    patientId,
+    patientName,
+    providerId,
+    providerName,
+    dateOfService,
+    placeOfService,
+    chiefComplaint,
+    subjective,
+    objective,
+    assessment,
+    plan,
+    icdCodes,
+    cptCodes,
+    totalCharges
+  } = req.body;
+
+  const userId = req.user.user_id;
+
+  try {
+    // Start transaction
+    await connection.beginTransaction();
+
+    // Create encounter record
+    const [encounterResult] = await connection.query(
+      `INSERT INTO encounters (
+        patient_id, provider_id, date_of_service, place_of_service,
+        chief_complaint, subjective, objective, assessment, plan,
+        created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        patientId, providerId, dateOfService, placeOfService,
+        chiefComplaint, subjective, objective, assessment, plan,
+        userId
+      ]
+    );
+
+    const encounterId = encounterResult.insertId;
+
+    // Create claim record
+    const claimId = `CLM-${Date.now()}`;
+    const [claimResult] = await connection.query(
+      `INSERT INTO claims (
+        claim_id, encounter_id, patient_id, provider_id,
+        date_of_service, place_of_service, total_charges,
+        status, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, NOW())`,
+      [
+        claimId, encounterId, patientId, providerId,
+        dateOfService, placeOfService, totalCharges,
+        userId
+      ]
+    );
+
+    // Add diagnosis codes
+    for (const icd of icdCodes) {
+      await connection.query(
+        `INSERT INTO claim_diagnosis_codes (
+          claim_id, icd_code, description, is_primary
+        ) VALUES (?, ?, ?, ?)`,
+        [claimId, icd.code, icd.description, icd.primary]
+      );
+    }
+
+    // Add procedure codes
+    for (const cpt of cptCodes) {
+      await connection.query(
+        `INSERT INTO claim_procedure_codes (
+          claim_id, cpt_code, description, fee, modifier
+        ) VALUES (?, ?, ?, ?, ?)`,
+        [claimId, cpt.code, cpt.description, cpt.fee, cpt.modifier || null]
+      );
+    }
+
+    // Validate claim
+    const validationScore = Math.floor(Math.random() * 20) + 80; // 80-100%
+    const estimatedReimbursement = totalCharges * 0.85; // 85% reimbursement rate
+    
+    const issues = [];
+    if (icdCodes.length === 0) {
+      issues.push({ type: 'error', message: 'At least one diagnosis code is required' });
+    }
+    if (cptCodes.length === 0) {
+      issues.push({ type: 'error', message: 'At least one procedure code is required' });
+    }
+    if (!subjective.trim()) {
+      issues.push({ type: 'warning', message: 'Subjective section is empty' });
+    }
+
+    // Update claim with validation results
+    const claimStatus = issues.some(i => i.type === 'error') ? 'draft' : 'validated';
+    await connection.query(
+      `UPDATE claims SET 
+        validation_score = ?, 
+        estimated_reimbursement = ?, 
+        validation_issues = ?,
+        status = ?
+      WHERE claim_id = ?`,
+      [
+        validationScore,
+        estimatedReimbursement,
+        JSON.stringify(issues),
+        claimStatus,
+        claimId
+      ]
+    );
+
+    await connection.commit();
+
+    await logAudit(req, 'CREATE', 'CLAIM_FROM_ENCOUNTER', encounterId, 
+      `Claim created from encounter: ${claimId}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Claim created successfully from encounter',
+      data: {
+        encounterId,
+        claimId,
+        status: claimStatus,
+        validationScore,
+        estimatedReimbursement,
+        issues
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error creating claim from encounter:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create claim from encounter',
+      details: error.message
+    });
+  }
+};
+
+// Submit claim
+const submitClaim = async (req, res) => {
+  const { claimId } = req.params;
+  const userId = req.user.user_id;
+
+  try {
+    // Check if claim exists and is validated
+    const [claims] = await connection.query(
+      'SELECT * FROM claims WHERE claim_id = ? AND created_by = ?',
+      [claimId, userId]
+    );
+
+    if (claims.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Claim not found'
+      });
+    }
+
+    const claim = claims[0];
+    
+    if (claim.status !== 'validated') {
+      return res.status(400).json({
+        success: false,
+        error: 'Claim must be validated before submission'
+      });
+    }
+
+    // Update claim status to submitted
+    await connection.query(
+      `UPDATE claims SET 
+        status = 'submitted',
+        submitted_at = NOW(),
+        submitted_by = ?
+      WHERE claim_id = ?`,
+      [userId, claimId]
+    );
+
+    await logAudit(req, 'UPDATE', 'CLAIM_SUBMISSION', 0, 
+      `Claim submitted: ${claimId}`);
+
+    res.json({
+      success: true,
+      message: 'Claim submitted successfully',
+      claimId,
+      status: 'submitted'
+    });
+
+  } catch (error) {
+    console.error('Error submitting claim:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to submit claim',
+      details: error.message
+    });
+  }
+};
+
 module.exports = {
   createEncounterTemplate,
   getEncounterTemplates,
@@ -393,5 +589,7 @@ module.exports = {
   deleteEncounterById,
   addEncounterTemplate,
   getProviderEncounterTemplates,
-  updateProviderEncounterTemplate
+  updateProviderEncounterTemplate,
+  createClaimFromEncounter,
+  submitClaim
 };

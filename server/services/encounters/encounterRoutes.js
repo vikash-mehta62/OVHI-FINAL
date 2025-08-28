@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createEncounterTemplate, getEncounterTemplates, getEncounterTemplateById, updateTemplateById, deleteTemplateById, getAllEncounters, createEncounter, getEncounterById, deleteEncounterById,updateEncounterById,addEncounterTemplate,getProviderEncounterTemplates,updateProviderEncounterTemplate } = require('./encounterController');
+const { createEncounterTemplate, getEncounterTemplates, getEncounterTemplateById, updateTemplateById, deleteTemplateById, getAllEncounters, createEncounter, getEncounterById, deleteEncounterById,updateEncounterById,addEncounterTemplate,getProviderEncounterTemplates,updateProviderEncounterTemplate, createClaimFromEncounter, submitClaim } = require('./encounterController');
 
 
 router.post('/template/create', createEncounterTemplate);
@@ -18,5 +18,8 @@ router.post('/update/:encounterId', updateEncounterById);
 router.delete('/delete/:encounterId', deleteEncounterById);
 router.post('/template/provider/update', updateProviderEncounterTemplate);
 
+// Encounter to Claim workflow routes
+router.post('/create-claim', createClaimFromEncounter);
+router.post('/submit-claim/:claimId', submitClaim);
 
 module.exports = router;

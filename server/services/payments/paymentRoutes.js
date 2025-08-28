@@ -9,7 +9,13 @@ const {
   getPaymentHistory,
   processRefund,
   handleStripeWebhook,
-  getPaymentAnalytics
+  getPaymentAnalytics,
+  // Payment Posting Engine
+  getERAQueue,
+  processERAAutoPost,
+  processBulkERAPost,
+  getPaymentPostingStats,
+  uploadERAFile
 } = require('./paymentCtrl');
 
 // Validation middleware
@@ -59,5 +65,21 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), handle
 
 // GET /api/v1/payments/analytics - Get payment analytics
 router.get('/analytics', getPaymentAnalytics);
+
+// Payment Posting Engine Routes
+// GET /api/v1/payments/era/queue - Get ERA processing queue
+router.get('/era/queue', getERAQueue);
+
+// POST /api/v1/payments/era/:eraId/auto-post - Process ERA auto-posting
+router.post('/era/:eraId/auto-post', processERAAutoPost);
+
+// POST /api/v1/payments/era/bulk-post - Bulk process ERAs
+router.post('/era/bulk-post', processBulkERAPost);
+
+// GET /api/v1/payments/posting/stats - Get payment posting statistics
+router.get('/posting/stats', getPaymentPostingStats);
+
+// POST /api/v1/payments/era/upload - Upload ERA file
+router.post('/era/upload', uploadERAFile);
 
 module.exports = router;
