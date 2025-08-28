@@ -487,15 +487,15 @@ const DenialManagement: React.FC = () => {
                     <h4 className="font-medium">Auto-Assignment Rules</h4>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">High Priority → Senior Staff</span>
+                        <span className="text-sm">High Priority &rarr; Senior Staff</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">Coding Errors → Coding Team</span>
+                        <span className="text-sm">Coding Errors &rarr; Coding Team</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">Auth Issues → Auth Specialist</span>
+                        <span className="text-sm">Auth Issues &rarr; Auth Specialist</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                     </div>
@@ -505,15 +505,15 @@ const DenialManagement: React.FC = () => {
                     <h4 className="font-medium">Escalation Rules</h4>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">Open > 30 days → Manager</span>
+                        <span className="text-sm">Open &gt; 30 days &rarr; Manager</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">High Value > $500 → Director</span>
+                        <span className="text-sm">High Value &gt; $500 &rarr; Director</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                       <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <span className="text-sm">Multiple Appeals → Legal</span>
+                        <span className="text-sm">Multiple Appeals &rarr; Legal</span>
                         <Badge variant="secondary">Active</Badge>
                       </div>
                     </div>
@@ -591,7 +591,7 @@ const DenialManagement: React.FC = () => {
   );
 };
 
-export default DenialManagement;
+// export default DenialManagement;
 
 interface AppealTask {
   id: number;
@@ -604,7 +604,7 @@ interface AppealTask {
   daysUntilDue: number;
 }
 
-const DenialManagement: React.FC = () => {
+const DenialManagement2: React.FC = () => {
   const [denialCases, setDenialCases] = useState<DenialCase[]>([]);
   const [appealTasks, setAppealTasks] = useState<AppealTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1249,4 +1249,4 @@ const DenialManagement: React.FC = () => {
   );
 };
 
-export default DenialManagement;
+export default DenialManagement2;
