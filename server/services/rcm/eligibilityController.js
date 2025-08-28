@@ -25,9 +25,13 @@ class EligibilityController {
 
       const { user_id: userId } = req.user || {};
 
-      // Validate required fields
-      if (!patientId || !memberId) {
-        return standardizedResponse(res, 400, false, 'Patient ID and Member ID are required');
+      // Validate required fields with proper empty string checking
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
+        return standardizedResponse(res, 400, false, 'Patient ID is required and cannot be empty');
+      }
+      
+      if (!memberId || (typeof memberId === 'string' && memberId.trim() === '')) {
+        return standardizedResponse(res, 400, false, 'Member ID is required and cannot be empty');
       }
 
       // Log the eligibility check request
@@ -88,8 +92,8 @@ class EligibilityController {
       const { patientId, serviceDate } = req.body;
       const { user_id: userId } = req.user || {};
 
-      if (!patientId) {
-        return standardizedResponse(res, 400, false, 'Patient ID is required');
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
+        return standardizedResponse(res, 400, false, 'Patient ID is required and cannot be empty');
       }
 
       // Get patient information
@@ -129,7 +133,9 @@ class EligibilityController {
    */
   async getEligibilityHistory(req, res) {
     try {
-      const { patientId, limit = 10, offset = 0 } = req.query;
+      // Get patientId from validated fields or query params
+      const patientId = req.validatedFields?.patientId || req.query.patientId || req.params.patientId;
+      const { limit = 10, offset = 0 } = req.query;
 
       if (!patientId) {
         return standardizedResponse(res, 400, false, 'Patient ID is required');
@@ -183,8 +189,12 @@ class EligibilityController {
 
       const { user_id: userId } = req.user || {};
 
-      if (!patientId || !procedureCodes || procedureCodes.length === 0) {
-        return standardizedResponse(res, 400, false, 'Patient ID and procedure codes are required');
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
+        return standardizedResponse(res, 400, false, 'Patient ID is required and cannot be empty');
+      }
+      
+      if (!procedureCodes || !Array.isArray(procedureCodes) || procedureCodes.length === 0) {
+        return standardizedResponse(res, 400, false, 'Procedure codes are required and must be a non-empty array');
       }
 
       // Perform claim validation
@@ -270,8 +280,9 @@ class EligibilityController {
       const { patientId, serviceDate, procedureCodes } = req.body;
       const { user_id: userId } = req.user || {};
 
-      if (!patientId) {
-        return standardizedResponse(res, 400, false, 'Patient ID is required');
+      // Handle empty or missing patientId
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
+        return standardizedResponse(res, 400, false, 'Patient ID is required and cannot be empty');
       }
 
       // Get patient insurance information

@@ -272,6 +272,25 @@ const handleNotFound = (req, res) => {
   });
 };
 
+/**
+ * Helper functions for creating specific error types
+ * These functions provide a convenient way to create standardized errors
+ */
+const createDatabaseError = (message, query = null) => {
+  return ErrorTypes.DATABASE_ERROR(message, query);
+};
+
+const createNotFoundError = (resource, id = null) => {
+  if (id) {
+    return ErrorTypes.RESOURCE_NOT_FOUND(resource, id);
+  }
+  return new AppError(`${resource} not found`, 404, 'NOT_FOUND');
+};
+
+const createValidationError = (message, details = null) => {
+  return ErrorTypes.VALIDATION_ERROR(message, details);
+};
+
 module.exports = {
   AppError,
   ErrorTypes,
@@ -282,5 +301,8 @@ module.exports = {
   formatValidationError,
   formatDatabaseError,
   handleRateLimitError,
-  handleNotFound
+  handleNotFound,
+  createDatabaseError,
+  createNotFoundError,
+  createValidationError
 };

@@ -375,16 +375,19 @@ const UnifiedRCMDashboard: React.FC = () => {
     if (!dashboardData) return null;
 
     const revenueData = dashboardData.trends?.monthlyRevenue || [];
-    const claimsData = Object.entries(dashboardData.claimsBreakdown).map(([key, value]) => ({
-      name: key.charAt(0).toUpperCase() + key.slice(1),
-      value: value as number,
-      color: {
-        draft: '#94A3B8',
-        submitted: '#3B82F6',
-        paid: '#10B981',
-        denied: '#EF4444'
-      }[key] || '#6B7280'
-    }));
+    const claimsData = Object.entries(dashboardData?.claimsBreakdown || {}).map(
+      ([key, value]) => ({
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        value: value as number,
+        color:
+          {
+            draft: '#94A3B8',
+            submitted: '#3B82F6',
+            paid: '#10B981',
+            denied: '#EF4444',
+          }[key] || '#6B7280',
+      })
+    );// Provide a default empty array if claimsBreakdown is null/undefined
 
     const agingData = [
       { name: '0-30 Days', value: parseFloat(dashboardData.arAging.aging_0_30.replace(/[$,]/g, '')) },

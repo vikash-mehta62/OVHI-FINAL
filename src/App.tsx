@@ -129,8 +129,12 @@ const App = () => {
   }, [api]);
 
   useEffect(() => {
+    if (token) {
+      localStorage.setItem('token', token);
+    }
     const handleShowConfig = async () => {
       try {
+        
         if (!token || !user) {
           return;
         }

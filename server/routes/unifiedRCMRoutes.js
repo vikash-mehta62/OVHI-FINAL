@@ -778,8 +778,7 @@ router.use((error, req, res, next) => {
  */
 router.post('/eligibility/check',
   sanitizationMiddleware,
-  ValidationMiddleware.validateRequiredParam('patientId'),
-  ValidationMiddleware.validateRequiredParam('memberId'),
+  ValidationMiddleware.validateEligibilityCheck,
   asyncHandler(eligibilityController.checkEligibility)
 );
 
@@ -792,7 +791,7 @@ router.post('/eligibility/check',
  */
 router.post('/eligibility/verify',
   sanitizationMiddleware,
-  ValidationMiddleware.validateRequiredParam('patientId'),
+  ValidationMiddleware.validateEligibilityVerify,
   asyncHandler(eligibilityController.verifyEligibility)
 );
 
@@ -804,7 +803,7 @@ router.post('/eligibility/verify',
  *     tags: [RCM Eligibility]
  */
 router.get('/eligibility/history',
-  ValidationMiddleware.validateRequiredParam('patientId'),
+  ValidationMiddleware.validateEligibilityHistoryQuery,
   asyncHandler(eligibilityController.getEligibilityHistory)
 );
 
@@ -817,7 +816,7 @@ router.get('/eligibility/history',
  */
 router.post('/claims/validate',
   sanitizationMiddleware,
-  ValidationMiddleware.validateRequiredParam('patientId'),
+  ValidationMiddleware.validateClaimValidation,
   asyncHandler(eligibilityController.validateClaim)
 );
 
@@ -856,7 +855,7 @@ router.post('/claims/estimate',
  */
 router.post('/benefits/check',
   sanitizationMiddleware,
-  ValidationMiddleware.validateRequiredParam('patientId'),
+  ValidationMiddleware.validateBenefitsCheck,
   asyncHandler(eligibilityController.checkBenefits)
 );
 
