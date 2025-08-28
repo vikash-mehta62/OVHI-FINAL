@@ -57,6 +57,10 @@ import { getRCMDashboardDataAPI } from '@/services/operations/rcm';
 import { paymentAPI } from '@/services/operations/payments';
 import EligibilityChecker from './EligibilityChecker';
 import QuickEligibilityCheck from './QuickEligibilityCheck';
+import EncounterToClaim from './EncounterToClaim';
+import PaymentPostingEngine from './PaymentPostingEngine';
+import DenialManagement from './DenialManagement';
+import RevenueForecasting from './RevenueForecasting';
 import {
   checkEligibilityAPI,
   validateClaimAPI,
@@ -519,10 +523,13 @@ const UnifiedRCMDashboard: React.FC = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="encounter">Encounter to Claim</TabsTrigger>
           <TabsTrigger value="eligibility">Eligibility</TabsTrigger>
           <TabsTrigger value="claims">Claims Validation</TabsTrigger>
+          <TabsTrigger value="payments">Payment Posting</TabsTrigger>
           <TabsTrigger value="aging">A/R Aging</TabsTrigger>
           <TabsTrigger value="denials">Denials</TabsTrigger>
+          <TabsTrigger value="forecasting">Revenue Forecasting</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
@@ -760,6 +767,10 @@ const UnifiedRCMDashboard: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="encounter" className="space-y-6">
+          <EncounterToClaim />
         </TabsContent>
 
         <TabsContent value="eligibility" className="space-y-6">
@@ -1019,36 +1030,16 @@ const UnifiedRCMDashboard: React.FC = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="denials">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Denial Trends</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <LineChartIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>Denial trend analysis will be displayed here</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <TabsContent value="payments" className="space-y-6">
+          <PaymentPostingEngine />
+        </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Denial Reasons</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <PieChartIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>Denial reasons breakdown will be displayed here</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="denials" className="space-y-6">
+          <DenialManagement />
+        </TabsContent>
+
+        <TabsContent value="forecasting" className="space-y-6">
+          <RevenueForecasting />
         </TabsContent>
 
         <TabsContent value="trends">

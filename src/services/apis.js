@@ -172,12 +172,14 @@ export const encounter = {
   UPDATE_TEMPLATE_API: BASE_URL + "/encounters/template/update",
   DELETE_TEMPLATE_API: BASE_URL + "/encounters/template/delete",
 
-
   CREATE_ENCOUNTER_API: BASE_URL + "/encounters/create",
   GET_ENCOUNTER_API: BASE_URL + "/encounters/get",
   UPDATE_ENCOUNTER_API: BASE_URL + "/encounters/update",
   DELETE_ENCOUNTER_API: BASE_URL + "/encounters/delete",
 
+  // Encounter to Claim workflow
+  CREATE_CLAIM_FROM_ENCOUNTER_API: BASE_URL + "/encounters/create-claim",
+  SUBMIT_CLAIM_API: BASE_URL + "/encounters/submit-claim",
 }
 export const device = {
 

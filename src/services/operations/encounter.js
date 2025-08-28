@@ -12,7 +12,10 @@ const {
   CREATE_ENCOUNTER_API,
   GET_ENCOUNTER_API,
   UPDATE_ENCOUNTER_API,
-  DELETE_ENCOUNTER_API
+  DELETE_ENCOUNTER_API,
+
+  CREATE_CLAIM_FROM_ENCOUNTER_API,
+  SUBMIT_CLAIM_API
 } = encounter
 
 export const createTemplateApi = async (formData, token) => {
@@ -268,3 +271,63 @@ export const deleteEncounterApi = async (encounterId, token) => {
 };
 
 
+
+// Create claim from encounter data
+export const createClaimFromEncounterApi = async (encounterData, token) => {
+  const loadingToastId = toast.loading("Creating claim from encounter...");
+  
+  try {
+    const response = await apiConnector(
+      "POST", 
+      CREATE_CLAIM_FROM_ENCOUNTER_API, 
+      encounterData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+
+    toast.dismiss(loadingToastId);
+    toast.success(response?.data?.message);
+    return response.data;
+
+  } catch (error) {
+    toast.dismiss(loadingToastId);
+    toast.error(error?.response?.data?.message || "Failed to create claim from encounter.");
+    console.error("create claim from encounter ERROR:", error);
+    return null;
+  }
+};
+
+// Submit claim
+export const submitClaimApi = async (claimId, token) => {
+  const loadingToastId = toast.loading("Submitting claim...");
+  
+  try {
+    const response = await apiConnector(
+      "POST", 
+      `${SUBMIT_CLAIM_API}/${claimId}`, 
+      {},
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+
+    toast.dismiss(loadingToastId);
+    toast.success(response?.data?.message);
+    return response.data;
+
+  } catch (error) {
+    toast.dismiss(loadingToastId);
+    toast.error(error?.response?.data?.message || "Failed to submit claim.");
+    console.error("submit claim ERROR:", error);
+    return null;
+  }
+};
