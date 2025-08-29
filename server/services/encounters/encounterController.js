@@ -243,9 +243,9 @@ const updateTemplateById = async (req, res) => {
 
 
 const getAllEncounters = async (req, res) => {
-  const { patientId } = { ...req.params, ...req.query };
+  const { encounterId } = { ...req.params, ...req.query };
   try {
-    let sql=  `SELECT * FROM encounters WHERE provider_id = ? ${patientId ? `AND patient_id = ${patientId}` : ''} ORDER BY created DESC`;
+    let sql=  `SELECT * FROM encounters WHERE provider_id = ? ${encounterId ? `AND encounter_id = ${encounterId}` : ''} ORDER BY created DESC`;
     // console.log(sql)
     const [rows] = await connection.query(
      sql,
