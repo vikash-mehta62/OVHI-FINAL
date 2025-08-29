@@ -24,6 +24,7 @@ exports.verifyToken = async (req, res, next) => {
     // Verify token and check expiration
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
+        console.log(err)
         if (err.name === "TokenExpiredError") {
           return res.status(403).json({ success: false, message: "Token expired" });
         }

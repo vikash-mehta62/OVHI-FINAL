@@ -1,7 +1,39 @@
 const connection = require("../../config/db");
 const moment = require("moment");
 const logAudit = require("../../utils/logAudit");
+const Joi = require("joi");
 
+const encounterSchema = Joi.object({
+  patient_id: Joi.string().required(),
+  provider_id: Joi.string().required(),
+  type: Joi.string().optional(),
+  template_type: Joi.string().optional(),
+  category: Joi.string().optional(),
+
+  subjective: Joi.string().optional(),
+  objective: Joi.string().optional(),
+  assessment: Joi.alternatives(Joi.string(), Joi.array().items(Joi.string())).optional(),
+  plan: Joi.alternatives(Joi.string(), Joi.array().items(Joi.string())).optional(),
+
+  duration_minutes: Joi.number().integer().min(1).optional(),
+  complexity: Joi.string().valid("low", "moderate", "high").optional(),
+  status: Joi.string().valid("open", "in-progress", "completed", "signed").optional(),
+
+  diagnosis_codes: Joi.array()
+    .items(Joi.string().pattern(/^[A-Z][0-9][0-9AB](\.[0-9A-Z]{1,4})?$/))
+    .optional(),
+
+  procedure_codes: Joi.array()
+    .items(Joi.string().pattern(/^\d{5}$/))
+    .optional(),
+
+  vitals: Joi.object({
+    blood_pressure: Joi.string().optional(),
+    heart_rate: Joi.number().optional(),
+    temperature: Joi.number().optional(),
+  }).optional(),
+
+});
 const createEncounterTemplate = async (req, res) => {
   const {
     template_name,
@@ -36,6 +68,55 @@ const createEncounterTemplate = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create template', details: error.message });
+  }
+};
+
+
+
+// CREATE Encounter
+const createEncounter = async (req, res) => {
+  try {
+    const { error, value } = encounterSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      return res.status(400).json({ errors: error.details.map((d) => d.message) });
+    }
+
+
+    // Insert encounter
+    const [result] = await connection.query(
+      `INSERT INTO encounters 
+        (patient_id, provider_id, type, template_type, category,
+         subjective, objective, assessment, plan, duration_minutes, complexity, status, 
+         diagnosis_codes, procedure_codes, vitals, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        value.patient_id || null,
+        value.provider_id || null,
+        value.type || null,
+        value.template_type || null,
+        value.category || null,
+        value.subjective || null,
+        value.objective || null,
+        JSON.stringify(value.assessment || null),
+        JSON.stringify(value.plan || null),
+        value.duration_minutes || null,
+        value.complexity || null,
+        value.status || null,
+        JSON.stringify(value.diagnosis_codes || []),
+        JSON.stringify(value.procedure_codes || []),
+        JSON.stringify(value.vitals || {})
+      ]
+    );
+
+
+    res.status(201).json({
+      encounter_id: result.insertId,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
   }
 };
 
@@ -160,38 +241,7 @@ const updateTemplateById = async (req, res) => {
   }
 };
 
-const createEncounter = async (req, res) => {
-  const {
-    patientId, templateId,
-    encounterType, reasonForVisit, notes,
-    diagnosisCodes, procedureCodes, followUpPlan,
-    status = 'Draft'
-  } = { ...req.body, ...req.query };
-  const user_id = req.user.user_id;
-  try {
-    const [result] = await connection.query(
-      `INSERT INTO encounters (
-          patient_id, provider_id, template_id,
-          encounter_type, reason_for_visit, notes,
-          diagnosis_codes, procedure_codes, follow_up_plan, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        patientId, user_id, templateId,
-        encounterType, reasonForVisit, notes,
-        diagnosisCodes, procedureCodes, followUpPlan, status
-      ]
-    );
 
-    await logAudit(req, 'CREATE', 'ENCOUNTER', req.user.user_id, `Encounter created for patient ${patientId}`);
-    res.status(201).json({
-      success: true,
-      message: 'Encounter created',
-      encounter_id: result.insertId
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to create encounter', details: error.message });
-  }
-};
 const getAllEncounters = async (req, res) => {
   const { patientId } = { ...req.params, ...req.query };
   try {

@@ -14,6 +14,7 @@ import { FileText, User, Calendar, DollarSign, CheckCircle, AlertTriangle, Clock
 import { createClaimFromEncounterApi, submitClaimApi } from '@/services/operations/encounter';
 import { ProviderSection } from './encounter/ProviderSection';
 import { PatientInsuranceSection } from './encounter/PatientInsuranceSection';
+import { ClaimInfoSection } from './encounter/ClaimSection';
 import { Checkbox } from 'antd';
 
 // Common medical codes for quick selection
@@ -110,82 +111,91 @@ const RESUBMISSION_CODES = [
   { code: 7, description: "Replacement of Prior Claim" },
   { code: 8, description: "Void / Canceled Prior Claim" },
 ];
-interface EncounterData {
-  // Patient demographics
+export interface EncounterData {
+  // Step 1 – Patient & Insurance
   patientId: string;
   patientName: string;
-  dob: string; // YYYY-MM-DD
+  dob: string;
   sex: "M" | "F" | "U";
   address: string;
+  patientPhone?: string;
 
-  // Insurance info
   insurance: {
-    payerId: string;       // Electronic payer ID (e.g. 60054 for BCBS)
-    subscriberId: string;  // Policy/Member ID
-    groupNumber?: string;  // Group plan number
+    payerId: string;
+    subscriberId: string;
+    groupNumber?: string;
     relationship: "self" | "spouse" | "child" | "other";
   };
 
-  // Provider / Billing org
-  provider: {
-  providerId: string;
-  providerName: string;
-  npi: string;             // Rendering provider NPI
-  tin: string;             // Tax ID (billing org)
-  billingOrg: string;      // Billing org name
-  referringNpi?: string;
-  supervisingNpi?: string;
+  // Step 1 – Providers
+  renderingProvider?: {
+    npi: string;
+    tin: string;
+  };
+  billingProvider?: {
+    organization: string;
+    tin: string;
+    phone?: string;
+    address?: string;
+    npi?: string;
+  };
+  referringProvider?: { npi: string; name?: string };
+  supervisingProvider?: { npi: string; name?: string };
+  sameAsBilling?: boolean;
+
+  // Step 1 – Service Facility (CMS-1500 Box 32)
+  serviceFacility?: {
+    name: string;
+    npi: string;
+    address: string;
+    phone?: string;
   };
 
-  // Encounter basics
-  occurrenceInfo: string;
-  occurrenceCode: string;
-  occurrenceDate: string;
-  dateOfService: string;   // From DOS
-  serviceTo?: string;      // To DOS (for time-based codes like CCM)
-  placeOfService: string;  // CMS POS code
-  priorAuthNumber: string;
-  findings: string;
+  // Step 1 – Encounter basics
+  priorAuthNumber?: string;
+  occurrenceCode?: string;
+  occurrenceDate?: string;
+  dateOfService: string;
+  serviceTo?: string;
+  placeOfService: string;
 
-  // Clinical notes
+  // Step 2 – Clinical Documentation
   chiefComplaint: string;
   subjective: string;
   objective: string;
   assessment: string;
   plan: string;
+  additionalFindings?: string;
+  lockedForAudit?: boolean;
 
-  // Diagnosis
-  icdCodes: Array<{
+  // Step 3 – Coding
+  icdCodes: {
     code: string;
     description: string;
     primary?: boolean;
-  }>;
-
-  // Procedures
-  cptCodes: Array<{
+  }[];
+  cptCodes: {
     code: string;
     description: string;
     fee: number;
-    units?: number;
-    modifiers?: string[];
-    dxPointers?: string[]; 
+    units: number;
+    modifiers: string[];
+    dxPointers: string[];
     ndc?: string;
-  }>;
+  }[];
 
-  // Financials
+  // Step 3–4 – Financials
   totalCharges: number;
   copayCollected?: number;
 
-  // Optional programs
-  rpm?: { minutes: number; daysOfReading: number };
-  ccm?: { minutes: number; careTeamInvolved: string[] };
-
-  // Signatures
-  signatures: {
+  // Step 4 – Signatures / Claim
+  signatures?: {
     providerOnFile: boolean;
     patientOnFile: boolean;
   };
 }
+
+
 
 interface ClaimData {
   claimId: string;
@@ -203,6 +213,7 @@ export default function EncounterToClaim() {
     // Patient
     patientId: "P12345",
     patientName: "John Doe",
+    patientPhone: "555-123-4567",
     dob: "1980-04-15",
     sex: "M",
     address: "123 Main St, Springfield, IL 62704",
@@ -212,41 +223,51 @@ export default function EncounterToClaim() {
       payerId: "60054",
       subscriberId: "W123456789",
       groupNumber: "GRP7890",
-      relationship: "self"
+      relationship: "self",
     },
   
-    // Provider
-    provider: {
-      providerId: "DR5678",
-      providerName: "Dr. Alice Smith",
+    // Providers
+    renderingProvider: {
       npi: "1234567890",
       tin: "12-3456789",
-      billingOrg: "Springfield Family Practice LLC",
-      referringNpi: "0987654321",
-      supervisingNpi: ""
     },
+    billingProvider: {
+      organization: "Springfield Family Practice LLC",
+      tin: "12-3456789",
+      phone: "555-987-6543",
+      address: "456 Medical Plaza, Springfield, IL 62704",
+    },
+    referringProvider: {
+      npi: "0987654321",
+      name: "Dr. Robert Jones",
+    },
+    supervisingProvider: {
+      npi: "1122334455",
+      name: "Dr. Jane Supervising",
+    },
+    sameAsBilling: true,
   
     // Encounter basics
-    occurrenceInfo:"Accident",
+    priorAuthNumber: "AUTH5678",
+    occurrenceCode: "01",
+    occurrenceDate: "2025-08-28",
     dateOfService: "2025-08-28",
     serviceTo: "2025-08-28",
     placeOfService: "11",
-    priorAuthNumber: "AUTH5678",
-    occurrenceCode: "",
-    occurrenceDate: "2025-08-28",
-    findings: "Patient Has Suffered From Headache For The Past 2 Years.",
-
-    // Clinical notes (required by your interface, so add placeholders if empty)
+  
+    // Clinical notes
     chiefComplaint: "Follow-up for hypertension and diabetes",
     subjective: "Patient reports occasional headaches and fatigue.",
     objective: "BP 150/90, HR 82, BMI 29. Labs pending.",
     assessment: "Uncontrolled hypertension; stable type 2 diabetes.",
     plan: "Increase lisinopril dosage, follow-up in 1 month, continue metformin.",
+    additionalFindings: "Patient reports occasional headaches and fatigue.",
+    lockedForAudit: false,
   
     // ICD codes
     icdCodes: [
       { code: "I10", description: "Essential (primary) hypertension", primary: true },
-      { code: "E11.9", description: "Type 2 diabetes mellitus without complications", primary: false }
+      { code: "E11.9", description: "Type 2 diabetes mellitus without complications", primary: false },
     ],
   
     // CPT codes
@@ -255,41 +276,32 @@ export default function EncounterToClaim() {
         code: "99214",
         description: "Office/outpatient visit, established patient, 25 min",
         fee: 125,
-        modifiers: ["25"],
         units: 1,
+        modifiers: ["25"],
         dxPointers: ["A", "B"],
-        ndc: "1234567890"
+        ndc: "1234567890",
       },
       {
         code: "93000",
         description: "Electrocardiogram, routine, w/ interpretation & report",
         fee: 40,
-        modifiers: ["59"],
         units: 1,
-        dxPointers: ["A"]
-      }
+        modifiers: ["59"],
+        dxPointers: ["A"],
+      },
     ],
   
     // Financials
     totalCharges: 165,
-    copayCollected: 20, // optional but realistic
-  
-    // Optional programs
-    rpm: {
-      minutes: 22,
-      daysOfReading: 18
-    },
-    ccm: {
-      minutes: 30,
-      careTeamInvolved: ["Nurse A", "Care Coordinator B"]
-    },
+    copayCollected: 20,
   
     // Signatures
     signatures: {
       providerOnFile: true,
-      patientOnFile: true
-    }
+      patientOnFile: true,
+    },
   });
+  
   
   // const [claimData, setClaimData] = useState<ClaimData | null>(null);
   const [claimData, setClaimData] = useState<ClaimData>({
@@ -304,207 +316,196 @@ export default function EncounterToClaim() {
   });
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Calculate total charges when CPT codes change
-  useEffect(() => {
-    const total = encounterData.cptCodes.reduce((sum, cpt) => sum + cpt.fee, 0);
-    setEncounterData(prev => ({ ...prev, totalCharges: total }));
-  }, [encounterData.cptCodes]);
-
-  const addIcdCode = (icd: { code: string; description: string }) => {
-    if (!encounterData.icdCodes.find(existing => existing.code === icd.code)) {
-      setEncounterData(prev => ({
-        ...prev,
-        icdCodes: [...prev.icdCodes, { ...icd, primary: prev.icdCodes.length === 0 }]
-      }));
-    }
-  };
-
-  const addCptCode = (cpt: { code: string; description: string; fee: number }) => {
-    if (!encounterData.cptCodes.find(existing => existing.code === cpt.code)) {
-      setEncounterData(prev => ({
-        ...prev,
-        cptCodes: [...prev.cptCodes, { ...cpt, dxPointers: ['A', 'B'] }]
-      }));
-    }
-  };
-
-  const removeIcdCode = (code: string) => {
-    setEncounterData(prev => ({
-      ...prev,
-      icdCodes: prev.icdCodes.filter(icd => icd.code !== code)
-    }));
-  };
-  const togglePrimaryIcd = (code: string) => {
-    setEncounterData(prev => ({
-      ...prev,
-      icdCodes: prev.icdCodes.map(icd => ({
-        ...icd,
-        primary: icd.code === code
-      }))
-    }));
-  };
-  
-  const updateCpt = (code: string, updates: Partial<EncounterData["cptCodes"][0]>) => {
-    setEncounterData(prev => ({
-      ...prev,
-      cptCodes: prev.cptCodes.map(cpt =>
-        cpt.code === code ? { ...cpt, ...updates } : cpt
-      ),
-    }));
-  };
-
-  const removeCptCode = (code: string) => {
-    setEncounterData(prev => ({
-      ...prev,
-      cptCodes: prev.cptCodes.filter(cpt => cpt.code !== code)
-    }));
-  };
-
-  const validateAndCreateClaim = async () => {
-    setIsProcessing(true);
-    
-    try {
-      const response = await createClaimFromEncounterApi(encounterData, token);
-      
-      if (response && response.success) {
-        setClaimData({
-          claimId: response.data.claimId,
-          status: response.data.status,
-          validationScore: response.data.validationScore,
-          resubmissionCode: response.data.resubmissionCode,
-          estimatedReimbursement: response.data.estimatedReimbursement,
-          issues: response.data.issues
-        });
-        setCurrentStep(4);
-      }
-    } catch (error) {
-      console.error('Error creating claim:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const submitClaim = async () => {
-    if (!claimData) return;
-    
-    setIsProcessing(true);
-    
-    try {
-      const response = await submitClaimApi(claimData.claimId, token);
-      
-      if (response && response.success) {
-        setClaimData(prev => prev ? { ...prev, status: 'submitted' } : null);
-      }
-    } catch (error) {
-      console.error('Error submitting claim:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const renderStepIndicator = () => (
-    <div className="flex items-center justify-between mb-6">
-      {[
-        { step: 1, title: 'Patient & Provider', icon: User },
-        { step: 2, title: 'SOAP Documentation', icon: FileText },
-        { step: 3, title: 'Medical Coding', icon: Calendar },
-        { step: 4, title: 'Claim Review', icon: DollarSign }
-      ].map(({ step, title, icon: Icon }) => (
-        <div key={step} className="flex items-center">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-            currentStep >= step 
-              ? 'bg-blue-600 border-blue-600 text-white' 
-              : 'border-gray-300 text-gray-400'
-          }`}>
-            {currentStep > step ? <CheckCircle className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
-          </div>
-          <span className={`ml-2 text-sm font-medium ${
-            currentStep >= step ? 'text-blue-600' : 'text-gray-400'
-          }`}>
-            {title}
-          </span>
-          {step < 4 && <div className="w-16 h-0.5 bg-gray-300 mx-4" />}
-        </div>
-      ))}
-    </div>
-  );
-  // Generic handler for updating nested encounterData fields
+  // ✅ Generic field update handler (Step 1 & 2)
 const handleFieldChange = (field: string, value: any) => {
   setEncounterData((prev) => {
-    // Split field by dot notation, e.g. "insurance.subscriberId"
     const keys = field.split(".");
     const updated: any = { ...prev };
     let obj = updated;
 
-    // Traverse until second-to-last key
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      obj[k] = { ...obj[k] }; // clone nested object
+      obj[k] = { ...obj[k] };
       obj = obj[k];
     }
-
-    // Set the final value
     obj[keys[keys.length - 1]] = value;
-
     return updated;
   });
 };
 
-const saveClaimDraft = () => {
-  // Implement draft saving logic here
-  alert("Claim draft saved successfully!");
+// ✅ ICD Management (Step 3)
+const addIcdCode = (icd: { code: string; description: string }) => {
+  setEncounterData(prev => {
+    if (prev.icdCodes.some(existing => existing.code === icd.code)) return prev;
+    return {
+      ...prev,
+      icdCodes: [...prev.icdCodes, { ...icd, primary: prev.icdCodes.length === 0 }]
+    };
+  });
 };
+
+const removeIcdCode = (code: string) => {
+  setEncounterData(prev => ({
+    ...prev,
+    icdCodes: prev.icdCodes.filter(icd => icd.code !== code)
+  }));
+};
+
+const togglePrimaryIcd = (code: string) => {
+  setEncounterData(prev => ({
+    ...prev,
+    icdCodes: prev.icdCodes.map(icd => ({
+      ...icd,
+      primary: icd.code === code
+    }))
+  }));
+};
+
 const updateIcdCode = (
   index: number,
   updatedIcd: { code: string; description: string; primary?: boolean }
 ) => {
-  setEncounterData((prev) => {
+  setEncounterData(prev => {
     const icdCodes = [...prev.icdCodes];
     icdCodes[index] = updatedIcd;
     return { ...prev, icdCodes };
   });
 };
 
-const updateCptCode = (
-  index: number,
-  updatedCpt: { code: string; description: string; fee: number; modifiers?: string[]; units?: number; dxPointers?: string[]; ndc?: string }
-) => {
-  setEncounterData((prev) => {
-    const cptCodes = [...prev.cptCodes];
-    // Initialize dxPointers with ['A', 'B'] if not provided
-    const newCpt = {
-      ...updatedCpt,
-      dxPointers: updatedCpt.dxPointers || ['A', 'B']
+// ✅ CPT Management (Step 3)
+const addCptCode = (cpt: { code: string; description: string; fee: number }) => {
+  setEncounterData(prev => {
+    if (prev.cptCodes.some(existing => existing.code === cpt.code)) return prev;
+    return {
+      ...prev,
+      cptCodes: [...prev.cptCodes, { ...cpt, units: 1, modifiers: [], dxPointers: ["A"] }]
     };
-    cptCodes[index] = newCpt;
-    return { ...prev, cptCodes };
   });
 };
-const toggleDxPointerLetter = (cptCode: string, pointerIndex: string) => {
+
+const removeCptCode = (code: string) => {
+  setEncounterData(prev => ({
+    ...prev,
+    cptCodes: prev.cptCodes.filter(cpt => cpt.code !== code)
+  }));
+};
+
+// Unified update for CPT (replaces old updateCpt & updateCptCode)
+const updateCptCode = (
+  code: string,
+  updates: Partial<EncounterData["cptCodes"][0]>
+) => {
+  setEncounterData(prev => ({
+    ...prev,
+    cptCodes: prev.cptCodes.map(cpt =>
+      cpt.code === code ? { ...cpt, ...updates } : cpt
+    )
+  }));
+};
+
+// Toggle Dx Pointers
+const toggleDxPointerLetter = (cptCode: string, pointer: string) => {
   setEncounterData(prev => ({
     ...prev,
     cptCodes: prev.cptCodes.map(cpt => {
-      if (cpt.code === cptCode) {
-        const dxPointers = cpt.dxPointers ?? [];
-        const index = dxPointers.indexOf(pointerIndex);
-        if (index > -1) {
-          // Remove the pointer if it exists
-          return { 
-            ...cpt, 
-            dxPointers: dxPointers.filter(i => i !== pointerIndex) 
-          };
-        } else {
-          // Add the pointer if it doesn't exist
-          return { 
-            ...cpt, 
-            dxPointers: [...dxPointers, pointerIndex] 
-          };
-        }
-      }
-      return cpt;
+      if (cpt.code !== cptCode) return cpt;
+      const dxPointers = cpt.dxPointers ?? [];
+      return dxPointers.includes(pointer)
+        ? { ...cpt, dxPointers: dxPointers.filter(p => p !== pointer) }
+        : { ...cpt, dxPointers: [...dxPointers, pointer] };
     }),
   }));
 };
+
+// ✅ Auto update total charges when CPTs change
+useEffect(() => {
+  const total = encounterData.cptCodes.reduce((sum, cpt) => sum + (cpt.fee * (cpt.units || 1)), 0);
+  setEncounterData(prev => ({ ...prev, totalCharges: total }));
+}, [encounterData.cptCodes]);
+
+// ✅ Claim Processing (Step 4)
+const validateAndCreateClaim = async () => {
+  setIsProcessing(true);
+  try {
+    const response = await createClaimFromEncounterApi(encounterData, token);
+    if (response?.success) {
+      setClaimData({
+        claimId: response.data.claimId,
+        status: response.data.status,
+        validationScore: response.data.validationScore,
+        resubmissionCode: response.data.resubmissionCode,
+        estimatedReimbursement: response.data.estimatedReimbursement,
+        issues: response.data.issues
+      });
+      setCurrentStep(4);
+    }
+  } catch (error) {
+    console.error("Error creating claim:", error);
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
+const submitClaim = async () => {
+  if (!claimData) return;
+  setIsProcessing(true);
+  try {
+    const response = await submitClaimApi(claimData.claimId, token);
+    if (response?.success) {
+      setClaimData(prev => prev ? { ...prev, status: "submitted" } : null);
+    }
+  } catch (error) {
+    console.error("Error submitting claim:", error);
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
+const saveClaimDraft = () => {
+  // could persist to backend
+  alert("Claim draft saved successfully!");
+};
+// ✅ Step indicator UI
+const renderStepIndicator = () => (
+  <div className="flex items-center justify-between mb-6">
+    {[
+      { step: 1, title: 'Patient & Provider', icon: User },
+      { step: 2, title: 'SOAP Documentation', icon: FileText },
+      { step: 3, title: 'Medical Coding', icon: Calendar },
+      { step: 4, title: 'Claim Review', icon: DollarSign }
+    ].map(({ step, title, icon: Icon }) => (
+      <div key={step} className="flex items-center">
+        <div
+          className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+            currentStep >= step
+              ? 'bg-blue-600 border-blue-600 text-white'
+              : 'border-gray-300 text-gray-400'
+          }`}
+        >
+          {currentStep > step ? (
+            <CheckCircle className="w-5 h-5" />
+          ) : (
+            <Icon className="w-5 h-5" />
+          )}
+        </div>
+        <span
+          className={`ml-2 text-sm font-medium ${
+            currentStep >= step ? 'text-blue-600' : 'text-gray-400'
+          }`}
+        >
+          {title}
+        </span>
+        {step < 4 && <div className="w-16 h-0.5 bg-gray-300 mx-4" />}
+      </div>
+    ))}
+  </div>
+);
+function handleClaimChange(field: string, value: any) {
+  setClaimData(prev => ({
+    ...prev,
+    [field]: value
+  }));
+}
 
 return (
   <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -518,7 +519,7 @@ return (
     {renderStepIndicator()}
 
     {/* Step 1: Patient & Provider Information */}
-{currentStep === 1 && (
+    {currentStep === 1 && (
   <Card>
     <CardHeader>
       <CardTitle className="flex items-center gap-2">
@@ -549,7 +550,7 @@ return (
       <section>
         <h3 className="text-lg font-semibold mb-2">Prior Authorization / Occurrence</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Prior Auth Number */}
+          {/* Prior Auth Number (CMS-1500 Box 23) */}
           <div>
             <Label htmlFor="priorAuthNumber">Prior Authorization Number</Label>
             <Input
@@ -557,16 +558,13 @@ return (
               type="text"
               value={encounterData.priorAuthNumber || ""}
               onChange={(e) =>
-                setEncounterData((prev) => ({
-                  ...prev,
-                  priorAuthNumber: e.target.value,
-                }))
+                setEncounterData((prev) => ({ ...prev, priorAuthNumber: e.target.value }))
               }
               placeholder="Enter prior auth #"
             />
           </div>
 
-          {/* Occurrence Code */}
+          {/* Occurrence Code (custom/UB-04 style if your payer needs it) */}
           <div>
             <Label htmlFor="occurrenceCode">Occurrence Code</Label>
             <Select
@@ -596,10 +594,7 @@ return (
               type="date"
               value={encounterData.occurrenceDate || ""}
               onChange={(e) =>
-                setEncounterData((prev) => ({
-                  ...prev,
-                  occurrenceDate: e.target.value,
-                }))
+                setEncounterData((prev) => ({ ...prev, occurrenceDate: e.target.value }))
               }
             />
           </div>
@@ -617,10 +612,7 @@ return (
               type="date"
               value={encounterData.dateOfService}
               onChange={(e) =>
-                setEncounterData((prev) => ({
-                  ...prev,
-                  dateOfService: e.target.value,
-                }))
+                setEncounterData((prev) => ({ ...prev, dateOfService: e.target.value }))
               }
             />
           </div>
@@ -653,10 +645,7 @@ return (
             id="chiefComplaint"
             value={encounterData.chiefComplaint}
             onChange={(e) =>
-              setEncounterData((prev) => ({
-                ...prev,
-                chiefComplaint: e.target.value,
-              }))
+              setEncounterData((prev) => ({ ...prev, chiefComplaint: e.target.value }))
             }
             placeholder="E.g. Patient reports headache for 3 days..."
             rows={2}
@@ -668,13 +657,22 @@ return (
       <div className="flex justify-end pt-4">
         <Button
           onClick={() => setCurrentStep(2)}
-          disabled={
-            !encounterData.patientId || 
-            !encounterData.patientName || 
-            !encounterData.provider?.providerId ||
-            !encounterData.dateOfService ||
-            !encounterData.placeOfService
-          }
+          // disabled={
+          //   !encounterData.patientId ||
+          //   !encounterData.patientName ||
+          //   !encounterData.dob ||
+          //   !encounterData.sex ||
+          //   !encounterData.patientPhone ||
+          //   !encounterData.insurance?.subscriberId ||
+          //   !encounterData.insurance?.payerId ||
+          //   !encounterData.dateOfService ||
+          //   !encounterData.placeOfService ||
+          //   !encounterData.renderingProvider?.npi ||
+          //   !encounterData.billingProvider?.npi ||      // CMS-1500 Box 33a
+          //   !encounterData.billingProvider?.address ||  // CMS-1500 Box 33
+          //   (!encounterData.serviceFacility?.npi &&     // CMS-1500 Box 32 (required if different)
+          //     encounterData.placeOfService !== "11")
+          // }
         >
           Next: SOAP Documentation
         </Button>
@@ -684,95 +682,127 @@ return (
 )}
 
 
+
 {/* Step 2: SOAP Documentation */}
 {currentStep === 2 && (
   <Card>
     <CardHeader>
       <CardTitle className="flex items-center gap-2">
-        <FileText className="w-5 h-5" />
-        Encounter Documentation
+        SOAP Documentation & Clinical Notes
       </CardTitle>
     </CardHeader>
-    <CardContent className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Subjective */}
+    <CardContent className="space-y-6">
+      
+      {/* Chief Complaint (from Step 1, but editable here too) */}
+      <section>
+        <Label htmlFor="chiefComplaint">Chief Complaint</Label>
+        <Textarea
+          id="chiefComplaint"
+          value={encounterData.chiefComplaint || ""}
+          onChange={(e) =>
+            setEncounterData((prev) => ({ ...prev, chiefComplaint: e.target.value }))
+          }
+          rows={2}
+          placeholder="E.g. Follow-up for hypertension and diabetes..."
+        />
+      </section>
+
+      {/* SOAP Notes */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="subjective">Subjective</Label>
+          <Label>Subjective</Label>
           <Textarea
-            id="subjective"
-            value={encounterData.subjective ?? ""}
+            value={encounterData.subjective || ""}
             onChange={(e) =>
               setEncounterData((prev) => ({ ...prev, subjective: e.target.value }))
             }
-            placeholder="Patient's description of symptoms, history of present illness..."
-            rows={4}
+            placeholder="Patient reports headache, dizziness, chest pain..."
+            rows={3}
           />
         </div>
 
-        {/* Objective */}
         <div>
-          <Label htmlFor="objective">Objective</Label>
+          <Label>Objective</Label>
           <Textarea
-            id="objective"
-            value={encounterData.objective ?? ""}
+            value={encounterData.objective || ""}
             onChange={(e) =>
               setEncounterData((prev) => ({ ...prev, objective: e.target.value }))
             }
-            placeholder="Physical exam findings, vitals, test results..."
-            rows={4}
+            placeholder="Vitals, exam findings, labs..."
+            rows={3}
           />
         </div>
+      </section>
 
-        {/* Assessment */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="assessment">Assessment</Label>
+          <Label>Assessment</Label>
           <Textarea
-            id="assessment"
-            value={encounterData.assessment ?? ""}
+            value={encounterData.assessment || ""}
             onChange={(e) =>
               setEncounterData((prev) => ({ ...prev, assessment: e.target.value }))
             }
-            placeholder="Clinical impression, diagnosis..."
+            placeholder="Diagnosis summary..."
             rows={3}
           />
         </div>
 
-        {/* Plan */}
         <div>
-          <Label htmlFor="plan">Plan</Label>
+          <Label>Plan</Label>
           <Textarea
-            id="plan"
-            value={encounterData.plan ?? ""}
+            value={encounterData.plan || ""}
             onChange={(e) =>
               setEncounterData((prev) => ({ ...prev, plan: e.target.value }))
             }
-            placeholder="Treatment plan, medications, follow-up instructions..."
+            placeholder="Treatment plan, follow-up instructions..."
             rows={3}
           />
         </div>
+      </section>
 
-        {/* Findings */}
-        <div className="col-span-2">
-          <Label htmlFor="findings">Findings</Label>
-          <Textarea
-            id="findings"
-            value={encounterData.findings ?? ""}
-            onChange={(e) =>
-              setEncounterData((prev) => ({ ...prev, findings: e.target.value }))
-            }
-            placeholder="Additional clinical findings, lab interpretations, imaging results..."
-            rows={4}
-          />
-        </div>
-      </div>
+      {/* Additional Findings */}
+      <section>
+        <Label>Additional Findings</Label>
+        <Textarea
+          value={encounterData.additionalFindings || ""}
+          onChange={(e) =>
+            setEncounterData((prev) => ({ ...prev, additionalFindings: e.target.value }))
+          }
+          placeholder="Free-text notes: imaging results, extended observations, etc."
+          rows={3}
+        />
+      </section>
+
+      {/* Lock for Audit */}
+      <section className="flex items-center gap-2 pt-2">
+        <input
+          type="checkbox"
+          checked={encounterData.lockedForAudit || false}
+          onChange={(e) =>
+            setEncounterData((prev) => ({
+              ...prev,
+              lockedForAudit: e.target.checked,
+            }))
+          }
+        />
+        <Label>Lock Documentation (prevents further edits after claim submission)</Label>
+      </section>
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={() => setCurrentStep(1)}>
           Back
         </Button>
-        <Button onClick={() => setCurrentStep(3)}>
-          Next
+        <Button
+          onClick={() => setCurrentStep(3)}
+          disabled={
+            !encounterData.subjective ||
+            !encounterData.objective ||
+            !encounterData.assessment ||
+            !encounterData.plan
+          }
+        >
+          Next: Coding & Charges
         </Button>
       </div>
     </CardContent>
@@ -786,204 +816,205 @@ return (
   <Card>
     <CardHeader>
       <CardTitle className="flex items-center gap-2">
-        <Calendar className="w-5 h-5" />
-        Medical Coding
+        Coding & Charges
       </CardTitle>
     </CardHeader>
-    <CardContent>
-      <Tabs defaultValue="diagnosis" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="diagnosis">Diagnosis Codes (ICD-10)</TabsTrigger>
-          <TabsTrigger value="procedure">Procedure Codes (CPT)</TabsTrigger>
-        </TabsList>
+    <CardContent className="space-y-8">
 
-        {/* Diagnosis Codes */}
-        <TabsContent value="diagnosis" className="space-y-4">
-          <div>
-            <h4 className="font-medium mb-2">Common ICD-10 Codes</h4>
-            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
-              {COMMON_ICD10_CODES.map(icd => (
-                <div key={icd.code} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <span className="font-mono text-sm">{icd.code}</span>
-                    <span className="ml-2 text-sm text-gray-600">{icd.description}</span>
-                  </div>
-                  <Button size="sm" onClick={() => addIcdCode(icd)} disabled={encounterData.icdCodes.length >= 12}>
-                    Add
-                  </Button>
-                </div>
-              ))}
+      {/* ICD-10 Section */}
+      <section>
+        <h3 className="text-lg font-semibold mb-2">Diagnoses (ICD-10)</h3>
+        <div className="space-y-3">
+          {encounterData.icdCodes?.map((dx, index) => (
+            <div key={index} className="grid grid-cols-6 gap-2 items-center">
+              <Input
+                placeholder="ICD-10 Code"
+                value={dx.code}
+                onChange={(e) => {
+                  const updated = [...encounterData.icdCodes];
+                  updated[index].code = e.target.value;
+                  setEncounterData((prev) => ({ ...prev, icdCodes: updated }));
+                }}
+              />
+              <Input
+                placeholder="Description"
+                value={dx.description}
+                onChange={(e) => {
+                  const updated = [...encounterData.icdCodes];
+                  updated[index].description = e.target.value;
+                  setEncounterData((prev) => ({ ...prev, icdCodes: updated }));
+                }}
+              />
+              <Select
+                value={dx.primary ? "yes" : "no"}
+                onValueChange={(val) => {
+                  const updated = encounterData.icdCodes.map((d, i) => ({
+                    ...d,
+                    primary: i === index ? val === "yes" : false, // only one primary
+                  }));
+                  setEncounterData((prev) => ({ ...prev, icdCodes: updated }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Primary?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Primary</SelectItem>
+                  <SelectItem value="no">Secondary</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  const updated = [...encounterData.icdCodes];
+                  updated.splice(index, 1);
+                  setEncounterData((prev) => ({ ...prev, icdCodes: updated }));
+                }}
+              >
+                Remove
+              </Button>
             </div>
-          </div>
+          ))}
+          <Button
+            variant="outline"
+            onClick={() =>
+              setEncounterData((prev) => ({
+                ...prev,
+                icdCodes: [...(prev.icdCodes || []), { code: "", description: "", primary: false }],
+              }))
+            }
+          >
+            + Add Diagnosis
+          </Button>
+        </div>
+      </section>
 
-          <Separator />
+{/* CPT/HCPCS Section */}
+<section>
+  <h3 className="text-lg font-semibold mb-2">Procedures (CPT / HCPCS)</h3>
 
-          <div>
-            <h4 className="font-medium mb-2">Selected Diagnosis Codes (A–L)</h4>
-            {encounterData.icdCodes.length === 0 ? (
-              <p className="text-gray-500 text-sm">No diagnosis codes selected</p>
-            ) : (
-              <div className="space-y-2">
-                {encounterData.icdCodes.map((icd, idx) => (
-                  <div key={icd.code} className="flex items-center gap-2 mb-2">
-                    <Input
-                      className="w-28"
-                      value={icd.code}
-                      onChange={(e) => updateIcdCode(idx, { ...icd, code: e.target.value })}
-                    />
-                    <Input
-                      className="flex-1"
-                      value={icd.description}
-                      onChange={(e) =>
-                        updateIcdCode(idx, { ...icd, description: e.target.value })
-                      }
-                    />
-                    <Checkbox
-                      checked={icd.primary}
-                      onChange={(e) =>
-                        updateIcdCode(idx, { ...icd, primary: Boolean(e.target.value) })
-                      }
-                    />
-                    <span className="text-sm">Primary</span>
-                    <Button size="sm" variant="outline" onClick={() => removeIcdCode(icd.code)}>
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+  {/* Table Header */}
+  <div className="grid grid-cols-7 gap-2 font-semibold text-sm text-gray-600 mb-2">
+    <span>CPT Code</span>
+    <span>Fee</span>
+    <span>Units</span>
+    <span>Modifiers</span>
+    <span>DX Pointers</span>
+    <span>NDC</span>
+    <span>Action</span>
+  </div>
 
-        {/* Procedure Codes */}
-        <TabsContent value="procedure" className="space-y-4">
-          <div>
-            <h4 className="font-medium mb-2">Common CPT Codes</h4>
-            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
-              {COMMON_CPT_CODES.map(cpt => (
-                <div key={cpt.code} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <span className="font-mono text-sm">{cpt.code}</span>
-                    <span className="ml-2 text-sm text-gray-600">{cpt.description}</span>
-                    <span className="ml-2 text-sm font-medium text-green-600">${cpt.fee}</span>
-                  </div>
-                  <Button size="sm" onClick={() => addCptCode(cpt)}>Add</Button>
-                </div>
-              ))}
-            </div>
-          </div>
+  <div className="space-y-3">
+    {encounterData.cptCodes?.map((proc, index) => (
+      <div key={index} className="grid grid-cols-7 gap-2 items-center">
+        <Input
+          placeholder="CPT Code"
+          value={proc.code}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].code = e.target.value;
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Input
+          type="number"
+          placeholder="Fee"
+          value={proc.fee}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].fee = parseFloat(e.target.value) || 0;
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Input
+          type="number"
+          placeholder="Units"
+          value={proc.units}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].units = parseInt(e.target.value) || 1;
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Input
+          placeholder="Modifiers"
+          value={proc.modifiers?.join(",") || ""}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].modifiers = e.target.value.split(",").map((m) => m.trim());
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Input
+          placeholder="DX Pointers"
+          value={proc.dxPointers?.join(",") || ""}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].dxPointers = e.target.value.split(",").map((p) => p.trim());
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Input
+          placeholder="NDC"
+          value={proc.ndc || ""}
+          onChange={(e) => {
+            const updated = [...encounterData.cptCodes];
+            updated[index].ndc = e.target.value;
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        />
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            const updated = [...encounterData.cptCodes];
+            updated.splice(index, 1);
+            setEncounterData((prev) => ({ ...prev, cptCodes: updated }));
+          }}
+        >
+          Remove
+        </Button>
+      </div>
+    ))}
+    <Button
+      variant="outline"
+      onClick={() =>
+        setEncounterData((prev) => ({
+          ...prev,
+          cptCodes: [
+            ...(prev.cptCodes || []),
+            { code: "", fee: 0, units: 1, modifiers: [], dxPointers: [] },
+          ],
+        }))
+      }
+    >
+      + Add Procedure
+    </Button>
+  </div>
+</section>
 
-          <Separator />
 
-          <div>
-            <h4 className="font-medium mb-2">Selected Procedure Codes</h4>
-            {encounterData.cptCodes.length === 0 ? (
-              <p className="text-gray-500 text-sm">No procedure codes selected</p>
-            ) : (
-              <div className="space-y-4">
-                {encounterData.cptCodes.map(cpt => (
-                  <div key={cpt.code} className="p-3 bg-green-50 rounded space-y-3">
-                    <div className="flex justify-between">
-                      <div>
-                        <span className="font-mono text-sm">{cpt.code}</span>
-                        <span className="ml-2 text-sm">{cpt.description}</span>
-                        <span className="ml-2 text-sm font-medium text-green-600">${cpt.fee}</span>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => removeCptCode(cpt.code)}>
-                        Remove
-                      </Button>
-                    </div>
-
-                    {/* Units */}
-                    <div className="flex items-center gap-2">
-                      <Label>Units:</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={cpt.units ?? 1}
-                        onChange={(e) => updateCpt(cpt.code, { units: parseInt(e.target.value) })}
-                        className="w-20"
-                      />
-                    </div>
-
-                    {/* Modifiers */}
-                    <div className="flex items-center gap-2">
-                      <Label>Modifiers:</Label>
-                      <Input
-                        type="text"
-                        placeholder="e.g., 25, 59"
-                        value={cpt.modifiers?.join(", ") ?? ""}
-                        onChange={(e) =>
-                          updateCpt(cpt.code, { modifiers: e.target.value.split(",").map(m => m.trim()) })
-                        }
-                        className="w-48"
-                      />
-                    </div>
-
-                    {/* DX Pointers (CMS-1500 Box 24E Letters A–L) */}
-                    <div>
-                      <Label className="mb-1 block">Diagnosis Pointers (A–L):</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {encounterData.icdCodes.map((icd, idx) => {
-                          const letter = String.fromCharCode(65 + idx);
-                          return (
-                            <label key={icd.code} className="flex items-center gap-1 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={cpt.dxPointers?.includes(letter) || false}
-                                onChange={() => toggleDxPointerLetter(cpt.code, letter)}
-                              />
-                              {letter}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* NDC Info */}
-                    {cpt.code.startsWith("J") && (
-                      <div className="flex items-center gap-2">
-                        <Label>NDC:</Label>
-                        <Input
-                          type="text"
-                          placeholder="e.g., 0002-8215-01"
-                          value={(cpt as any).ndc ?? ""}
-                          onChange={(e) => updateCpt(cpt.code, { ndc: e.target.value })}
-                          className="w-64"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Total Charges */}
-                <div className="pt-2 border-t flex justify-between items-center">
-                  <span className="font-medium">Total Charges:</span>
-                  <span className="text-lg font-bold text-green-600">
-                    ${encounterData.totalCharges.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+      {/* Financial Summary */}
+      <section className="pt-4">
+        <Label>Total Charges</Label>
+        <Input
+          type="number"
+          value={encounterData.totalCharges || 0}
+          readOnly
+        />
+      </section>
 
       {/* Navigation */}
-      <div className="flex justify-between mt-6">
-        <Button variant="outline" onClick={() => setCurrentStep(2)}>Back</Button>
+      <div className="flex justify-between pt-4">
+        <Button variant="outline" onClick={() => setCurrentStep(2)}>
+          Back
+        </Button>
         <Button
-          onClick={async () => setCurrentStep(4)}
-          disabled={encounterData.icdCodes.length === 0 || encounterData.cptCodes.length === 0 || isProcessing}
+          onClick={() => setCurrentStep(4)}
+          disabled={!encounterData.icdCodes?.length || !encounterData.cptCodes?.length}
         >
-          {isProcessing ? (
-            <>
-              <Clock className="w-4 h-4 mr-2 animate-spin" />
-              Validating...
-            </>
-          ) : (
-            "Next"
-          )}
+          Next: Claim Review
         </Button>
       </div>
     </CardContent>
@@ -991,311 +1022,169 @@ return (
 )}
 
 
-      {/* Step 4: Claim Review */}
-      {currentStep === 4 && claimData && (
-  <Card>
+{/* Step 4: Claim Review */}
+{currentStep === 4 && (
+  <Card className="mt-4 p-4">
     <CardHeader>
-      <CardTitle className="flex items-center gap-2">
-        <DollarSign className="w-5 h-5" />
+      <CardTitle className="text-2xl font-semibold flex items-center gap-2">
         Claim Review & Submission
       </CardTitle>
     </CardHeader>
+
+    <ClaimInfoSection data={claimData} onChange={handleClaimChange} />
+
     <CardContent className="space-y-6">
 
-      {/* Top summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="text-center p-4 bg-blue-50 rounded-lg">
-          <div className="text-2xl font-bold text-blue-600">
-            {claimData.validationScore}%
-          </div>
-          <div className="text-sm text-gray-600">Validation Score</div>
+      {/* ---------------- Patient & Insurance ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Patient & Insurance</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div><span className="font-medium">Patient:</span> {encounterData.patientName} (DOB: {encounterData.dob})</div>
+          <div><span className="font-medium">Sex:</span> {encounterData.sex}</div>
+          <div><span className="font-medium">Address:</span> {encounterData.address}</div>
+          <div><span className="font-medium">Payer ID:</span> {encounterData.insurance?.payerId}</div>
+          <div><span className="font-medium">Subscriber ID:</span> {encounterData.insurance?.subscriberId}</div>
+          <div><span className="font-medium">Group #:</span> {encounterData.insurance?.groupNumber}</div>
+          <div><span className="font-medium">Relationship:</span> {encounterData.insurance?.relationship}</div>
         </div>
-        <div className="text-center p-4 bg-green-50 rounded-lg">
-          <div className="text-2xl font-bold text-green-600">
-            ${claimData.estimatedReimbursement.toFixed(2)}
-          </div>
-          <div className="text-sm text-gray-600">Est. Reimbursement</div>
-        </div>
-        <div className="text-center p-4 bg-gray-50 rounded-lg">
-          <div className="text-2xl font-bold text-gray-600">{claimData.claimId}</div>
-          <div className="text-sm text-gray-600">Claim ID</div>
-        </div>
-      </div>
-      <div className="my-4 border-t border-b py-4">
-  <div className="grid grid-cols-2 gap-4 text-sm">
-    {/* Empty left column to push content right */}
-    <div></div>
+      </section>
 
-    {/* Resubmission Code on Right */}
-    <div>
-      <Label htmlFor="resubmissionCode">
-        Resubmission Code (CMS-1500 Box 22)
-      </Label>
-      <Select
-        value={claimData.resubmissionCode?.toString() || ""}
-        onValueChange={(value) =>
-          setClaimData((prev) => ({ ...prev, resubmissionCode: Number(value) }))
-        }
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select Resubmission Code" />
-        </SelectTrigger>
-        <SelectContent>
-          {RESUBMISSION_CODES.map((code) => (
-            <SelectItem key={code.code} value={code.code.toString()}>
-              {code.code} – {code.description}
-            </SelectItem>
+      {/* ---------------- Provider ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Provider</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div><span className="font-medium">Rendering NPI:</span> {encounterData.renderingProvider?.npi}</div>
+          <div><span className="font-medium">Rendering TIN:</span> {encounterData.renderingProvider?.tin}</div>
+          <div><span className="font-medium">Billing Org:</span> {encounterData.billingProvider?.organization}</div>
+          <div><span className="font-medium">Billing TIN:</span> {encounterData.billingProvider?.tin}</div>
+          <div><span className="font-medium">Billing Address:</span> {encounterData.billingProvider?.address}</div>
+          <div><span className="font-medium">Billing Phone:</span> {encounterData.billingProvider?.phone}</div>
+          {encounterData.referringProvider?.npi && (
+            <div><span className="font-medium">Referring NPI:</span> {encounterData.referringProvider?.npi}</div>
+          )}
+          {encounterData.supervisingProvider?.npi && (
+            <div><span className="font-medium">Supervising NPI:</span> {encounterData.supervisingProvider?.npi}</div>
+          )}
+        </div>
+      </section>
+
+      {/* ---------------- Diagnoses ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Diagnoses (ICD-10)</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          {encounterData.icdCodes?.map((dx, i) => (
+            <div key={i} className="mb-1">
+              <span className="font-medium">{dx.code}</span>: {dx.description} {dx.primary ? "(Primary)" : ""}
+            </div>
           ))}
-        </SelectContent>
-      </Select>
-    </div>
+        </div>
+      </section>
+
+      {/* ---------------- Procedures ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Procedures (CPT/HCPCS)</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse border border-gray-300">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 border">Code</th>
+                <th className="p-2 border">Description</th>
+                <th className="p-2 border">Fee</th>
+                <th className="p-2 border">Units</th>
+                <th className="p-2 border">Modifiers</th>
+                <th className="p-2 border">DX Ptrs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {encounterData.cptCodes?.map((proc, i) => (
+                <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                  <td className="p-2 border">{proc.code}</td>
+                  <td className="p-2 border">{proc.description}</td>
+                  <td className="p-2 border">${proc.fee}</td>
+                  <td className="p-2 border">{proc.units}</td>
+                  <td className="p-2 border">{proc.modifiers?.join(", ")}</td>
+                  <td className="p-2 border">{proc.dxPointers?.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ---------------- Financials ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Financials</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div><span className="font-medium">Total Charges:</span> ${encounterData.totalCharges}</div>
+          <div><span className="font-medium">Copay Collected:</span> ${encounterData.copayCollected || 0}</div>
+        </div>
+      </section>
+
+      {/* ---------------- Signatures ---------------- */}
+      <section className="p-4 border rounded-md bg-gray-50">
+        <h3 className="text-lg font-medium mb-3 border-b pb-2">Signatures</h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={encounterData.signatures?.providerOnFile || false}
+              onChange={(e) =>
+                setEncounterData((prev) => ({
+                  ...prev,
+                  signatures: { ...prev.signatures, providerOnFile: e.target.checked },
+                }))
+              }
+            />
+            <Label>Provider Signature on File</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={encounterData.signatures?.patientOnFile || false}
+              onChange={(e) =>
+                setEncounterData((prev) => ({
+                  ...prev,
+                  signatures: { ...prev.signatures, patientOnFile: e.target.checked },
+                }))
+              }
+            />
+            <Label>Patient Signature on File</Label>
+          </div>
+        </div>
+      </section>
+
+{/* ---------------- Navigation + Submit + Export ---------------- */}
+<div className="flex justify-between pt-6 space-x-4">
+  <Button variant="outline" onClick={() => setCurrentStep(3)}>
+    Back
+  </Button>
+
+  <div className="flex space-x-2">
+    {/* Export to CMS-1500 */}
+    {/* <Button
+      variant="secondary"
+      onClick={() => handleExportCMS(encounterData)}
+    >
+      Export CMS-1500
+    </Button> */}
+
+    {/* Submit Claim */}
+    <Button
+      onClick={() => console.log("Submitting claim:", encounterData)}
+      disabled={
+        !encounterData.signatures?.providerOnFile ||
+        !encounterData.signatures?.patientOnFile
+      }
+    >
+      Submit Claim
+    </Button>
   </div>
 </div>
-
-
-
-      {/* Patient / Provider / Encounter */}
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <Label>Patient Name</Label>
-          <Input
-            value={encounterData.patientName}
-            onChange={(e) => handleFieldChange("patientName", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Patient ID</Label>
-          <Input
-            value={encounterData.patientId}
-            onChange={(e) => handleFieldChange("patientId", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Provider Name</Label>
-          <Input
-            value={encounterData.provider?.providerName}
-            onChange={(e) =>
-              handleFieldChange("provider", {
-                ...encounterData.provider,
-                providerName: e.target.value,
-              })
-            }
-          />
-        </div>
-        <div>
-          <Label>Provider ID</Label>
-          <Input
-            value={encounterData.provider?.providerId}
-            onChange={(e) =>
-              handleFieldChange("provider", {
-                ...encounterData.provider,
-                providerId: e.target.value,
-              })
-            }
-          />
-        </div>
-        <div>
-          <Label>Date of Service</Label>
-          <Input
-            type="date"
-            value={encounterData.dateOfService}
-            onChange={(e) => handleFieldChange("dateOfService", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Place of Service</Label>
-          <Input
-            value={encounterData.placeOfService}
-            onChange={(e) => handleFieldChange("placeOfService", e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* ICD Codes */}
-      <div>
-        <h4 className="font-medium">Diagnosis Codes</h4>
-        {encounterData.icdCodes.map((icd, idx) => (
-          <div key={icd.code} className="flex items-center gap-2 mb-2">
-            <Input
-              className="w-28"
-              value={icd.code}
-              onChange={(e) => updateIcdCode(idx, { ...icd, code: e.target.value })}
-            />
-            <Input
-              className="flex-1"
-              value={icd.description}
-              onChange={(e) =>
-                updateIcdCode(idx, { ...icd, description: e.target.value })
-              }
-            />
-            <Checkbox
-              checked={icd.primary}
-              onChange={(e) =>
-                updateIcdCode(idx, { ...icd, primary: Boolean(e.target.checked) })
-              }
-            />
-            <span className="text-sm">Primary</span>
-            <Button size="sm" variant="outline" onClick={() => removeIcdCode(icd.code)}>
-              Remove
-            </Button>
-          </div>
-        ))}
-      </div>
-
-      {/* CPT Codes */}
-      <div>
-        <h4 className="font-medium mb-3">Procedure Codes</h4>
-        {encounterData.cptCodes.map((cpt, idx) => (
-          <div
-            key={cpt.code}
-            className="space-y-2 mb-4 p-3 border rounded bg-gray-50"
-          >
-            <div className="grid grid-cols-6 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">CPT Code</label>
-                <Input
-                  className="w-full"
-                  value={cpt.code}
-                  onChange={(e) =>
-                    updateCptCode(idx, { ...cpt, code: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-xs font-medium mb-1">Description</label>
-                <Input
-                  className="w-full"
-                  value={cpt.description}
-                  onChange={(e) =>
-                    updateCptCode(idx, { ...cpt, description: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1">Units</label>
-                <Input
-                  type="number"
-                  className="w-full"
-                  value={cpt.units ?? 1}
-                  onChange={(e) =>
-                    updateCptCode(idx, { ...cpt, units: Number(e.target.value) })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1">Fee ($)</label>
-                <Input
-                  type="number"
-                  className="w-full"
-                  value={cpt.fee}
-                  onChange={(e) =>
-                    updateCptCode(idx, { ...cpt, fee: Number(e.target.value) })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Modifiers</label>
-                <Input
-                  placeholder="Comma separated"
-                  value={cpt.modifiers?.join(", ") || ""}
-                  onChange={(e) =>
-                    updateCptCode(idx, {
-                      ...cpt,
-                      modifiers: e.target.value
-                        .split(",")
-                        .map((m) => m.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1">DX Pointers</label>
-                <Input
-                  placeholder="Comma separated letters"
-                  value={cpt.dxPointers?.join(", ") || ""}
-                  onChange={(e) =>
-                    updateCptCode(idx, {
-                      ...cpt,
-                      dxPointers: e.target.value
-                        .split(",")
-                        .map((n) => n.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1">NDC</label>
-                <Input
-                  placeholder="If applicable"
-                  value={cpt.ndc || ""}
-                  onChange={(e) =>
-                    updateCptCode(idx, { ...cpt, ndc: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* Total charges */}
-        <div className="pt-2 border-t flex justify-between items-center">
-          <span className="font-medium">Total Charges:</span>
-          <span className="text-lg font-bold text-green-600">
-            $
-            {encounterData.cptCodes
-              .reduce((sum, c) => sum + (c.fee || 0) * (c.units || 1), 0)
-              .toFixed(2)}
-          </span>
-        </div>
-      </div>
-
-
-      {/* Action Buttons */}
-      <div className="flex justify-between mt-6">
-        <Button variant="outline" onClick={() => setCurrentStep(3)}>
-          Back to Coding
-        </Button>
-        <div className="space-x-2">
-          <Button variant="outline" onClick={saveClaimDraft}>
-            Save as Draft
-          </Button>
-          <Button
-            onClick={submitClaim}
-            disabled={
-              claimData.status === "submitted" ||
-              claimData.issues.some((i) => i.type === "error") ||
-              isProcessing
-            }
-          >
-            {isProcessing ? (
-              <>
-                <Clock className="w-4 h-4 mr-2 animate-spin" />
-                Submitting...
-              </>
-            ) : claimData.status === "submitted" ? (
-              <>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Submitted
-              </>
-            ) : (
-              "Submit Claim"
-            )}
-          </Button>
-        </div>
-      </div>
     </CardContent>
   </Card>
 )}
+
+
 
 
 
