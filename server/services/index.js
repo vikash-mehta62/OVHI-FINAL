@@ -21,7 +21,7 @@ const billingRoutes = require("./billings/billingRoutes");
 const ccmRoutes = require("./ccm/ccmRoutes");
 const encountersRoutes = require("./encounters/encounterRoutes");
 const devicesRoutes = require("./devices/devicesRoutes");
-const { getConsentDetails, submitConsentForm,uploadConsentForms } = require("./patients/patientCtrl2");
+const { getConsentDetails, submitConsentForm, uploadConsentForms } = require("./patients/patientCtrl2");
 const thirdPartyApiRoutes = require("./third-party-apis/api-routes");
 const generalRoutes = require("./general-apis/generalRoutes");
 const unifiedRCMRoutes = require("../routes/unifiedRCMRoutes");
@@ -30,6 +30,7 @@ const paymentRoutes = require("./payments/paymentRoutes");
 const analyticsRoutes = require("./analytics/analyticsRoutes");
 const rpmRoutes = require("./rpm/rpmRoutes");
 const mipsRoutes = require("../routes/mipsRoutes");
+const userRoutes = require("./user/userRoutes");
 
 
 
@@ -49,19 +50,20 @@ router.use('/appointment', verifyToken, appointmentRoutes);
 router.use('/location', verifyToken, locationRoute);
 router.use('/work-flow', verifyToken, workFlowRoutes);
 router.use('/mio', mioRoutes);
-router.use("/twilio",verifyToken, twilioRoutes);
-router.use("/documents",verifyToken, documentRoutes);
-router.use("/billing",verifyToken, billingRoutes);
-router.use("/ccm",verifyToken, ccmRoutes);
-router.use("/encounters",verifyToken, encountersRoutes);
-router.use("/devices",verifyToken, devicesRoutes);
+router.use("/twilio", verifyToken, twilioRoutes);
+router.use("/documents", verifyToken, documentRoutes);
+router.use("/billing", verifyToken, billingRoutes);
+router.use("/ccm", verifyToken, ccmRoutes);
+router.use("/encounters", verifyToken, encountersRoutes);
+router.use("/devices", verifyToken, devicesRoutes);
 router.get("/ehr/consent-form", getConsentDetails);
 router.post('/ehr/consent-form', submitConsentForm);
 router.post('/ehr/upload-consent-form', uploadConsentForms);
+router.use("/users", verifyToken, userRoutes);
 //for third Party APIs !IMPORTANT
-router.use("/client",thirdPartyApiRoutes);
+router.use("/client", thirdPartyApiRoutes);
 //for Testing
-router.use("/general",generalRoutes);
+router.use("/general", generalRoutes);
 // Unified RCM Routes
 router.use("/rcm", verifyToken, unifiedRCMRoutes);
 
