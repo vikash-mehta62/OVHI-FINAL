@@ -15,6 +15,12 @@ const {
   updateClaimStatus,
   bulkUpdateClaimStatus,
   getClaimById,
+  getDetailedClaimById,
+  correctAndResubmitClaim,
+  fileAppeal,
+  transferToPatient,
+  addClaimComment,
+  voidClaim,
   postPayment,
   getPaymentPostingData,
   getARAgingReport,
@@ -194,6 +200,30 @@ router.get('/claims/:claimId',
 
 /**
  * @swagger
+ * /api/v1/rcm/claims/{claimId}/detailed:
+ *   get:
+ *     summary: Get detailed claim information with history and comments
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     responses:
+ *       200:
+ *         description: Detailed claim information retrieved successfully
+ *       404:
+ *         description: Claim not found
+ */
+router.get('/claims/:claimId/detailed',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  asyncHandler(getDetailedClaimById)
+);
+
+/**
+ * @swagger
  * /api/v1/rcm/claims/{claimId}/status:
  *   put:
  *     summary: Update claim status
@@ -263,6 +293,185 @@ router.post('/claims/bulk-update',
   sanitizationMiddleware,
   ValidationMiddleware.validateBulkUpdateClaimStatus,
   asyncHandler(bulkUpdateClaimStatus)
+);
+
+// =====================================================
+// CLAIM ACTION ROUTES
+// =====================================================
+
+/**
+ * @swagger
+ * /api/v1/rcm/claims/{claimId}/correct-resubmit:
+ *   post:
+ *     summary: Correct and resubmit claim
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - correction_reason
+ *             properties:
+ *               correction_reason:
+ *                 type: string
+ *                 description: Reason for correction
+ *     responses:
+ *       200:
+ *         description: Claim corrected and resubmitted successfully
+ */
+router.post('/claims/:claimId/correct-resubmit',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  asyncHandler(correctAndResubmitClaim)
+);
+
+/**
+ * @swagger
+ * /api/v1/rcm/claims/{claimId}/appeal:
+ *   post:
+ *     summary: File appeal for claim
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - appeal_reason
+ *             properties:
+ *               appeal_reason:
+ *                 type: string
+ *                 description: Reason for appeal
+ *     responses:
+ *       200:
+ *         description: Appeal filed successfully
+ */
+router.post('/claims/:claimId/appeal',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  asyncHandler(fileAppeal)
+);
+
+/**
+ * @swagger
+ * /api/v1/rcm/claims/{claimId}/transfer-patient:
+ *   post:
+ *     summary: Transfer claim to patient responsibility
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - transfer_reason
+ *             properties:
+ *               transfer_reason:
+ *                 type: string
+ *                 description: Reason for transfer
+ *     responses:
+ *       200:
+ *         description: Claim transferred to patient successfully
+ */
+router.post('/claims/:claimId/transfer-patient',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  asyncHandler(transferToPatient)
+);
+
+/**
+ * @swagger
+ * /api/v1/rcm/claims/{claimId}/comment:
+ *   post:
+ *     summary: Add comment to claim
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - comment
+ *             properties:
+ *               comment:
+ *                 type: string
+ *                 description: Comment text
+ *     responses:
+ *       200:
+ *         description: Comment added successfully
+ */
+router.post('/claims/:claimId/comment',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  asyncHandler(addClaimComment)
+);
+
+/**
+ * @swagger
+ * /api/v1/rcm/claims/{claimId}/void:
+ *   post:
+ *     summary: Void claim
+ *     tags: [RCM Claims]
+ *     parameters:
+ *       - in: path
+ *         name: claimId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - void_reason
+ *             properties:
+ *               void_reason:
+ *                 type: string
+ *                 description: Reason for voiding
+ *     responses:
+ *       200:
+ *         description: Claim voided successfully
+ */
+router.post('/claims/:claimId/void',
+  ValidationMiddleware.validatePositiveIntegerParam('claimId'),
+  sanitizationMiddleware,
+  asyncHandler(voidClaim)
 );
 
 // =====================================================

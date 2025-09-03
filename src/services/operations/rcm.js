@@ -122,6 +122,151 @@ export const bulkUpdateClaimsAPI = async (token, claimIds, status) => {
   }
 };
 
+// Claim Actions
+export const correctAndResubmitClaimAPI = async (token, claimId, correctionReason) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/${claimId}/correct-resubmit`,
+      { correction_reason: correctionReason },
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to correct and resubmit claim");
+    }
+
+    toast.success("Claim corrected and resubmitted successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Correct and Resubmit Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to correct and resubmit claim");
+    return null;
+  }
+};
+
+export const fileAppealAPI = async (token, claimId, appealReason) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/${claimId}/appeal`,
+      { appeal_reason: appealReason },
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to file appeal");
+    }
+
+    toast.success("Appeal filed successfully");
+    return response.data;
+  } catch (error) {
+    console.error("File Appeal API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to file appeal");
+    return null;
+  }
+};
+
+export const transferToPatientAPI = async (token, claimId, transferReason) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/${claimId}/transfer-patient`,
+      { transfer_reason: transferReason },
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to transfer claim to patient");
+    }
+
+    toast.success("Claim transferred to patient responsibility successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Transfer to Patient API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to transfer claim to patient");
+    return null;
+  }
+};
+
+export const addClaimCommentAPI = async (token, claimId, comment) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/${claimId}/comment`,
+      { comment },
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to add comment");
+    }
+
+    toast.success("Comment added successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Add Claim Comment API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to add comment");
+    return null;
+  }
+};
+
+export const voidClaimAPI = async (token, claimId, voidReason) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      `${RCM_CLAIMS_API}/${claimId}/void`,
+      { void_reason: voidReason },
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to void claim");
+    }
+
+    toast.success("Claim voided successfully");
+    return response.data;
+  } catch (error) {
+    console.error("Void Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to void claim");
+    return null;
+  }
+};
+
+// Get Detailed Claim Information
+export const getDetailedClaimAPI = async (token, claimId) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${RCM_CLAIMS_API}/${claimId}/detailed`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Failed to fetch detailed claim information");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("Get Detailed Claim API Error:", error);
+    toast.error(error?.response?.data?.message || "Failed to fetch detailed claim information");
+    return null;
+  }
+};
+
 // A/R Aging Report
 export const getARAgingReportAPI = async (token) => {
   try {

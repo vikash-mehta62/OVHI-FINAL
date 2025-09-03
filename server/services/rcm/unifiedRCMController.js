@@ -217,6 +217,207 @@ class UnifiedRCMController {
     }
   }
 
+  /**
+   * Get detailed claim information with history, comments, and related data
+   */
+  async getDetailedClaimById(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { user_id: userId } = req.user;
+
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      const detailedClaim = await this.service.getDetailedClaimById(claimId, userId);
+
+      if (!detailedClaim) {
+        return ResponseHelpers.sendNotFound(res, 'Claim', claimId);
+      }
+
+      ResponseHelpers.sendSuccess(res, detailedClaim, 'Detailed claim information retrieved successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Get detailed claim by ID');
+    }
+  }
+
+  // =====================================================
+  // CLAIM ACTIONS
+  // =====================================================
+
+  /**
+   * Correct and resubmit claim
+   */
+  async correctAndResubmitClaim(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { correction_reason: correctionReason } = req.body;
+      const { user_id: userId } = req.user;
+
+      // Validate required fields
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      if (!correctionReason || correctionReason.trim() === '') {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'correction_reason', message: 'Correction reason is required' }
+        ]);
+      }
+
+      const result = await this.service.correctAndResubmitClaim(claimId, {
+        correctionReason: correctionReason.trim(),
+        userId
+      });
+
+      ResponseHelpers.sendSuccess(res, result, 'Claim corrected and resubmitted successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Correct and resubmit claim');
+    }
+  }
+
+  /**
+   * File appeal for claim
+   */
+  async fileAppeal(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { appeal_reason: appealReason } = req.body;
+      const { user_id: userId } = req.user;
+
+      // Validate required fields
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      if (!appealReason || appealReason.trim() === '') {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'appeal_reason', message: 'Appeal reason is required' }
+        ]);
+      }
+
+      const result = await this.service.fileAppeal(claimId, {
+        appealReason: appealReason.trim(),
+        userId
+      });
+
+      ResponseHelpers.sendSuccess(res, result, 'Appeal filed successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'File appeal');
+    }
+  }
+
+  /**
+   * Transfer claim to patient responsibility
+   */
+  async transferToPatient(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { transfer_reason: transferReason } = req.body;
+      const { user_id: userId } = req.user;
+
+      // Validate required fields
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      if (!transferReason || transferReason.trim() === '') {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'transfer_reason', message: 'Transfer reason is required' }
+        ]);
+      }
+
+      const result = await this.service.transferToPatient(claimId, {
+        transferReason: transferReason.trim(),
+        userId
+      });
+
+      ResponseHelpers.sendSuccess(res, result, 'Claim transferred to patient responsibility successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Transfer to patient');
+    }
+  }
+
+  /**
+   * Add comment to claim
+   */
+  async addClaimComment(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { comment } = req.body;
+      const { user_id: userId } = req.user;
+
+      // Validate required fields
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      if (!comment || comment.trim() === '') {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'comment', message: 'Comment is required' }
+        ]);
+      }
+
+      const result = await this.service.addClaimComment(claimId, {
+        comment: comment.trim(),
+        userId
+      });
+
+      ResponseHelpers.sendSuccess(res, result, 'Comment added successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Add claim comment');
+    }
+  }
+
+  /**
+   * Void claim
+   */
+  async voidClaim(req, res) {
+    try {
+      const claimId = parseInt(req.params.claimId);
+      const { void_reason: voidReason } = req.body;
+      const { user_id: userId } = req.user;
+
+      // Validate required fields
+      if (!claimId || isNaN(claimId)) {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'claimId', message: 'Valid claim ID is required' }
+        ]);
+      }
+
+      if (!voidReason || voidReason.trim() === '') {
+        return ResponseHelpers.sendValidationError(res, [
+          { field: 'void_reason', message: 'Void reason is required' }
+        ]);
+      }
+
+      const result = await this.service.voidClaim(claimId, {
+        voidReason: voidReason.trim(),
+        userId
+      });
+
+      ResponseHelpers.sendSuccess(res, result, 'Claim voided successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Void claim');
+    }
+  }
+
   // =====================================================
   // PAYMENT PROCESSING
   // =====================================================
@@ -758,6 +959,14 @@ module.exports = {
   updateClaimStatus: unifiedRCMController.updateClaimStatus.bind(unifiedRCMController),
   bulkUpdateClaimStatus: unifiedRCMController.bulkUpdateClaimStatus.bind(unifiedRCMController),
   getClaimById: unifiedRCMController.getClaimById.bind(unifiedRCMController),
+  getDetailedClaimById: unifiedRCMController.getDetailedClaimById.bind(unifiedRCMController),
+
+  // Claim Actions
+  correctAndResubmitClaim: unifiedRCMController.correctAndResubmitClaim.bind(unifiedRCMController),
+  fileAppeal: unifiedRCMController.fileAppeal.bind(unifiedRCMController),
+  transferToPatient: unifiedRCMController.transferToPatient.bind(unifiedRCMController),
+  addClaimComment: unifiedRCMController.addClaimComment.bind(unifiedRCMController),
+  voidClaim: unifiedRCMController.voidClaim.bind(unifiedRCMController),
   
   // Payment Processing
   postPayment: unifiedRCMController.postPayment.bind(unifiedRCMController),

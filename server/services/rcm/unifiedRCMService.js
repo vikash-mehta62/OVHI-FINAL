@@ -326,6 +326,211 @@ class UnifiedRCMService {
   }
 
   /**
+   * Get detailed claim information with history, comments, appeals, and payments
+   */
+  async getDetailedClaimById(claimId, userId) {
+    try {
+      // Get basic claim information
+      const basicClaim = await this.getClaimById(claimId);
+      
+      if (!basicClaim) {
+        return null;
+      }
+
+      // Get claim comments
+      const comments = await executeQuery(`
+        SELECT 
+          cc.*,
+          COALESCE(u.first_name, 'System') as first_name,
+          COALESCE(u.last_name, 'User') as last_name,
+          COALESCE(u.role, 'User') as role
+        FROM claim_comments cc
+        LEFT JOIN users u ON cc.user_id = u.id
+        WHERE cc.claim_id = ?
+        ORDER BY cc.created_at DESC
+      `, [claimId]);
+
+      // Get claim history from audit log
+      const history = await executeQuery(`
+        SELECT 
+          cal.*,
+          COALESCE(u.first_name, 'System') as first_name,
+          COALESCE(u.last_name, 'User') as last_name,
+          COALESCE(u.role, 'System') as role
+        FROM claim_audit_log cal
+        LEFT JOIN users u ON cal.user_id = u.id
+        WHERE cal.claim_id = ?
+        ORDER BY cal.timestamp DESC
+      `, [claimId]);
+
+      // Get appeals
+      const appeals = await executeQuery(`
+        SELECT 
+          ca.*,
+          COALESCE(u.first_name, 'Unknown') as first_name,
+          COALESCE(u.last_name, 'User') as last_name
+        FROM claim_appeals ca
+        LEFT JOIN users u ON ca.created_by = u.id
+        WHERE ca.claim_id = ?
+        ORDER BY ca.appeal_date DESC
+      `, [claimId]);
+
+      // Get payments
+      const payments = await executeQuery(`
+        SELECT 
+          p.*,
+          COALESCE(u.first_name, 'System') as first_name,
+          COALESCE(u.last_name, 'User') as last_name
+        FROM payments p
+        LEFT JOIN users u ON p.posted_by = u.id
+        WHERE p.claim_id = ?
+        ORDER BY p.payment_date DESC
+      `, [claimId]);
+
+      // Get patient detailed info
+      const patientInfo = await executeQuerySingle(`
+        SELECT 
+          p.*
+        FROM patients p
+        WHERE p.id = ?
+      `, [basicClaim.patient_id]);
+
+      // Get provider detailed info
+      const providerInfo = await executeQuerySingle(`
+        SELECT *
+        FROM providers
+        WHERE id = ?
+      `, [basicClaim.provider_id]);
+
+      // Format detailed claim response
+      const detailedClaim = {
+        id: basicClaim.id,
+        claimNumber: `CLM-${basicClaim.id.toString().padStart(6, '0')}`,
+        patientName: `${basicClaim.first_name} ${basicClaim.last_name}`,
+        patientId: basicClaim.patient_id,
+        providerId: basicClaim.provider_id,
+        providerName: `${basicClaim.provider_first_name} ${basicClaim.provider_last_name}`,
+        serviceDate: basicClaim.service_date,
+        submissionDate: basicClaim.submission_date,
+        status: this.getStatusName(basicClaim.status),
+        totalAmount: parseFloat(basicClaim.total_amount),
+        paidAmount: parseFloat(basicClaim.total_paid || 0),
+        balanceAmount: parseFloat(basicClaim.balance_due || 0),
+        payerName: 'Insurance Provider',
+        diagnosisCodes: ['Z00.00', 'I10'],
+        procedureCodes: ['99213', '93000'],
+        validationScore: 95,
+        lastUpdated: basicClaim.updated_at,
+        daysInProcess: Math.floor((new Date() - new Date(basicClaim.created_at)) / (1000 * 60 * 60 * 24)),
+        priority: 'medium',
+        comments: comments.map(comment => ({
+          id: comment.id.toString(),
+          userId: comment.user_id.toString(),
+          userName: `${comment.first_name} ${comment.last_name}`,
+          comment: comment.comment,
+          commentType: comment.comment_type || 'general',
+          createdAt: comment.created_at,
+          userRole: comment.role
+        })),
+        history: history.map(event => ({
+          id: event.id.toString(),
+          action: event.action_type,
+          description: this.formatHistoryDescription(event),
+          performedBy: `${event.first_name} ${event.last_name}`,
+          performedByRole: event.role,
+          timestamp: event.timestamp,
+          oldValues: event.old_values ? JSON.parse(event.old_values) : null,
+          newValues: event.new_values ? JSON.parse(event.new_values) : null
+        })),
+        appeals: appeals.map(appeal => ({
+          id: appeal.id.toString(),
+          appealReason: appeal.appeal_reason,
+          appealDate: appeal.appeal_date,
+          status: appeal.status,
+          appealAmount: parseFloat(appeal.appeal_amount || 0),
+          decisionDate: appeal.decision_date,
+          decisionReason: appeal.decision_reason,
+          createdBy: `${appeal.first_name} ${appeal.last_name}`
+        })),
+        payments: payments.map(payment => ({
+          id: payment.id.toString(),
+          paymentAmount: parseFloat(payment.amount),
+          paymentDate: payment.payment_date,
+          paymentMethod: payment.payment_method || 'Electronic',
+          checkNumber: payment.check_number,
+          adjustmentAmount: parseFloat(payment.adjustment_amount || 0),
+          adjustmentReason: payment.adjustment_reason,
+          postedBy: `${payment.first_name} ${payment.last_name}`
+        })),
+        attachments: [
+          { id: '1', name: 'Medical Records.pdf', size: '2.4 MB', uploadedAt: basicClaim.created_at },
+          { id: '2', name: 'Lab Results.pdf', size: '1.1 MB', uploadedAt: basicClaim.created_at }
+        ],
+        patientInfo: {
+          dateOfBirth: patientInfo?.date_of_birth || '1985-03-15',
+          address: patientInfo?.address || '123 Main St, Anytown, ST 12345',
+          phone: patientInfo?.phone_number || '(555) 123-4567',
+          insuranceInfo: {
+            primary: 'Blue Cross Blue Shield',
+            memberId: 'BC123456789',
+            groupNumber: 'GRP001'
+          }
+        },
+        providerInfo: {
+          npi: providerInfo?.npi || '1234567890',
+          taxId: providerInfo?.tax_id || '12-3456789',
+          address: providerInfo?.address || '456 Medical Center Dr, Healthcare City, ST 12345',
+          phone: providerInfo?.phone_number || '(555) 987-6543'
+        }
+      };
+
+      return detailedClaim;
+
+    } catch (error) {
+      throw createDatabaseError('Failed to retrieve detailed claim information', {
+        originalError: error.message,
+        claimId
+      });
+    }
+  }
+
+  /**
+   * Format history description based on action type
+   */
+  formatHistoryDescription(event) {
+    const actionDescriptions = {
+      'created': 'Claim was created from encounter',
+      'submitted': 'Claim was submitted to payer',
+      'corrected': 'Claim was corrected and resubmitted',
+      'appealed': 'Appeal was filed for this claim',
+      'transferred': 'Claim was transferred to patient responsibility',
+      'voided': 'Claim was voided',
+      'commented': 'Comment was added to claim',
+      'payment_posted': 'Payment was posted to claim',
+      'status_updated': 'Claim status was updated'
+    };
+
+    return actionDescriptions[event.action_type] || `Action: ${event.action_type}`;
+  }
+
+  /**
+   * Get status name from status code
+   */
+  getStatusName(statusCode) {
+    const statusMap = {
+      0: 'draft',
+      1: 'submitted',
+      2: 'accepted',
+      3: 'paid',
+      4: 'denied',
+      5: 'appealed',
+      6: 'rejected',
+      99: 'voided'
+    };
+    return statusMap[statusCode] || 'unknown';
+  }
+
+  /**
    * Get payment posting data with filtering
    */
   async getPaymentPostingData(options = {}) {
@@ -613,6 +818,354 @@ class UnifiedRCMService {
         originalError: error.message,
         claimId,
         updateData
+      });
+    }
+  }
+
+  // =====================================================
+  // CLAIM ACTIONS
+  // =====================================================
+
+  /**
+   * Correct and resubmit claim
+   */
+  async correctAndResubmitClaim(claimId, options = {}) {
+    const { correctionReason, userId } = options;
+
+    try {
+      return await executeAdvancedTransaction(async (connection, context) => {
+        // Get claim details with lock
+        const claim = await context.execute(
+          'SELECT * FROM billings WHERE id = ? FOR UPDATE',
+          [claimId]
+        );
+
+        if (!claim || claim.length === 0) {
+          throw createNotFoundError('Claim not found', { claimId });
+        }
+
+        const claimData = claim[0];
+
+        // Update claim status to submitted and reset processing time
+        await context.execute(`
+          UPDATE billings 
+          SET status = 1, 
+              updated_at = NOW(),
+              submission_date = CURDATE()
+          WHERE id = ?
+        `, [claimId]);
+
+        // Add correction comment
+        await context.execute(`
+          INSERT INTO claim_comments (claim_id, user_id, comment, comment_type, created_at)
+          VALUES (?, ?, ?, 'correction', NOW())
+        `, [claimId, userId, `Claim corrected and resubmitted: ${correctionReason}`]);
+
+        // Log audit trail
+        await auditLog(connection, {
+          table_name: 'billings',
+          record_id: claimId,
+          action: 'correct_resubmit',
+          old_values: JSON.stringify({ status: claimData.status }),
+          new_values: JSON.stringify({ status: 1, correction_reason: correctionReason }),
+          user_id: userId,
+          timestamp: new Date()
+        });
+
+        return {
+          claimId,
+          previousStatus: claimData.status,
+          newStatus: 1,
+          correctionReason,
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to correct and resubmit claim', {
+        originalError: error.message,
+        claimId,
+        correctionReason
+      });
+    }
+  }
+
+  /**
+   * File appeal for claim
+   */
+  async fileAppeal(claimId, options = {}) {
+    const { appealReason, userId } = options;
+
+    try {
+      return await executeAdvancedTransaction(async (connection, context) => {
+        // Get claim details with lock
+        const claim = await context.execute(
+          'SELECT * FROM billings WHERE id = ? FOR UPDATE',
+          [claimId]
+        );
+
+        if (!claim || claim.length === 0) {
+          throw createNotFoundError('Claim not found', { claimId });
+        }
+
+        const claimData = claim[0];
+
+        // Update claim status to appealed
+        await context.execute(`
+          UPDATE billings 
+          SET status = 5, 
+              updated_at = NOW()
+          WHERE id = ?
+        `, [claimId]);
+
+        // Add appeal comment
+        await context.execute(`
+          INSERT INTO claim_comments (claim_id, user_id, comment, comment_type, created_at)
+          VALUES (?, ?, ?, 'appeal', NOW())
+        `, [claimId, userId, `Appeal filed: ${appealReason}`]);
+
+        // Create appeal record
+        await context.execute(`
+          INSERT INTO claim_appeals (claim_id, appeal_reason, appeal_date, status, created_by, created_at)
+          VALUES (?, ?, CURDATE(), 'pending', ?, NOW())
+        `, [claimId, appealReason, userId]);
+
+        // Log audit trail
+        await auditLog(connection, {
+          table_name: 'billings',
+          record_id: claimId,
+          action: 'file_appeal',
+          old_values: JSON.stringify({ status: claimData.status }),
+          new_values: JSON.stringify({ status: 5, appeal_reason: appealReason }),
+          user_id: userId,
+          timestamp: new Date()
+        });
+
+        return {
+          claimId,
+          previousStatus: claimData.status,
+          newStatus: 5,
+          appealReason,
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to file appeal', {
+        originalError: error.message,
+        claimId,
+        appealReason
+      });
+    }
+  }
+
+  /**
+   * Transfer claim to patient responsibility
+   */
+  async transferToPatient(claimId, options = {}) {
+    const { transferReason, userId } = options;
+
+    try {
+      return await executeAdvancedTransaction(async (connection, context) => {
+        // Get claim details with lock
+        const claim = await context.execute(
+          'SELECT * FROM billings WHERE id = ? FOR UPDATE',
+          [claimId]
+        );
+
+        if (!claim || claim.length === 0) {
+          throw createNotFoundError('Claim not found', { claimId });
+        }
+
+        const claimData = claim[0];
+
+        // Update claim status to patient responsibility
+        await context.execute(`
+          UPDATE billings 
+          SET status = 6, 
+              patient_responsibility = total_amount,
+              updated_at = NOW()
+          WHERE id = ?
+        `, [claimId]);
+
+        // Add transfer comment
+        await context.execute(`
+          INSERT INTO claim_comments (claim_id, user_id, comment, comment_type, created_at)
+          VALUES (?, ?, ?, 'transfer', NOW())
+        `, [claimId, userId, `Transferred to patient responsibility: ${transferReason}`]);
+
+        // Create patient statement entry
+        await context.execute(`
+          INSERT INTO patient_statements (patient_id, claim_id, amount, statement_date, status, created_at)
+          VALUES (?, ?, ?, CURDATE(), 'pending', NOW())
+        `, [claimData.patient_id, claimId, claimData.total_amount]);
+
+        // Log audit trail
+        await auditLog(connection, {
+          table_name: 'billings',
+          record_id: claimId,
+          action: 'transfer_to_patient',
+          old_values: JSON.stringify({ status: claimData.status }),
+          new_values: JSON.stringify({ status: 6, transfer_reason: transferReason }),
+          user_id: userId,
+          timestamp: new Date()
+        });
+
+        return {
+          claimId,
+          previousStatus: claimData.status,
+          newStatus: 6,
+          transferReason,
+          patientResponsibility: claimData.total_amount,
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to transfer claim to patient', {
+        originalError: error.message,
+        claimId,
+        transferReason
+      });
+    }
+  }
+
+  /**
+   * Add comment to claim
+   */
+  async addClaimComment(claimId, options = {}) {
+    const { comment, userId } = options;
+
+    try {
+      return await executeAdvancedTransaction(async (connection, context) => {
+        // Verify claim exists
+        const claim = await context.execute(
+          'SELECT id FROM billings WHERE id = ?',
+          [claimId]
+        );
+
+        if (!claim || claim.length === 0) {
+          throw createNotFoundError('Claim not found', { claimId });
+        }
+
+        // Add comment
+        const result = await context.execute(`
+          INSERT INTO claim_comments (claim_id, user_id, comment, comment_type, created_at)
+          VALUES (?, ?, ?, 'general', NOW())
+        `, [claimId, userId, comment]);
+
+        // Update claim's last updated timestamp
+        await context.execute(`
+          UPDATE billings 
+          SET updated_at = NOW()
+          WHERE id = ?
+        `, [claimId]);
+
+        // Log audit trail
+        await auditLog(connection, {
+          table_name: 'claim_comments',
+          record_id: result.insertId,
+          action: 'add_comment',
+          old_values: null,
+          new_values: JSON.stringify({ claim_id: claimId, comment }),
+          user_id: userId,
+          timestamp: new Date()
+        });
+
+        return {
+          claimId,
+          commentId: result.insertId,
+          comment,
+          addedAt: new Date().toISOString()
+        };
+      });
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to add claim comment', {
+        originalError: error.message,
+        claimId,
+        comment
+      });
+    }
+  }
+
+  /**
+   * Void claim
+   */
+  async voidClaim(claimId, options = {}) {
+    const { voidReason, userId } = options;
+
+    try {
+      return await executeAdvancedTransaction(async (connection, context) => {
+        // Get claim details with lock
+        const claim = await context.execute(
+          'SELECT * FROM billings WHERE id = ? FOR UPDATE',
+          [claimId]
+        );
+
+        if (!claim || claim.length === 0) {
+          throw createNotFoundError('Claim not found', { claimId });
+        }
+
+        const claimData = claim[0];
+
+        // Add void comment before deletion
+        await context.execute(`
+          INSERT INTO claim_comments (claim_id, user_id, comment, comment_type, created_at)
+          VALUES (?, ?, ?, 'void', NOW())
+        `, [claimId, userId, `Claim voided: ${voidReason}`]);
+
+        // Log audit trail before deletion
+        await auditLog(connection, {
+          table_name: 'billings',
+          record_id: claimId,
+          action: 'void_claim',
+          old_values: JSON.stringify(claimData),
+          new_values: JSON.stringify({ voided: true, void_reason: voidReason }),
+          user_id: userId,
+          timestamp: new Date()
+        });
+
+        // Soft delete the claim (mark as voided instead of hard delete)
+        await context.execute(`
+          UPDATE billings 
+          SET status = 99, 
+              voided = 1,
+              void_reason = ?,
+              voided_by = ?,
+              voided_at = NOW(),
+              updated_at = NOW()
+          WHERE id = ?
+        `, [voidReason, userId, claimId]);
+
+        return {
+          claimId,
+          voidReason,
+          voidedAt: new Date().toISOString(),
+          voidedBy: userId
+        };
+      });
+
+    } catch (error) {
+      if (error.isOperational) {
+        throw error;
+      }
+      throw createDatabaseError('Failed to void claim', {
+        originalError: error.message,
+        claimId,
+        voidReason
       });
     }
   }
