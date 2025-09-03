@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -130,7 +131,7 @@ interface DashboardData {
 }
 
 const UnifiedRCMDashboard: React.FC = () => {
-  const { token } = useSelector((state: any) => state.auth);
+  const { token } = useSelector((state: RootState) => state.auth);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState('30d');
@@ -912,91 +913,6 @@ const UnifiedRCMDashboard: React.FC = () => {
         </TabsContent>
       </Tabs>
     </div>
-  );
-};
-
-export default UnifiedRCMDashboard;
-variant = "outline"
-onClick = { handleBatchClaimValidation }
-disabled = { loading }
-className = "flex-1"
-  >
-  { loading?<RefreshCw className = "h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                    Batch Claim Validation
-                  </Button >
-                </div >
-  <div className="text-sm text-gray-500 text-center">
-    Upload CSV files or select multiple records for batch processing
-  </div>
-              </div >
-            </CardContent >
-          </Card >
-        </TabsContent >
-
-        <TabsContent value="aging">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>A/R Aging Analysis</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData?.agingData || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Amount']} />
-                  <Bar dataKey="value" fill="#F59E0B" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="payments" className="space-y-6">
-          <PaymentPostingEngine />
-        </TabsContent>
-
-        <TabsContent value="denials" className="space-y-6">
-          <DenialManagement />
-        </TabsContent>
-
-        <TabsContent value="forecasting" className="space-y-6">
-          <RevenueForecasting />
-        </TabsContent>
-
-        <TabsContent value="trends">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <TrendingUp className="h-5 w-5" />
-                <span>Revenue Trends</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={chartData?.revenueData || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, '']} />
-                  <Area type="monotone" dataKey="revenue" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="collections" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs >
-
-  {/* Footer */ }
-  < div className = "text-center text-sm text-gray-500" >
-    Last updated: { new Date(dashboardData.generatedAt).toLocaleString() }
-{ dashboardData.cached && ' (from cache)' }
-      </div >
-    </div >
   );
 };
 
