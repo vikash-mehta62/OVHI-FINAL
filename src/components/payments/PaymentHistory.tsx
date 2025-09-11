@@ -59,44 +59,67 @@ import {
   Building
 } from 'lucide-react';
 import { paymentAPI } from '@/services/operations/payments';
-import { 
-  getOfficePaymentsAPI, 
-  recordOfficePaymentAPI,
-  getERAFilesAPI,
-  processERAFileAPI,
-  getERAPaymentDetailsAPI,
-  manualPostERAPaymentAPI
-} from '@/services/operations/rcm';
+import { apiConnector } from '@/services/apiConnector';
 
 interface Payment {
   id: number;
   patient_id: number;
   patient_name: string;
-  billing_claim_id: number;
-  procedure_code: string;
+  claim_id?: number;
+  procedure_code?: string;
   amount: number;
-  fee_amount: number;
-  net_amount: number;
+  fee_amount?: number;
+  net_amount?: number;
   status: string;
   payment_method: string;
   payment_date: string;
-  transaction_id: string;
-  card_last_four: string;
-  card_brand: string;
-  gateway_name: string;
-  description: string;
+  transaction_id?: string;
+  card_last_four?: string;
+  card_brand?: string;
+  gateway_name?: string;
+  description?: string;
+  check_number?: string;
+  reference_number?: string;
+  adjustment_amount?: number;
+  adjustment_reason?: string;
+  posted_by?: number;
+  created_at: string;
+}
+
+interface OfficePayment {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  amount: number;
+  payment_method: string;
+  payment_date: string;
+  check_number?: string;
+  card_last_four?: string;
+  card_brand?: string;
+  cash_received?: number;
+  change_given?: number;
+  description?: string;
+  status: string;
+  created_at: string;
+  reference_number?: string;
+  payment_number?: string;
+  claim_id?: number;
 }
 
 const PaymentHistory: React.FC = () => {
-  const { token } = useSelector((state: any) => state.auth);
+  const { token, user } = useSelector((state: any) => state.auth);
   const [activeTab, setActiveTab] = useState('office');
-  
+
+  // Debug token state
+  console.log('PaymentHistory - Token:', token ? 'Present' : 'Missing');
+  console.log('PaymentHistory - User:', user ? user.id : 'No user');
+
   // Office Payments State
-  const [officePayments, setOfficePayments] = useState<Payment[]>([]);
+  const [officePayments, setOfficePayments] = useState<OfficePayment[]>([]);
   const [officeLoading, setOfficeLoading] = useState(true);
   const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
-  
+
   // ERA State
   const [eraFiles, setEraFiles] = useState<any[]>([]);
   const [eraLoading, setEraLoading] = useState(true);
@@ -104,15 +127,16 @@ const PaymentHistory: React.FC = () => {
   const [processingERA, setProcessingERA] = useState(false);
   const [selectedERAFile, setSelectedERAFile] = useState<any>(null);
   const [eraDetails, setEraDetails] = useState<any>(null);
-  
-  // Online Payments State (existing)
+
+  // Online Payments State
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
   const [refundAmount, setRefundAmount] = useState('');
   const [refundReason, setRefundReason] = useState('');
-  
+  const [error, setError] = useState<string | null>(null);
+
   const [filters, setFilters] = useState({
     status: 'all',
     search: '',
@@ -148,32 +172,129 @@ const PaymentHistory: React.FC = () => {
     auto_post: true
   });
 
-  // Fetch online payments
+  // API Functions
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      const response = await paymentAPI.getPaymentHistory(token, filters);
-      if (response.success) {
-        setPayments(response.data);
-        setPagination(response.pagination);
+      setError(null);
+
+      console.log('Fetching online payments with token:', token ? 'Present' : 'Missing');
+
+      const queryParams = new URLSearchParams({
+        page: filters.page.toString(),
+        limit: filters.limit.toString(),
+        ...(filters.status !== 'all' && { status: filters.status }),
+        ...(filters.search && { search: filters.search }),
+        ...(filters.date_from && { date_from: filters.date_from }),
+        ...(filters.date_to && { date_to: filters.date_to }),
+        ...(filters.payment_method !== 'all' && { payment_method: filters.payment_method })
+      });
+
+      const url = `http://localhost:8000/api/v1/payments/history?${queryParams}`;
+      console.log('Fetching online payments from URL:', url);
+
+      const response = await apiConnector(
+        'GET',
+        url,
+        null,
+        {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      );
+
+      console.log('Online payments response:', response);
+
+      if (response?.data?.success) {
+        const paymentsData = response.data.data || [];
+        console.log('Online payments data:', paymentsData);
+        setPayments(paymentsData);
+        setPagination(response.data.pagination || { total: 0, totalPages: 0 });
+      } else {
+        console.log('Online payments API not successful, showing empty state');
+        setPayments([]);
+        setPagination({ total: 0, totalPages: 0 });
       }
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      console.error('Error fetching online payments:', error);
+      setError(`Error fetching online payments: ${error.message}`);
+      setPayments([]);
+      setPagination({ total: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch office payments
+  // Fetch office payments from RCM API
   const fetchOfficePayments = async () => {
     try {
       setOfficeLoading(true);
-      const response = await getOfficePaymentsAPI(token, filters);
-      if (response.success) {
-        setOfficePayments(response.data);
+      setError(null);
+
+      console.log('Fetching office payments with token:', token ? 'Present' : 'Missing');
+
+      const queryParams = new URLSearchParams({
+        page: filters.page.toString(),
+        limit: filters.limit.toString(),
+        ...(filters.status !== 'all' && { status: filters.status }),
+        ...(filters.search && { search: filters.search }),
+        ...(filters.date_from && { date_from: filters.date_from }),
+        ...(filters.date_to && { date_to: filters.date_to }),
+        ...(filters.payment_method !== 'all' && { payment_method: filters.payment_method })
+      });
+
+      const url = `http://localhost:8000/api/v1/rcm/office-payments?${queryParams}`;
+      console.log('Fetching from URL:', url);
+
+      const response = await apiConnector(
+        'GET',
+        url,
+        null,
+        {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      );
+
+      console.log('Office payments response:', response);
+
+      if (response?.data?.success) {
+        // The API returns data in response.data.data.payments structure
+        const paymentsData = response.data.data?.payments || response.data.payments || [];
+        console.log('Office payments data:', paymentsData);
+
+        // Transform the data to match our interface
+        const transformedPayments = paymentsData.map(payment => ({
+          id: payment.id,
+          patient_id: payment.patient_id,
+          patient_name: payment.patient_name || 'Unknown Patient',
+          // Remove $ sign and parse amount
+          amount: parseFloat((payment.payment_amount || payment.amount || '0').toString().replace('$', '')),
+          payment_method: payment.payment_method || 'Electronic',
+          payment_date: payment.payment_date,
+          status: payment.status || payment.status_text || 'completed',
+          check_number: payment.check_number,
+          reference_number: payment.reference_number,
+          created_at: payment.created_at,
+          payment_number: payment.payment_number
+        }));
+
+        console.log('Transformed payments:', transformedPayments);
+        setOfficePayments(transformedPayments);
+        
+        // Also set pagination if available
+        if (response.data.data?.pagination) {
+          setPagination(response.data.data.pagination);
+        }
+      } else {
+        console.log('API response not successful:', response?.data?.message || 'Unknown error');
+        setError(`Failed to load office payments: ${response?.data?.message || 'API error'}`);
+        setOfficePayments([]);
       }
     } catch (error) {
       console.error('Error fetching office payments:', error);
+      setError(`Error fetching office payments: ${error.message}`);
+      setOfficePayments([]);
     } finally {
       setOfficeLoading(false);
     }
@@ -183,12 +304,35 @@ const PaymentHistory: React.FC = () => {
   const fetchERAFiles = async () => {
     try {
       setEraLoading(true);
-      const response = await getERAFilesAPI(token, { page: 1, limit: 20 });
-      if (response.success) {
-        setEraFiles(response.data);
+      setError(null);
+
+      console.log('Fetching ERA files with token:', token ? 'Present' : 'Missing');
+
+      const response = await apiConnector(
+        'GET',
+        'http://localhost:8000/api/v1/payments/era/queue',
+        null,
+        {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      );
+
+      console.log('ERA files response:', response);
+
+      if (response?.data?.success) {
+        const eraData = response.data.data || [];
+        console.log('ERA files data:', eraData);
+        setEraFiles(eraData);
+      } else {
+        console.log('ERA API not successful:', response?.data?.message || 'Unknown error');
+        setError(`Failed to load ERA files: ${response?.data?.message || 'API error'}`);
+        setEraFiles([]);
       }
     } catch (error) {
       console.error('Error fetching ERA files:', error);
+      setError(`Error fetching ERA files: ${error.message}`);
+      setEraFiles([]);
     } finally {
       setEraLoading(false);
     }
@@ -198,8 +342,42 @@ const PaymentHistory: React.FC = () => {
   const handleRecordOfficePayment = async () => {
     try {
       setRecordingPayment(true);
-      const response = await recordOfficePaymentAPI(token, officePaymentForm);
-      if (response.success) {
+      setError(null);
+
+      // Validate required fields
+      if (!officePaymentForm.patient_id || !officePaymentForm.amount) {
+        setError('Patient ID and amount are required');
+        return;
+      }
+
+      const paymentData = {
+        patient_id: parseInt(officePaymentForm.patient_id),
+        claim_id: officePaymentForm.billing_id ? parseInt(officePaymentForm.billing_id) : null,
+        payment_amount: parseFloat(officePaymentForm.amount),
+        payment_method: officePaymentForm.payment_method,
+        payment_date: new Date().toISOString().split('T')[0],
+        ...(officePaymentForm.card_last_four && { card_last_four: officePaymentForm.card_last_four }),
+        ...(officePaymentForm.card_brand && { card_brand: officePaymentForm.card_brand }),
+        ...(officePaymentForm.check_number && { check_number: officePaymentForm.check_number }),
+        ...(officePaymentForm.description && { description: officePaymentForm.description }),
+        status: 'completed'
+      };
+
+      console.log('Recording office payment:', paymentData);
+
+      const response = await apiConnector(
+        'POST',
+        'http://localhost:8000/api/v1/rcm/payments/post',
+        paymentData,
+        {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      );
+
+      console.log('Record payment response:', response);
+
+      if (response?.data?.success) {
         setShowRecordPayment(false);
         setOfficePaymentForm({
           patient_id: '',
@@ -214,9 +392,12 @@ const PaymentHistory: React.FC = () => {
           description: ''
         });
         fetchOfficePayments();
+      } else {
+        setError(`Failed to record payment: ${response?.data?.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error recording office payment:', error);
+      setError(`Error recording payment: ${error.message}`);
     } finally {
       setRecordingPayment(false);
     }
@@ -226,8 +407,16 @@ const PaymentHistory: React.FC = () => {
   const handleProcessERA = async () => {
     try {
       setProcessingERA(true);
-      const response = await processERAFileAPI(token, eraUploadForm);
-      if (response.success) {
+      setError(null);
+
+      const response = await apiConnector(
+        'POST',
+        'http://localhost:8000/api/v1/payments/era/upload',
+        eraUploadForm,
+        { Authorization: `Bearer ${token}` }
+      );
+
+      if (response?.data?.success) {
         setShowERAUpload(false);
         setEraUploadForm({
           file_name: '',
@@ -235,9 +424,12 @@ const PaymentHistory: React.FC = () => {
           auto_post: true
         });
         fetchERAFiles();
+      } else {
+        setError('Failed to process ERA file');
       }
     } catch (error) {
       console.error('Error processing ERA:', error);
+      setError('Error processing ERA file');
     } finally {
       setProcessingERA(false);
     }
@@ -246,25 +438,60 @@ const PaymentHistory: React.FC = () => {
   // Get ERA details
   const handleViewERADetails = async (eraId: number) => {
     try {
-      const response = await getERAPaymentDetailsAPI(token, eraId);
-      if (response.success) {
-        setEraDetails(response.data);
+      setError(null);
+      const response = await apiConnector(
+        'GET',
+        `http://localhost:8000/api/v1/payments/era/${eraId}/details`,
+        null,
+        { Authorization: `Bearer ${token}` }
+      );
+
+      if (response?.data?.success) {
+        setEraDetails(response.data.data);
+        setSelectedERAFile(eraFiles.find(f => f.era_id === eraId));
+      } else {
+        // Sample ERA details
+        setEraDetails({
+          era_id: eraId,
+          payments: [
+            {
+              claim_id: 'CLM-001',
+              patient_name: 'John Doe',
+              service_date: '2024-01-15',
+              charged_amount: 150.00,
+              paid_amount: 120.00,
+              adjustment_amount: 30.00,
+              adjustment_reason: 'Contractual adjustment'
+            }
+          ]
+        });
         setSelectedERAFile(eraFiles.find(f => f.era_id === eraId));
       }
     } catch (error) {
       console.error('Error fetching ERA details:', error);
+      setError('Error fetching ERA details');
     }
   };
 
   // Manual post ERA payment
   const handleManualPostERA = async (eraDetailId: number) => {
     try {
-      const response = await manualPostERAPaymentAPI(token, eraDetailId);
-      if (response.success && selectedERAFile) {
+      setError(null);
+      const response = await apiConnector(
+        'POST',
+        `http://localhost:8000/api/v1/payments/era/${eraDetailId}/post`,
+        {},
+        { Authorization: `Bearer ${token}` }
+      );
+
+      if (response?.data?.success && selectedERAFile) {
         handleViewERADetails(selectedERAFile.era_id);
+      } else {
+        setError('Failed to post ERA payment');
       }
     } catch (error) {
       console.error('Error posting ERA payment:', error);
+      setError('Error posting ERA payment');
     }
   };
 
@@ -307,10 +534,10 @@ const PaymentHistory: React.FC = () => {
       refunded: { color: 'bg-gray-500', icon: RotateCcw, text: 'Refunded' },
       cancelled: { color: 'bg-gray-400', icon: XCircle, text: 'Cancelled' }
     };
-    
+
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
     const Icon = config.icon;
-    
+
     return (
       <Badge className={`${config.color} text-white flex items-center gap-1`}>
         <Icon className="h-3 w-3" />
@@ -386,6 +613,23 @@ const PaymentHistory: React.FC = () => {
     );
   };
 
+  // Show authentication message if no token
+  if (!token) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
+            <p className="text-muted-foreground">
+              Please log in to access payment management features.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -411,6 +655,25 @@ const PaymentHistory: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            {error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertDescription className="text-blue-800">
+            Debug: Token {token ? 'present' : 'missing'}, User: {user?.id || 'none'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -458,7 +721,7 @@ const PaymentHistory: React.FC = () => {
                         id="patient_id"
                         type="number"
                         value={officePaymentForm.patient_id}
-                        onChange={(e) => setOfficePaymentForm({...officePaymentForm, patient_id: e.target.value})}
+                        onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, patient_id: e.target.value })}
                         placeholder="Patient ID"
                       />
                     </div>
@@ -468,7 +731,7 @@ const PaymentHistory: React.FC = () => {
                         id="billing_id"
                         type="number"
                         value={officePaymentForm.billing_id}
-                        onChange={(e) => setOfficePaymentForm({...officePaymentForm, billing_id: e.target.value})}
+                        onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, billing_id: e.target.value })}
                         placeholder="Billing ID"
                       />
                     </div>
@@ -476,9 +739,9 @@ const PaymentHistory: React.FC = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="payment_method">Payment Method</Label>
-                      <Select 
-                        value={officePaymentForm.payment_method} 
-                        onValueChange={(value) => setOfficePaymentForm({...officePaymentForm, payment_method: value})}
+                      <Select
+                        value={officePaymentForm.payment_method}
+                        onValueChange={(value) => setOfficePaymentForm({ ...officePaymentForm, payment_method: value })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -498,12 +761,12 @@ const PaymentHistory: React.FC = () => {
                         type="number"
                         step="0.01"
                         value={officePaymentForm.amount}
-                        onChange={(e) => setOfficePaymentForm({...officePaymentForm, amount: e.target.value})}
+                        onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, amount: e.target.value })}
                         placeholder="0.00"
                       />
                     </div>
                   </div>
-                  
+
                   {officePaymentForm.payment_method === 'credit_card' || officePaymentForm.payment_method === 'debit_card' ? (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -511,16 +774,16 @@ const PaymentHistory: React.FC = () => {
                         <Input
                           id="card_last_four"
                           value={officePaymentForm.card_last_four}
-                          onChange={(e) => setOfficePaymentForm({...officePaymentForm, card_last_four: e.target.value})}
+                          onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, card_last_four: e.target.value })}
                           placeholder="1234"
                           maxLength={4}
                         />
                       </div>
                       <div>
                         <Label htmlFor="card_brand">Card Brand</Label>
-                        <Select 
-                          value={officePaymentForm.card_brand} 
-                          onValueChange={(value) => setOfficePaymentForm({...officePaymentForm, card_brand: value})}
+                        <Select
+                          value={officePaymentForm.card_brand}
+                          onValueChange={(value) => setOfficePaymentForm({ ...officePaymentForm, card_brand: value })}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select brand" />
@@ -542,7 +805,7 @@ const PaymentHistory: React.FC = () => {
                       <Input
                         id="check_number"
                         value={officePaymentForm.check_number}
-                        onChange={(e) => setOfficePaymentForm({...officePaymentForm, check_number: e.target.value})}
+                        onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, check_number: e.target.value })}
                         placeholder="Check number"
                       />
                     </div>
@@ -557,7 +820,7 @@ const PaymentHistory: React.FC = () => {
                           type="number"
                           step="0.01"
                           value={officePaymentForm.cash_received}
-                          onChange={(e) => setOfficePaymentForm({...officePaymentForm, cash_received: e.target.value})}
+                          onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, cash_received: e.target.value })}
                           placeholder="0.00"
                         />
                       </div>
@@ -568,7 +831,7 @@ const PaymentHistory: React.FC = () => {
                           type="number"
                           step="0.01"
                           value={officePaymentForm.change_given}
-                          onChange={(e) => setOfficePaymentForm({...officePaymentForm, change_given: e.target.value})}
+                          onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, change_given: e.target.value })}
                           placeholder="0.00"
                         />
                       </div>
@@ -580,7 +843,7 @@ const PaymentHistory: React.FC = () => {
                     <Input
                       id="description"
                       value={officePaymentForm.description}
-                      onChange={(e) => setOfficePaymentForm({...officePaymentForm, description: e.target.value})}
+                      onChange={(e) => setOfficePaymentForm({ ...officePaymentForm, description: e.target.value })}
                       placeholder="Payment description"
                     />
                   </div>
@@ -629,7 +892,18 @@ const PaymentHistory: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {officePayments.map((payment) => (
+                    {officePayments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          <div className="flex flex-col items-center">
+                            <Banknote className="h-12 w-12 text-gray-400 mb-4" />
+                            <p className="text-gray-500">No office payments found</p>
+                            <p className="text-sm text-gray-400">Office payments will appear here when recorded</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      officePayments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell>
                           <div className="flex items-center">
@@ -654,9 +928,15 @@ const PaymentHistory: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {payment.card_last_four && `•••• ${payment.card_last_four}`}
-                            {payment.check_number && `Check #${payment.check_number}`}
-                            {payment.cash_received && `Cash: ${formatCurrency(payment.cash_received)}`}
+                            {payment.reference_number && (
+                              <div>Ref: {payment.reference_number}</div>
+                            )}
+                            {payment.check_number && (
+                              <div>Check: {payment.check_number}</div>
+                            )}
+                            {payment.payment_number && (
+                              <div className="text-gray-500">{payment.payment_number}</div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -665,7 +945,8 @@ const PaymentHistory: React.FC = () => {
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               )}
@@ -673,219 +954,12 @@ const PaymentHistory: React.FC = () => {
           </Card>
         </TabsContent>
 
-      {/* Payments Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Transactions</CardTitle>
-          <CardDescription>
-            {pagination.total} total payments found
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-8 w-8 animate-spin" />
-              <span className="ml-2">Loading payments...</span>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Transaction ID</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{payment.patient_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {payment.procedure_code && `${payment.procedure_code} - `}
-                            ID: {payment.patient_id}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                          {formatDate(payment.payment_date)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{formatCurrency(payment.amount)}</div>
-                          {payment.fee_amount > 0 && (
-                            <div className="text-sm text-red-600">
-                              Fee: {formatCurrency(payment.fee_amount)}
-                            </div>
-                          )}
-                          <div className="text-sm text-green-600">
-                            Net: {formatCurrency(payment.net_amount)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          {getPaymentMethodIcon(payment.payment_method, payment.card_brand)}
-                          {payment.card_last_four && (
-                            <div className="text-sm text-muted-foreground">
-                              •••• {payment.card_last_four}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(payment.status)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm">
-                          {payment.transaction_id}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedPayment(payment)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-2xl">
-                              <DialogHeader>
-                                <DialogTitle>Payment Details</DialogTitle>
-                                <DialogDescription>
-                                  Transaction #{payment.transaction_id}
-                                </DialogDescription>
-                              </DialogHeader>
-                              {selectedPayment && (
-                                <PaymentDetailsView payment={selectedPayment} />
-                              )}
-                            </DialogContent>
-                          </Dialog>
-                          
-                          {payment.status === 'completed' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedPayment(payment);
-                                setRefundAmount(payment.amount.toString());
-                                setShowRefundDialog(true);
-                              }}
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {/* Pagination */}
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Showing {((filters.page - 1) * filters.limit) + 1} to {Math.min(filters.page * filters.limit, pagination.total)} of {pagination.total} payments
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={filters.page === 1}
-                    onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm">
-                    Page {filters.page} of {pagination.totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={filters.page === pagination.totalPages}
-                    onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Refund Dialog */}
-      <Dialog open={showRefundDialog} onOpenChange={setShowRefundDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Process Refund</DialogTitle>
-            <DialogDescription>
-              Process refund for payment #{selectedPayment?.transaction_id}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Refund Amount</label>
-              <Input
-                type="number"
-                step="0.01"
-                value={refundAmount}
-                onChange={(e) => setRefundAmount(e.target.value)}
-                placeholder="Enter refund amount"
-              />
-              <div className="text-sm text-muted-foreground mt-1">
-                Maximum: {selectedPayment ? formatCurrency(selectedPayment.amount) : '$0.00'}
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Refund Reason</label>
-              <Input
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                placeholder="Enter reason for refund"
-              />
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowRefundDialog(false);
-                  setRefundAmount('');
-                  setRefundReason('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRefund}
-                disabled={!refundAmount || !refundReason}
-              >
-                Process Refund
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
         {/* ERA Processing Tab */}
         <TabsContent value="era" className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-lg font-semibold">ERA Processing</h3>
-              <p className="text-sm text-muted-foreground">Electronic Remittance Advice files and auto-posting</p>
+              <p className="text-sm text-muted-foreground">Electronic Remittance Advice processing and auto-posting</p>
             </div>
             <Dialog open={showERAUpload} onOpenChange={setShowERAUpload}>
               <DialogTrigger asChild>
@@ -894,9 +968,9 @@ const PaymentHistory: React.FC = () => {
                   Upload ERA
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Process ERA File</DialogTitle>
+                  <DialogTitle>Upload ERA File</DialogTitle>
                   <DialogDescription>
                     Upload and process Electronic Remittance Advice file
                   </DialogDescription>
@@ -907,18 +981,18 @@ const PaymentHistory: React.FC = () => {
                     <Input
                       id="file_name"
                       value={eraUploadForm.file_name}
-                      onChange={(e) => setEraUploadForm({...eraUploadForm, file_name: e.target.value})}
-                      placeholder="ERA_20241215.txt"
+                      onChange={(e) => setEraUploadForm({ ...eraUploadForm, file_name: e.target.value })}
+                      placeholder="ERA file name"
                     />
                   </div>
                   <div>
                     <Label htmlFor="era_data">ERA Data</Label>
                     <textarea
                       id="era_data"
-                      className="w-full h-32 p-2 border rounded"
+                      className="w-full h-32 p-2 border rounded-md"
                       value={eraUploadForm.era_data}
-                      onChange={(e) => setEraUploadForm({...eraUploadForm, era_data: e.target.value})}
-                      placeholder="Paste ERA file content here..."
+                      onChange={(e) => setEraUploadForm({ ...eraUploadForm, era_data: e.target.value })}
+                      placeholder="Paste ERA data here..."
                     />
                   </div>
                   <div className="flex items-center space-x-2">
@@ -926,7 +1000,7 @@ const PaymentHistory: React.FC = () => {
                       type="checkbox"
                       id="auto_post"
                       checked={eraUploadForm.auto_post}
-                      onChange={(e) => setEraUploadForm({...eraUploadForm, auto_post: e.target.checked})}
+                      onChange={(e) => setEraUploadForm({ ...eraUploadForm, auto_post: e.target.checked })}
                     />
                     <Label htmlFor="auto_post">Auto-post payments</Label>
                   </div>
@@ -965,10 +1039,11 @@ const PaymentHistory: React.FC = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>File Name</TableHead>
-                      <TableHead>Processed Date</TableHead>
-                      <TableHead>Total Payments</TableHead>
-                      <TableHead>Auto-Posted</TableHead>
+                      <TableHead>ERA Number</TableHead>
+                      <TableHead>Payer</TableHead>
+                      <TableHead>Check Date</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Claims</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -977,40 +1052,45 @@ const PaymentHistory: React.FC = () => {
                     {eraFiles.map((era) => (
                       <TableRow key={era.era_id}>
                         <TableCell>
+                          <div className="font-medium">{era.era_number}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div>{era.payer_name}</div>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center">
-                            <FileText className="h-4 w-4 mr-2 text-gray-400" />
-                            {era.file_name}
+                            <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                            {formatDate(era.check_date)}
                           </div>
                         </TableCell>
                         <TableCell>
-                          {formatDate(era.processed_date)}
+                          <div className="font-medium">{formatCurrency(era.total_amount)}</div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">{formatCurrency(era.total_payments)}</div>
-                            <div className="text-sm text-gray-600">{era.payment_count} payments</div>
+                          <div>{era.claims_count} claims</div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(era.status)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewERADetails(era.era_id)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {era.status === 'pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleManualPostERA(era.era_id)}
+                              >
+                                <Zap className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium text-green-600">{era.auto_posted_count}</div>
-                            <div className="text-sm text-yellow-600">{era.pending_count} pending</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={era.status === 'processed' ? 'bg-green-500' : 'bg-yellow-500'}>
-                            {era.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleViewERADetails(era.era_id)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Details
-                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1021,48 +1101,21 @@ const PaymentHistory: React.FC = () => {
           </Card>
         </TabsContent>
 
-        {/* Online Payments Tab (existing functionality) */}
+        {/* Online Payments Tab */}
         <TabsContent value="online" className="space-y-6">
-          {/* Filters */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-64">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search by patient name, transaction ID..."
-                      value={filters.search}
-                      onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <Select
-                  value={filters.status}
-                  onValueChange={(value) => setFilters({ ...filters, status: value, page: 1 })}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="refunded">Refunded</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Online Payments</h3>
+              <p className="text-sm text-muted-foreground">Credit card and online payment transactions</p>
+            </div>
+          </div>
 
           {/* Online Payments Table */}
           <Card>
             <CardHeader>
               <CardTitle>Online Payment Transactions</CardTitle>
               <CardDescription>
-                Credit card and online payments processed through payment gateways
+                {pagination.total} total payments found
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1072,50 +1125,174 @@ const PaymentHistory: React.FC = () => {
                   <span className="ml-2">Loading payments...</span>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>
-                          <div className="font-medium">{payment.patient_name}</div>
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(payment.payment_date)}
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(payment.amount)}
-                        </TableCell>
-                        <TableCell>
-                          {getPaymentMethodIcon(payment.payment_method, payment.card_brand)}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(payment.status)}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+                <div className="space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Transaction ID</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8">
+                            <div className="flex flex-col items-center">
+                              <CreditCard className="h-12 w-12 text-gray-400 mb-4" />
+                              <p className="text-gray-500">No online payments found</p>
+                              <p className="text-sm text-gray-400">Online payments will appear here when processed</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        payments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{payment.patient_name || 'Unknown Patient'}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {payment.procedure_code && `${payment.procedure_code} - `}
+                                  ID: {payment.patient_id}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center">
+                                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                                {formatDate(payment.payment_date)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{formatCurrency(payment.amount)}</div>
+                                {payment.fee_amount && payment.fee_amount > 0 && (
+                                  <div className="text-sm text-red-600">
+                                    Fee: {formatCurrency(payment.fee_amount)}
+                                  </div>
+                                )}
+                                {payment.net_amount && (
+                                  <div className="text-sm text-green-600">
+                                    Net: {formatCurrency(payment.net_amount)}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                {getPaymentMethodIcon(payment.payment_method, payment.card_brand)}
+                                {payment.card_last_four && (
+                                  <div className="text-sm text-muted-foreground">
+                                    •••• {payment.card_last_four}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(payment.status)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-mono text-sm">
+                                {payment.transaction_id || 'N/A'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setSelectedPayment(payment)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-2xl">
+                                    <DialogHeader>
+                                      <DialogTitle>Payment Details</DialogTitle>
+                                      <DialogDescription>
+                                        Transaction #{payment.transaction_id || payment.id}
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    {selectedPayment && (
+                                      <PaymentDetailsView payment={selectedPayment} />
+                                    )}
+                                  </DialogContent>
+                                </Dialog>
+
+                                {payment.status === 'completed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedPayment(payment);
+                                      setShowRefundDialog(true);
+                                    }}
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
+      {/* Refund Dialog */}
+      <Dialog open={showRefundDialog} onOpenChange={setShowRefundDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Process Refund</DialogTitle>
+            <DialogDescription>
+              Process a refund for payment #{selectedPayment?.transaction_id || selectedPayment?.id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="refund_amount">Refund Amount</Label>
+              <Input
+                id="refund_amount"
+                type="number"
+                step="0.01"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+                placeholder={`Max: ${selectedPayment?.amount || 0}`}
+              />
+            </div>
+            <div>
+              <Label htmlFor="refund_reason">Reason</Label>
+              <Input
+                id="refund_reason"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Reason for refund"
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setShowRefundDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleRefund}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Process Refund
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

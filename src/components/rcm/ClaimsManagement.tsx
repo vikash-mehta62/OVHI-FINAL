@@ -224,110 +224,163 @@ const ClaimsManagement: React.FC = () => {
   const [comment, setComment] = useState('');
   const [voidReason, setVoidReason] = useState('');
 
-  // Sample data
+  // Fetch claims data from API
   useEffect(() => {
-    const sampleClaims: Claim[] = [
-      {
-        id: '1',
-        claimNumber: 'CLM-2024-001',
-        patientName: 'John Smith',
-        patientId: 'PAT001',
-        providerId: 'PRV001',
-        providerName: 'Dr. Sarah Johnson',
-        serviceDate: '2024-01-15',
-        submissionDate: '2024-01-16',
-        status: 'submitted',
-        totalAmount: 450.00,
-        paidAmount: 0.00,
-        balanceAmount: 450.00,
-        payerName: 'Blue Cross Blue Shield',
-        diagnosisCodes: ['Z00.00', 'I10'],
-        procedureCodes: ['99213', '93000'],
-        validationScore: 95,
-        lastUpdated: '2024-01-16',
-        daysInProcess: 5,
-        priority: 'medium'
-      },
-      {
-        id: '2',
-        claimNumber: 'CLM-2024-002',
-        patientName: 'Jane Doe',
-        patientId: 'PAT002',
-        providerId: 'PRV002',
-        providerName: 'Dr. Mike Wilson',
-        serviceDate: '2024-01-14',
-        submissionDate: '2024-01-15',
-        status: 'paid',
-        totalAmount: 280.00,
-        paidAmount: 224.00,
-        balanceAmount: 56.00,
-        payerName: 'Aetna',
-        diagnosisCodes: ['M79.3'],
-        procedureCodes: ['99214'],
-        validationScore: 98,
-        lastUpdated: '2024-01-18',
-        daysInProcess: 0,
-        priority: 'low'
-      },
-      {
-        id: '3',
-        claimNumber: 'CLM-2024-003',
-        patientName: 'Bob Johnson',
-        patientId: 'PAT003',
-        providerId: 'PRV001',
-        providerName: 'Dr. Sarah Johnson',
-        serviceDate: '2024-01-12',
-        submissionDate: '2024-01-13',
-        status: 'denied',
-        totalAmount: 650.00,
-        paidAmount: 0.00,
-        balanceAmount: 650.00,
-        payerName: 'Medicare',
-        diagnosisCodes: ['E11.9', 'I10'],
-        procedureCodes: ['99215', '90834'],
-        validationScore: 78,
-        lastUpdated: '2024-01-17',
-        daysInProcess: 8,
-        priority: 'high'
-      },
-      {
-        id: '4',
-        claimNumber: 'CLM-2024-004',
-        patientName: 'Alice Brown',
-        patientId: 'PAT004',
-        providerId: 'PRV003',
-        providerName: 'Dr. Lisa Chen',
-        serviceDate: '2024-01-18',
-        submissionDate: '2024-01-19',
-        status: 'accepted',
-        totalAmount: 320.00,
-        paidAmount: 0.00,
-        balanceAmount: 320.00,
-        payerName: 'Cigna',
-        diagnosisCodes: ['R06.02'],
-        procedureCodes: ['99203'],
-        validationScore: 92,
-        lastUpdated: '2024-01-19',
-        daysInProcess: 2,
-        priority: 'medium'
+    fetchClaimsData();
+  }, [token]);
+
+  const fetchClaimsData = async () => {
+    if (!token) return;
+    
+    setIsLoading(true);
+    try {
+      // Fetch claims from API
+      const response = await fetch('http://localhost:8000/api/v1/rcm/claims?page=1&limit=100', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        console.log('API Response:', result); // Debug log
+        
+        if (result.success && result.data) {
+          console.log('Claims data:', result.data.claims); // Debug log
+          
+          // Check if claims is an array
+          if (!Array.isArray(result.data.claims)) {
+            console.error('Claims data is not an array:', result.data.claims);
+            throw new Error('Invalid claims data format');
+          }
+          console.log(result.data.claims,"CLAIMS DARA")
+          // Transform API data to match component interface
+          const transformedClaims = result.data.claims?.map((claim: any) => ({
+            id: claim.id?.toString() || claim.claim_id?.toString(),
+            claimNumber: claim.claim_number || `CLM-${claim.id}`,
+            patientName: claim.patient_name || `${claim.first_name || ''} ${claim.last_name || ''}`.trim(),
+            patientId: claim.patient_id?.toString() || 'N/A',
+            providerId: claim.provider_id?.toString() || 'N/A',
+            providerName: claim.provider_name || claim.practice_name || 'Unknown Provider',
+            serviceDate: claim.service_date || claim.created_at?.split('T')[0],
+            submissionDate: claim.submission_date || claim.created_at?.split('T')[0],
+            status: mapClaimStatus(claim.status),
+            totalAmount: parseFloat(claim.total_amount || claim.amount || 0),
+            paidAmount: parseFloat(claim.paid_amount || 0),
+            balanceAmount: parseFloat(claim.remaining_balance || claim.total_amount || 0),
+            payerName: claim.payer_name || claim.insurance_name || 'Unknown Payer',
+            diagnosisCodes: claim.diagnosis_codes ? 
+              (Array.isArray(claim.diagnosis_codes) ? claim.diagnosis_codes : [claim.diagnosis_codes]) : [],
+            procedureCodes: claim.procedure_codes ? 
+              (Array.isArray(claim.procedure_codes) ? claim.procedure_codes : [claim.procedure_codes]) : [],
+            validationScore: claim.validation_score || 85,
+            lastUpdated: claim.updated_at?.split('T')[0] || claim.created_at?.split('T')[0],
+            daysInProcess: calculateDaysInProcess(claim.created_at),
+            priority: determinePriority(claim)
+          })) || [];
+
+          setClaims(transformedClaims);
+
+          // Calculate stats from actual data
+          const calculatedStats = calculateStatsFromClaims(transformedClaims);
+          setStats(calculatedStats);
+        }
+      } else {
+        throw new Error('Failed to fetch claims data');
       }
-    ];
+    } catch (error) {
+      console.error('Error fetching claims:', error);
+      toast.error('Failed to load claims data');
+      
+      // Fallback to empty state or show error message
+      setClaims([]);
+      setStats({
+        totalClaims: 0,
+        submittedClaims: 0,
+        paidClaims: 0,
+        deniedClaims: 0,
+        totalAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        averageProcessingTime: 0,
+        cleanClaimRate: 0
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const sampleStats: ClaimStats = {
-      totalClaims: 156,
-      submittedClaims: 89,
-      paidClaims: 45,
-      deniedClaims: 12,
-      totalAmount: 125680.50,
-      paidAmount: 98450.25,
-      pendingAmount: 27230.25,
-      averageProcessingTime: 8.5,
-      cleanClaimRate: 92.3
+  // Helper function to map API status to component status
+  const mapClaimStatus = (apiStatus: any): Claim['status'] => {
+    const statusMap: { [key: string]: Claim['status'] } = {
+      '0': 'draft',
+      '1': 'submitted', 
+      '2': 'accepted',
+      '3': 'paid',
+      '4': 'denied',
+      '5': 'appealed',
+      'draft': 'draft',
+      'submitted': 'submitted',
+      'accepted': 'accepted',
+      'paid': 'paid',
+      'denied': 'denied',
+      'appealed': 'appealed',
+      'rejected': 'denied'
     };
+    
+    return statusMap[apiStatus?.toString()] || 'draft';
+  };
 
-    setClaims(sampleClaims);
-    setStats(sampleStats);
-  }, []);
+  // Helper function to calculate days in process
+  const calculateDaysInProcess = (createdAt: string): number => {
+    if (!createdAt) return 0;
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - created.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  // Helper function to determine priority
+  const determinePriority = (claim: any): Claim['priority'] => {
+    const amount = parseFloat(claim.total_amount || 0);
+    const daysOld = calculateDaysInProcess(claim.created_at);
+    
+    if (amount > 1000 || daysOld > 14 || claim.status === '4') return 'high';
+    if (amount > 500 || daysOld > 7) return 'medium';
+    return 'low';
+  };
+
+  // Helper function to calculate stats from claims data
+  const calculateStatsFromClaims = (claimsData: Claim[]): ClaimStats => {
+    const totalClaims = claimsData.length;
+    const submittedClaims = claimsData.filter(c => c.status === 'submitted' || c.status === 'accepted').length;
+    const paidClaims = claimsData.filter(c => c.status === 'paid').length;
+    const deniedClaims = claimsData.filter(c => c.status === 'denied').length;
+    
+    const totalAmount = claimsData.reduce((sum, c) => sum + c.totalAmount, 0);
+    const paidAmount = claimsData.reduce((sum, c) => sum + c.paidAmount, 0);
+    const pendingAmount = totalAmount - paidAmount;
+    
+    const avgProcessingTime = claimsData.length > 0 ? 
+      claimsData.reduce((sum, c) => sum + c.daysInProcess, 0) / claimsData.length : 0;
+    
+    const cleanClaimRate = totalClaims > 0 ? 
+      ((totalClaims - deniedClaims) / totalClaims) * 100 : 0;
+
+    return {
+      totalClaims,
+      submittedClaims,
+      paidClaims,
+      deniedClaims,
+      totalAmount,
+      paidAmount,
+      pendingAmount,
+      averageProcessingTime: Math.round(avgProcessingTime * 10) / 10,
+      cleanClaimRate: Math.round(cleanClaimRate * 10) / 10
+    };
+  };
 
   const filteredClaims = claims.filter(claim => {
     const matchesStatus = filterStatus === 'all' || claim.status === filterStatus;
@@ -384,11 +437,77 @@ const ClaimsManagement: React.FC = () => {
       // Fetch detailed claim data from API
       const result = await getDetailedClaimAPI(token, claim.id);
       
-      if (result?.success) {
-        setDetailedClaim(result.data);
+      if (result?.success && result.data) {
+        // Transform API response to match DetailedClaim interface
+        const apiData = result.data;
+        const transformedDetailedClaim: DetailedClaim = {
+          ...claim,
+          comments: apiData.comments?.map((comment: any) => ({
+            id: comment.id?.toString(),
+            userId: comment.user_id?.toString(),
+            userName: comment.user_name || comment.name || 'Unknown User',
+            comment: comment.comment || comment.comment_text,
+            commentType: comment.comment_type || 'general',
+            createdAt: comment.created_at,
+            userRole: comment.user_role || comment.role || 'User'
+          })) || [],
+          history: apiData.history?.map((event: any) => ({
+            id: event.id?.toString(),
+            action: event.action || event.event_type,
+            description: event.description || event.event_description,
+            performedBy: event.performed_by || event.user_name || 'System',
+            performedByRole: event.performed_by_role || event.user_role || 'System',
+            timestamp: event.timestamp || event.created_at,
+            oldStatus: event.old_status,
+            newStatus: event.new_status,
+            details: event.details
+          })) || [],
+          appeals: apiData.appeals?.map((appeal: any) => ({
+            id: appeal.id?.toString(),
+            appealReason: appeal.appeal_reason || appeal.reason,
+            appealDate: appeal.appeal_date || appeal.created_at?.split('T')[0],
+            status: appeal.status || 'pending',
+            appealAmount: parseFloat(appeal.appeal_amount || appeal.amount || 0),
+            decisionDate: appeal.decision_date,
+            decisionReason: appeal.decision_reason,
+            createdBy: appeal.created_by || appeal.user_name || 'Unknown'
+          })) || [],
+          payments: apiData.payments?.map((payment: any) => ({
+            id: payment.id?.toString(),
+            paymentAmount: parseFloat(payment.amount || payment.payment_amount || 0),
+            paymentDate: payment.payment_date || payment.created_at?.split('T')[0],
+            paymentMethod: payment.payment_method || 'Electronic',
+            checkNumber: payment.check_number || payment.confirmation_number,
+            adjustmentAmount: parseFloat(payment.adjustment_amount || 0),
+            adjustmentReason: payment.adjustment_reason,
+            postedBy: payment.posted_by || payment.user_name || 'System'
+          })) || [],
+          attachments: apiData.attachments || [],
+          patientInfo: {
+            dateOfBirth: apiData.patient_info?.date_of_birth || apiData.date_of_birth,
+            address: apiData.patient_info?.address || 
+              `${apiData.address || ''} ${apiData.city || ''} ${apiData.state || ''} ${apiData.zip_code || ''}`.trim(),
+            phone: apiData.patient_info?.phone || apiData.phone,
+            insuranceInfo: {
+              primary: apiData.patient_info?.insurance_info?.primary || apiData.insurance_name || claim.payerName,
+              secondary: apiData.patient_info?.insurance_info?.secondary,
+              memberId: apiData.patient_info?.insurance_info?.member_id || apiData.member_id,
+              groupNumber: apiData.patient_info?.insurance_info?.group_number || apiData.group_number
+            }
+          },
+          providerInfo: {
+            npi: apiData.provider_info?.npi || apiData.npi,
+            taxId: apiData.provider_info?.tax_id || apiData.tax_id,
+            address: apiData.provider_info?.address || 
+              `${apiData.provider_address || ''} ${apiData.provider_city || ''} ${apiData.provider_state || ''}`.trim(),
+            phone: apiData.provider_info?.phone || apiData.provider_phone
+          }
+        };
+        
+        setDetailedClaim(transformedDetailedClaim);
       } else {
-        // Fallback to mock data if API fails
-        const mockDetailedClaim: DetailedClaim = {
+        // Fallback to basic claim data if detailed API fails
+        const basicDetailedClaim: DetailedClaim = {
         ...claim,
         comments: [
           {
@@ -510,17 +629,47 @@ const ClaimsManagement: React.FC = () => {
   const handleSubmitClaim = async (claimId: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setClaims(prev => prev.map(claim => 
-        claim.id === claimId 
-          ? { ...claim, status: 'submitted', submissionDate: new Date().toISOString().split('T')[0] }
-          : claim
-      ));
-      
-      toast.success('Claim submitted successfully');
+      // Update claim status via API
+      const response = await fetch(`/api/v1/rcm/claims/${claimId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 1, // 1 = submitted
+          notes: 'Claim submitted for processing'
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.success) {
+          // Update local state
+          setClaims(prev => prev.map(claim => 
+            claim.id === claimId 
+              ? { 
+                  ...claim, 
+                  status: 'submitted', 
+                  submissionDate: new Date().toISOString().split('T')[0],
+                  lastUpdated: new Date().toISOString().split('T')[0]
+                }
+              : claim
+          ));
+          
+          toast.success('Claim submitted successfully');
+          
+          // Refresh claims data to get latest status
+          setTimeout(() => fetchClaimsData(), 1000);
+        } else {
+          throw new Error(result.message || 'Failed to submit claim');
+        }
+      } else {
+        throw new Error('API request failed');
+      }
     } catch (error) {
+      console.error('Submit claim error:', error);
       toast.error('Failed to submit claim');
     } finally {
       setIsLoading(false);
@@ -537,17 +686,57 @@ const ClaimsManagement: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Simulate bulk submission
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Use bulk update API
+      const claimIds = draftClaims.map(claim => parseInt(claim.id));
       
-      setClaims(prev => prev.map(claim => 
-        claim.status === 'draft' 
-          ? { ...claim, status: 'submitted', submissionDate: new Date().toISOString().split('T')[0] }
-          : claim
-      ));
-      
-      toast.success(`${draftClaims.length} claims submitted successfully`);
+      const response = await fetch('/api/v1/rcm/claims/bulk-update', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          claim_ids: claimIds,
+          status: 1, // 1 = submitted
+          notes: 'Bulk submission processed'
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.success) {
+          const successCount = result.data?.summary?.successful || draftClaims.length;
+          const failureCount = result.data?.summary?.failed || 0;
+          
+          // Update local state for successful submissions
+          setClaims(prev => prev.map(claim => 
+            draftClaims.some(dc => dc.id === claim.id)
+              ? { 
+                  ...claim, 
+                  status: 'submitted', 
+                  submissionDate: new Date().toISOString().split('T')[0],
+                  lastUpdated: new Date().toISOString().split('T')[0]
+                }
+              : claim
+          ));
+          
+          if (failureCount > 0) {
+            toast.warning(`${successCount} claims submitted successfully, ${failureCount} failed`);
+          } else {
+            toast.success(`${successCount} claims submitted successfully`);
+          }
+          
+          // Refresh claims data
+          setTimeout(() => fetchClaimsData(), 1000);
+        } else {
+          throw new Error(result.message || 'Bulk submission failed');
+        }
+      } else {
+        throw new Error('API request failed');
+      }
     } catch (error) {
+      console.error('Bulk submit error:', error);
       toast.error('Failed to submit claims');
     } finally {
       setIsLoading(false);

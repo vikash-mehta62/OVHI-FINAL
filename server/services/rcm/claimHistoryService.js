@@ -138,7 +138,15 @@ class ClaimHistoryService {
         ORDER BY ch.timestamp DESC
       `;
 
-      const result = await executeQueryWithPagination(query, queryParams, page, limit);
+      // Create count query for pagination
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM claim_history ch
+        LEFT JOIN users u ON ch.user_id = u.id
+        WHERE ${whereClause}
+      `;
+
+      const result = await executeQueryWithPagination(query, countQuery, queryParams, { page, limit });
 
       // Format history entries
       const formattedHistory = result.data.map(entry => ({

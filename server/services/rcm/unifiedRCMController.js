@@ -357,32 +357,37 @@ class UnifiedRCMController {
     try {
       const claimId = parseInt(req.params.claimId);
       const { comment } = req.body;
-      const { user_id: userId } = req.user;
-
-      // Validate required fields
+      const userId = req.user?.id || req.user?.user_id;
+  
+      console.log('Authenticated User:', req.user);
+  
+      // Validate claimId
       if (!claimId || isNaN(claimId)) {
         return ResponseHelpers.sendValidationError(res, [
           { field: 'claimId', message: 'Valid claim ID is required' }
         ]);
       }
-
+  
+      // Validate comment
       if (!comment || comment.trim() === '') {
         return ResponseHelpers.sendValidationError(res, [
           { field: 'comment', message: 'Comment is required' }
         ]);
       }
-
+  
       const result = await this.service.addClaimComment(claimId, {
         comment: comment.trim(),
         userId
       });
-
-      ResponseHelpers.sendSuccess(res, result, 'Comment added successfully');
-
+  
+      return ResponseHelpers.sendSuccess(res, result, 'Comment added successfully');
+  
     } catch (error) {
+      console.error('Error in addClaimComment:', error);
       handleControllerError(error, res, 'Add claim comment');
     }
   }
+  
 
   /**
    * Void claim
@@ -497,6 +502,38 @@ class UnifiedRCMController {
 
     } catch (error) {
       handleControllerError(error, res, 'Get payment posting data');
+    }
+  }
+
+  /**
+   * Get office payments data
+   */
+  async getOfficePaymentsData(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        status = 'all',
+        search = '',
+        date_from,
+        date_to,
+        payment_method = 'all'
+      } = req.query;
+
+      const officePaymentsData = await this.service.getOfficePaymentsData({
+        page: parseInt(page),
+        limit: parseInt(limit),
+        status,
+        search,
+        date_from,
+        date_to,
+        payment_method
+      });
+
+      ResponseHelpers.sendSuccess(res, officePaymentsData, 'Office payments data retrieved successfully');
+
+    } catch (error) {
+      handleControllerError(error, res, 'Get office payments data');
     }
   }
 
@@ -972,6 +1009,7 @@ module.exports = {
   postPayment: unifiedRCMController.postPayment.bind(unifiedRCMController),
   getPaymentPostingData: unifiedRCMController.getPaymentPostingData.bind(unifiedRCMController),
   getPayments: unifiedRCMController.getPaymentPostingData.bind(unifiedRCMController), // Alias
+  getOfficePaymentsData: unifiedRCMController.getOfficePaymentsData.bind(unifiedRCMController),
   
   // A/R Aging and Collections
   getARAgingReport: unifiedRCMController.getARAgingReport.bind(unifiedRCMController),

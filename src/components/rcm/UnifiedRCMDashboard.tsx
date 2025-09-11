@@ -330,10 +330,17 @@ const UnifiedRCMDashboard: React.FC = () => {
   const kpiCards = useMemo(() => {
     if (!dashboardData?.kpis) return [];
 
+    // Safe number formatting to avoid NaN
+    const safeNumber = (value: any, defaultValue: number = 0): number => {
+      if (value === null || value === undefined || value === '') return defaultValue;
+      const num = typeof value === 'string' ? parseFloat(value) : value;
+      return isNaN(num) ? defaultValue : num;
+    };
+
     return [
       {
         title: 'Collection Rate',
-        value: `${dashboardData.kpis.collectionRate}%`,
+        value: `${safeNumber(dashboardData.kpis?.collectionRate, 0).toFixed(1)}%`,
         change: '+2.3%',
         trend: 'up',
         target: '95%',
@@ -343,7 +350,7 @@ const UnifiedRCMDashboard: React.FC = () => {
       },
       {
         title: 'Days in A/R',
-        value: `${dashboardData.kpis.daysInAR}`,
+        value: `${safeNumber(dashboardData.kpis?.daysInAR, 0).toFixed(0)}`,
         change: '-5.2%',
         trend: 'down',
         target: '25',
@@ -353,7 +360,7 @@ const UnifiedRCMDashboard: React.FC = () => {
       },
       {
         title: 'First Pass Rate',
-        value: `${dashboardData.kpis.firstPassRate}%`,
+        value: `${safeNumber(dashboardData.kpis?.firstPassRate, 0).toFixed(1)}%`,
         change: '+1.8%',
         trend: 'up',
         target: '90%',
@@ -363,7 +370,7 @@ const UnifiedRCMDashboard: React.FC = () => {
       },
       {
         title: 'Denial Rate',
-        value: `${dashboardData.kpis.denialRate}%`,
+        value: `${safeNumber(dashboardData.kpis?.denialRate, 0).toFixed(1)}%`,
         change: '-0.8%',
         trend: 'down',
         target: '3%',
@@ -379,10 +386,27 @@ const UnifiedRCMDashboard: React.FC = () => {
     if (!dashboardData) return null;
 
     const revenueData = dashboardData.trends?.monthlyRevenue || [];
+    // Safe parsing function
+    const safeParseFloat = (value: any, defaultValue: number = 0): number => {
+      if (value === null || value === undefined || value === '') return defaultValue;
+      
+      // If it's already a number, return it
+      if (typeof value === 'number') return isNaN(value) ? defaultValue : value;
+      
+      // If it's a string, clean and parse it
+      if (typeof value === 'string') {
+        const cleaned = value.replace(/[$,\s]/g, '');
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? defaultValue : parsed;
+      }
+      
+      return defaultValue;
+    };
+
     const claimsData = Object.entries(dashboardData?.claimsBreakdown || {}).map(
       ([key, value]) => ({
         name: key.charAt(0).toUpperCase() + key.slice(1),
-        value: value as number,
+        value: safeParseFloat(value, 0),
         color:
           {
             draft: '#94A3B8',
@@ -391,13 +415,13 @@ const UnifiedRCMDashboard: React.FC = () => {
             denied: '#EF4444',
           }[key] || '#6B7280',
       })
-    );// Provide a default empty array if claimsBreakdown is null/undefined
+    );
 
     const agingData = [
-      { name: '0-30 Days', value: parseFloat(dashboardData?.arAging?.aging_0_30.replace(/[$,]/g, '')) },
-      { name: '31-60 Days', value: parseFloat(dashboardData?.arAging?.aging_31_60.replace(/[$,]/g, '')) },
-      { name: '61-90 Days', value: parseFloat(dashboardData?.arAging?.aging_61_90.replace(/[$,]/g, '')) },
-      { name: '90+ Days', value: parseFloat(dashboardData?.arAging?.aging_90_plus.replace(/[$,]/g, '')) }
+      { name: '0-30 Days', value: safeParseFloat(dashboardData?.arAging?.aging_0_30, 0) },
+      { name: '31-60 Days', value: safeParseFloat(dashboardData?.arAging?.aging_31_60, 0) },
+      { name: '61-90 Days', value: safeParseFloat(dashboardData?.arAging?.aging_61_90, 0) },
+      { name: '90+ Days', value: safeParseFloat(dashboardData?.arAging?.aging_90_plus, 0) }
     ];
 
     return { revenueData, claimsData, agingData };

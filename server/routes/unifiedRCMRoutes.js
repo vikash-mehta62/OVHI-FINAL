@@ -23,6 +23,7 @@ const {
   voidClaim,
   postPayment,
   getPaymentPostingData,
+  getOfficePaymentsData,
   getARAgingReport,
   getCollectionsWorkflow,
   updateCollectionStatus,
@@ -543,6 +544,62 @@ router.post('/payments/post',
   sanitizationMiddleware,
   ValidationMiddleware.validatePostPayment,
   asyncHandler(postPayment)
+);
+
+/**
+ * @swagger
+ * /api/v1/rcm/payments/office:
+ *   get:
+ *     summary: Get office payment data
+ *     tags: [RCM Payments]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Payment status filter
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date filter
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date filter
+ *       - in: query
+ *         name: payment_method
+ *         schema:
+ *           type: string
+ *         description: Payment method filter
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Items per page
+ *     responses:
+ *       200:
+ *         description: Office payment data retrieved successfully
+ */
+router.get('/office-payments',
+  ValidationMiddleware.validateGetDashboardQuery,
+  asyncHandler(getOfficePaymentsData)
 );
 
 // =====================================================

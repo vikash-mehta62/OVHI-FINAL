@@ -1,113 +1,783 @@
-const EventEmitter = require('events');
-const os = require('os');
+/**
+ * Performance Monitoring Service
+ * System health monitoring and optimization
+ */
 
-class PerformanceMonitoringService extends EventEmitter {
-  constructor() {
-    super();
-    
-    this.config = {
-      monitoringInterval: 30000, // 30 seconds
-      alertThresholds: {
-        cpuUsage: 80, // percentage
-        memoryUsage: 85, // percentage
-        responseTime: 2000, // milliseconds
-        errorRate: 5, // percentage
-        diskUsage: 90, // percentage
-        connectionPoolUsage: 80 // percentage
-      },
-      retentionPeriod: 24 * 60 * 60 * 1000, // 24 hours
-      maxDataPoints: 2880 // 24 hours at 30-second intervals
-    };
-    
-    this.metrics = {
-      system: [],
-      application: [],
-      database: [],
-      api: [],
-      alerts: []
-    };
-    
-    this.isMonitoring = false;
-    this.monitoringInterval = null;
-    this.alertCooldowns = new Map();
-  }
+const mysql = require('mysql2/promise');
+const dbConfig = require('../../config/db');
+const { executeQuery, executeQuerySingle } = require('../../utils/dbUtils');
 
-  // Start monitoring
-  startMonitoring() {
-    if (this.isMonitoring) {
-      return;
+class PerformanceMonitoringService {
+    constructor() {
+        this.pool = mysql.createPool(dbConfig);
+        this.metrics = {
+            responseTime: [],
+            throughput: [],
+            errorRate: [],
+            systemHealth: {}
+        };
+        this.alertThresholds = {
+            responseTime: 5000, // 5 seconds
+            errorRate: 5, // 5%
+            cpuUsage: 80, // 80%
+            memoryUsage: 85, // 85%
+            diskUsage: 90 // 90%
+        };
+        this.startTime = Date.now();
     }
 
-    this.isMonitoring = true;
-    this.monitoringInterval = setInterval(() => {
-      this.collectMetrics();
-    }, this.config.monitoringInterval);
-    
-    console.log('Performance monitoring started');
-    this.emit('monitoringStarted');
-  }
+    /**
+     * Get comprehensive system performance metrics
+     */
+    async getPerformanceMetrics(timeframe = '1h') {
+        try {
+            const connection = await this.pool.getConnection();
 
-  // Stop monitoring
-  stopMonitoring() {
-    if (!this.isMonitoring) {
-      return;
+            // Get database performance metrics
+            const dbMetrics = await this.getDatabaseMetrics(connection);
+            
+            // Get API performance metrics
+            const apiMetrics = await this.getAPIMetrics(connection, timeframe);
+            
+            // Get RCM-specific performance metrics
+            const rcmMetrics = await this.getRCMMetrics(connection, timeframe);
+            
+            // Get system resource metrics
+            const systemMetrics = await this.getSystemMetrics();
+            
+            // Get error and alert metrics
+            const errorMetrics = await this.getErrorMetrics(connection, timeframe);
+            
+            // Calculate performance scores
+            const performanceScores = this.calculatePerformanceScores({
+                dbMetrics,
+                apiMetrics,
+                rcmMetrics,
+                systemMetrics,
+                errorMetrics
+            });
+
+            connection.release();
+
+            return {
+                timestamp: new Date(),
+                timeframe,
+                database: dbMetrics,
+                api: apiMetrics,
+                rcm: rcmMetrics,
+                system: systemMetrics,
+                errors: errorMetrics,
+                scores: performanceScores,
+                alerts: await this.getActiveAlerts(),
+                recommendations: this.generateRecommendations(performanceScores)
+            };
+
+        } catch (error) {
+            console.error('Error getting performance metrics:', error);
+            throw error;
+        }
     }
 
-    this.isMonitoring = false;
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-    }
-    
-    console.log('Performance monitoring stopped');
-    this.emit('monitoringStopped');
-  }
+    /**
+     * Get database performance metrics
+     */
+    async getDatabaseMetrics(connection) {
+        try {
+            // Get connection pool status
+            const poolStats = this.pool.pool._allConnections.length;
+            const activeConnections = this.pool.pool._acquiringConnections.length;
+            
+            // Get query performance stats
+            const [queryStats] = await connection.execute(`
+                SELECT 
+                    COUNT(*) as total_queries,
+                    AVG(TIMER_WAIT/1000000000) as avg_query_time_seconds,
+                    MAX(TIMER_WAIT/1000000000) as max_query_time_seconds,
+                    SUM(CASE WHEN TIMER_WAIT > 5000000000 THEN 1 ELSE 0 END) as slow_queries
+                FROM performance_schema.events_statements_history_long 
+                WHERE EVENT_NAME LIKE 'statement/sql/%'
+                AND TIMER_START > UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 HOUR)) * 1000000000
+            `);
 
-  // Collect all metrics
-  async collectMetrics() {
-    const timestamp = new Date();
-    
-    try {
-      // Collect system metrics
-      const systemMetrics = await this.collectSystemMetrics();
-      this.addMetric('system', { ...systemMetrics, timestamp });
-      
-      // Collect application metrics
-      const appMetrics = await this.collectApplicationMetrics();
-      this.addMetric('application', { ...appMetrics, timestamp });
-      
-      // Collect database metrics
-      const dbMetrics = await this.collectDatabaseMetrics();
-      this.addMetric('database', { ...dbMetrics, timestamp });
-      
-      // Check for alerts
-      this.checkAlerts(systemMetrics, appMetrics, dbMetrics);
-      
-    } catch (error) {
-      console.error('Error collecting metrics:', error.message);
-      this.emit('metricsError', error);
-    }
-  }
+            // Get table sizes and row counts
+            const [tableStats] = await connection.execute(`
+                SELECT 
+                    table_name,
+                    table_rows,
+                    ROUND(((data_length + index_length) / 1024 / 1024), 2) as size_mb
+                FROM information_schema.tables 
+                WHERE table_schema = DATABASE()
+                AND table_name IN ('claims', 'payments', 'patients', 'rcm_era_files', 'rcm_denial_categories')
+                ORDER BY (data_length + index_length) DESC
+            `);
 
-  // System metrics collection
-  async collectSystemMetrics() {
-    const cpus = os.cpus();
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    
-    // Calculate CPU usage
-    let totalIdle = 0;
-    let totalTick = 0;
-    
-    cpus.forEach(cpu => {
-      for (const type in cpu.times) {
-        totalTick += cpu.times[type];
-      }
-      totalIdle += cpu.times.idle;
-    });
-    
-    const idle = totalIdle / cpus.length;
-    const total = totalTick / cpus.length;
-    const cpuUsage = 100 - ~~(100 * idle / total);\n    
-    return {\n      cpu: {\n        usage: cpuUsage,\n        cores: cpus.length,\n        model: cpus[0].model\n      },\n      memory: {\n        total: Math.round(totalMem / 1024 / 1024), // MB\n        used: Math.round(usedMem / 1024 / 1024), // MB\n        free: Math.round(freeMem / 1024 / 1024), // MB\n        usage: Math.round((usedMem / totalMem) * 100) // percentage\n      },\n      system: {\n        platform: os.platform(),\n        arch: os.arch(),\n        uptime: os.uptime(),\n        loadAverage: os.loadavg()\n      }\n    };\n  }\n\n  // Application metrics collection\n  async collectApplicationMetrics() {\n    const memUsage = process.memoryUsage();\n    \n    return {\n      process: {\n        pid: process.pid,\n        uptime: process.uptime(),\n        memory: {\n          heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB\n          heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB\n          external: Math.round(memUsage.external / 1024 / 1024), // MB\n          rss: Math.round(memUsage.rss / 1024 / 1024) // MB\n        }\n      },\n      eventLoop: {\n        delay: await this.measureEventLoopDelay()\n      }\n    };\n  }\n\n  // Database metrics collection\n  async collectDatabaseMetrics() {\n    try {\n      // Get performance optimization service if available\n      const PerformanceOptimizationService = require('./performanceOptimizationService');\n      const perfService = new PerformanceOptimizationService();\n      \n      const poolStats = perfService.getConnectionPoolStats();\n      const perfMetrics = perfService.getPerformanceMetrics();\n      \n      return {\n        connectionPool: {\n          total: poolStats.totalConnections,\n          used: poolStats.usedConnections,\n          free: poolStats.freeConnections,\n          queued: poolStats.queuedRequests,\n          usage: poolStats.totalConnections > 0 \n            ? Math.round((poolStats.usedConnections / poolStats.totalConnections) * 100) \n            : 0\n        },\n        queries: {\n          total: perfMetrics.database.totalQueries,\n          avgTime: perfMetrics.database.avgQueryTime,\n          p95Time: perfMetrics.database.p95QueryTime,\n          slowQueries: perfMetrics.database.slowQueries,\n          slowQueryRate: perfMetrics.database.slowQueryRate\n        },\n        cache: {\n          hitRate: perfMetrics.cache.hitRate,\n          size: perfMetrics.cache.size,\n          hits: perfMetrics.cache.hits,\n          misses: perfMetrics.cache.misses\n        }\n      };\n    } catch (error) {\n      return {\n        connectionPool: { error: 'Unable to collect pool stats' },\n        queries: { error: 'Unable to collect query stats' },\n        cache: { error: 'Unable to collect cache stats' }\n      };\n    }\n  }\n\n  // Measure event loop delay\n  measureEventLoopDelay() {\n    return new Promise((resolve) => {\n      const start = process.hrtime.bigint();\n      setImmediate(() => {\n        const delta = process.hrtime.bigint() - start;\n        resolve(Number(delta / 1000000n)); // Convert to milliseconds\n      });\n    });\n  }\n\n  // Add metric to collection\n  addMetric(type, metric) {\n    if (!this.metrics[type]) {\n      this.metrics[type] = [];\n    }\n    \n    this.metrics[type].push(metric);\n    \n    // Keep only recent metrics\n    if (this.metrics[type].length > this.config.maxDataPoints) {\n      this.metrics[type] = this.metrics[type].slice(-this.config.maxDataPoints);\n    }\n    \n    // Clean old metrics\n    const cutoff = Date.now() - this.config.retentionPeriod;\n    this.metrics[type] = this.metrics[type].filter(m => m.timestamp.getTime() > cutoff);\n  }\n\n  // Alert checking\n  checkAlerts(systemMetrics, appMetrics, dbMetrics) {\n    const alerts = [];\n    \n    // CPU usage alert\n    if (systemMetrics.cpu.usage > this.config.alertThresholds.cpuUsage) {\n      alerts.push({\n        type: 'cpu_high',\n        severity: 'warning',\n        message: `High CPU usage: ${systemMetrics.cpu.usage}%`,\n        value: systemMetrics.cpu.usage,\n        threshold: this.config.alertThresholds.cpuUsage\n      });\n    }\n    \n    // Memory usage alert\n    if (systemMetrics.memory.usage > this.config.alertThresholds.memoryUsage) {\n      alerts.push({\n        type: 'memory_high',\n        severity: 'warning',\n        message: `High memory usage: ${systemMetrics.memory.usage}%`,\n        value: systemMetrics.memory.usage,\n        threshold: this.config.alertThresholds.memoryUsage\n      });\n    }\n    \n    // Database connection pool alert\n    if (dbMetrics.connectionPool && dbMetrics.connectionPool.usage > this.config.alertThresholds.connectionPoolUsage) {\n      alerts.push({\n        type: 'db_pool_high',\n        severity: 'warning',\n        message: `High database connection pool usage: ${dbMetrics.connectionPool.usage}%`,\n        value: dbMetrics.connectionPool.usage,\n        threshold: this.config.alertThresholds.connectionPoolUsage\n      });\n    }\n    \n    // Process alerts\n    alerts.forEach(alert => this.processAlert(alert));\n  }\n\n  // Process and emit alerts\n  processAlert(alert) {\n    const alertKey = `${alert.type}_${alert.severity}`;\n    const now = Date.now();\n    const cooldownPeriod = 300000; // 5 minutes\n    \n    // Check cooldown\n    if (this.alertCooldowns.has(alertKey)) {\n      const lastAlert = this.alertCooldowns.get(alertKey);\n      if (now - lastAlert < cooldownPeriod) {\n        return; // Skip alert due to cooldown\n      }\n    }\n    \n    // Add timestamp and emit\n    alert.timestamp = new Date();\n    alert.id = `alert_${now}_${Math.random().toString(36).substr(2, 9)}`;\n    \n    this.metrics.alerts.push(alert);\n    this.alertCooldowns.set(alertKey, now);\n    \n    console.warn(`ALERT [${alert.severity.toUpperCase()}]: ${alert.message}`);\n    this.emit('alert', alert);\n    \n    // Keep only recent alerts\n    if (this.metrics.alerts.length > 1000) {\n      this.metrics.alerts = this.metrics.alerts.slice(-1000);\n    }\n  }\n\n  // API endpoint metrics tracking\n  trackApiRequest(endpoint, method, responseTime, statusCode) {\n    const metric = {\n      endpoint,\n      method,\n      responseTime,\n      statusCode,\n      timestamp: new Date(),\n      isError: statusCode >= 400\n    };\n    \n    this.addMetric('api', metric);\n    \n    // Check response time alert\n    if (responseTime > this.config.alertThresholds.responseTime) {\n      this.processAlert({\n        type: 'response_time_high',\n        severity: 'warning',\n        message: `Slow API response: ${endpoint} took ${responseTime}ms`,\n        value: responseTime,\n        threshold: this.config.alertThresholds.responseTime,\n        endpoint,\n        method\n      });\n    }\n  }\n\n  // Get metrics\n  getMetrics(type = null, timeRange = null) {\n    if (type && this.metrics[type]) {\n      let metrics = [...this.metrics[type]];\n      \n      if (timeRange) {\n        const cutoff = Date.now() - timeRange;\n        metrics = metrics.filter(m => m.timestamp.getTime() > cutoff);\n      }\n      \n      return metrics;\n    }\n    \n    if (timeRange) {\n      const cutoff = Date.now() - timeRange;\n      const filtered = {};\n      \n      for (const [key, values] of Object.entries(this.metrics)) {\n        filtered[key] = values.filter(m => m.timestamp.getTime() > cutoff);\n      }\n      \n      return filtered;\n    }\n    \n    return this.metrics;\n  }\n\n  // Get current status\n  getCurrentStatus() {\n    const latest = {};\n    \n    for (const [type, metrics] of Object.entries(this.metrics)) {\n      if (metrics.length > 0) {\n        latest[type] = metrics[metrics.length - 1];\n      }\n    }\n    \n    return latest;\n  }\n\n  // Get performance summary\n  getPerformanceSummary(timeRange = 3600000) { // 1 hour default\n    const cutoff = Date.now() - timeRange;\n    const summary = {\n      system: { healthy: true, issues: [] },\n      application: { healthy: true, issues: [] },\n      database: { healthy: true, issues: [] },\n      api: { healthy: true, issues: [] },\n      alerts: { count: 0, recent: [] }\n    };\n    \n    // Analyze system metrics\n    const systemMetrics = this.metrics.system.filter(m => m.timestamp.getTime() > cutoff);\n    if (systemMetrics.length > 0) {\n      const avgCpu = systemMetrics.reduce((sum, m) => sum + m.cpu.usage, 0) / systemMetrics.length;\n      const avgMemory = systemMetrics.reduce((sum, m) => sum + m.memory.usage, 0) / systemMetrics.length;\n      \n      summary.system.avgCpuUsage = Math.round(avgCpu);\n      summary.system.avgMemoryUsage = Math.round(avgMemory);\n      \n      if (avgCpu > this.config.alertThresholds.cpuUsage) {\n        summary.system.healthy = false;\n        summary.system.issues.push('High CPU usage');\n      }\n      \n      if (avgMemory > this.config.alertThresholds.memoryUsage) {\n        summary.system.healthy = false;\n        summary.system.issues.push('High memory usage');\n      }\n    }\n    \n    // Analyze API metrics\n    const apiMetrics = this.metrics.api.filter(m => m.timestamp.getTime() > cutoff);\n    if (apiMetrics.length > 0) {\n      const avgResponseTime = apiMetrics.reduce((sum, m) => sum + m.responseTime, 0) / apiMetrics.length;\n      const errorRate = (apiMetrics.filter(m => m.isError).length / apiMetrics.length) * 100;\n      \n      summary.api.avgResponseTime = Math.round(avgResponseTime);\n      summary.api.errorRate = Math.round(errorRate * 100) / 100;\n      summary.api.totalRequests = apiMetrics.length;\n      \n      if (avgResponseTime > this.config.alertThresholds.responseTime) {\n        summary.api.healthy = false;\n        summary.api.issues.push('Slow response times');\n      }\n      \n      if (errorRate > this.config.alertThresholds.errorRate) {\n        summary.api.healthy = false;\n        summary.api.issues.push('High error rate');\n      }\n    }\n    \n    // Recent alerts\n    const recentAlerts = this.metrics.alerts.filter(a => a.timestamp.getTime() > cutoff);\n    summary.alerts.count = recentAlerts.length;\n    summary.alerts.recent = recentAlerts.slice(-10); // Last 10 alerts\n    \n    return summary;\n  }\n\n  // Health check\n  async healthCheck() {\n    const status = this.getCurrentStatus();\n    const summary = this.getPerformanceSummary();\n    \n    const isHealthy = summary.system.healthy && \n                     summary.application.healthy && \n                     summary.database.healthy && \n                     summary.api.healthy;\n    \n    return {\n      status: isHealthy ? 'healthy' : 'degraded',\n      monitoring: this.isMonitoring,\n      summary,\n      current: status,\n      timestamp: new Date().toISOString()\n    };\n  }\n\n  // Export metrics for external monitoring\n  exportMetrics(format = 'json') {\n    const data = {\n      timestamp: new Date().toISOString(),\n      config: this.config,\n      metrics: this.metrics,\n      summary: this.getPerformanceSummary()\n    };\n    \n    if (format === 'json') {\n      return JSON.stringify(data, null, 2);\n    }\n    \n    // Add other formats as needed (CSV, Prometheus, etc.)\n    return data;\n  }\n\n  // Clear old data\n  clearOldData(olderThan = null) {\n    const cutoff = olderThan || (Date.now() - this.config.retentionPeriod);\n    let totalCleared = 0;\n    \n    for (const [type, metrics] of Object.entries(this.metrics)) {\n      const originalLength = metrics.length;\n      this.metrics[type] = metrics.filter(m => m.timestamp.getTime() > cutoff);\n      totalCleared += originalLength - this.metrics[type].length;\n    }\n    \n    console.log(`Cleared ${totalCleared} old metric data points`);\n    return totalCleared;\n  }\n}\n\nmodule.exports = PerformanceMonitoringService;
+            // Get index usage statistics
+            const [indexStats] = await connection.execute(`
+                SELECT 
+                    object_schema,
+                    object_name,
+                    index_name,
+                    count_read,
+                    count_write,
+                    count_fetch,
+                    sum_timer_wait/1000000000 as total_latency_seconds
+                FROM performance_schema.table_io_waits_summary_by_index_usage
+                WHERE object_schema = DATABASE()
+                ORDER BY sum_timer_wait DESC
+                LIMIT 10
+            `);
+
+            return {
+                connectionPool: {
+                    totalConnections: poolStats,
+                    activeConnections: activeConnections,
+                    utilizationRate: (activeConnections / poolStats) * 100
+                },
+                queryPerformance: queryStats[0] || {},
+                tableStatistics: tableStats,
+                indexUsage: indexStats,
+                healthScore: this.calculateDatabaseHealthScore(queryStats[0], poolStats, activeConnections)
+            };
+
+        } catch (error) {
+            console.error('Error getting database metrics:', error);
+            return {
+                connectionPool: { error: error.message },
+                queryPerformance: {},
+                tableStatistics: [],
+                indexUsage: [],
+                healthScore: 0
+            };
+        }
+    }
+
+    /**
+     * Get API performance metrics
+     */
+    async getAPIMetrics(connection, timeframe) {
+        try {
+            const timeframeHours = this.parseTimeframe(timeframe);
+
+            // Get API endpoint performance from logs (if logging is implemented)
+            const [apiStats] = await connection.execute(`
+                SELECT 
+                    endpoint,
+                    COUNT(*) as request_count,
+                    AVG(response_time_ms) as avg_response_time,
+                    MAX(response_time_ms) as max_response_time,
+                    MIN(response_time_ms) as min_response_time,
+                    SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count,
+                    SUM(CASE WHEN response_time_ms > 5000 THEN 1 ELSE 0 END) as slow_requests
+                FROM api_request_logs 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                GROUP BY endpoint
+                ORDER BY request_count DESC
+                LIMIT 20
+            `, [timeframeHours]);
+
+            // Calculate throughput and error rates
+            const totalRequests = apiStats.reduce((sum, stat) => sum + parseInt(stat.request_count), 0);
+            const totalErrors = apiStats.reduce((sum, stat) => sum + parseInt(stat.error_count), 0);
+            const errorRate = totalRequests > 0 ? (totalErrors / totalRequests) * 100 : 0;
+            const throughput = totalRequests / timeframeHours; // requests per hour
+
+            // Get most used endpoints
+            const topEndpoints = apiStats.slice(0, 10);
+
+            // Get slowest endpoints
+            const slowestEndpoints = [...apiStats]
+                .sort((a, b) => parseFloat(b.avg_response_time) - parseFloat(a.avg_response_time))
+                .slice(0, 5);
+
+            return {
+                summary: {
+                    totalRequests,
+                    totalErrors,
+                    errorRate,
+                    throughput,
+                    avgResponseTime: apiStats.length > 0 ? 
+                        apiStats.reduce((sum, stat) => sum + parseFloat(stat.avg_response_time), 0) / apiStats.length : 0
+                },
+                topEndpoints,
+                slowestEndpoints,
+                healthScore: this.calculateAPIHealthScore(errorRate, throughput, apiStats)
+            };
+
+        } catch (error) {
+            console.error('Error getting API metrics:', error);
+            return {
+                summary: { error: error.message },
+                topEndpoints: [],
+                slowestEndpoints: [],
+                healthScore: 0
+            };
+        }
+    }
+
+    /**
+     * Get RCM-specific performance metrics
+     */
+    async getRCMMetrics(connection, timeframe) {
+        try {
+            const timeframeHours = this.parseTimeframe(timeframe);
+
+            // Claims processing metrics
+            const [claimsMetrics] = await connection.execute(`
+                SELECT 
+                    COUNT(*) as total_claims,
+                    SUM(CASE WHEN status = 3 THEN 1 ELSE 0 END) as paid_claims,
+                    SUM(CASE WHEN status = 4 THEN 1 ELSE 0 END) as denied_claims,
+                    AVG(total_amount) as avg_claim_amount,
+                    AVG(DATEDIFF(COALESCE(last_payment_date, NOW()), created_at)) as avg_processing_days
+                FROM claims 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            `, [timeframeHours]);
+
+            // Payment processing metrics
+            const [paymentMetrics] = await connection.execute(`
+                SELECT 
+                    COUNT(*) as total_payments,
+                    SUM(amount) as total_amount,
+                    AVG(amount) as avg_payment_amount,
+                    COUNT(DISTINCT patient_id) as unique_patients,
+                    AVG(DATEDIFF(payment_date, (SELECT created_at FROM claims WHERE id = payments.claim_id))) as avg_payment_delay_days
+                FROM payments 
+                WHERE payment_date >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            `, [timeframeHours]);
+
+            // ERA processing metrics
+            const [eraMetrics] = await connection.execute(`
+                SELECT 
+                    COUNT(*) as total_era_files,
+                    SUM(total_payments) as total_era_payments,
+                    AVG(matched_payments) as avg_matched_payments,
+                    AVG(unmatched_payments) as avg_unmatched_payments,
+                    AVG((matched_payments / (matched_payments + unmatched_payments)) * 100) as avg_match_rate
+                FROM rcm_era_files 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                AND processing_status = 'completed'
+            `, [timeframeHours]);
+
+            // Denial management metrics
+            const [denialMetrics] = await connection.execute(`
+                SELECT 
+                    COUNT(*) as total_denials,
+                    SUM(estimated_recovery_amount) as total_denied_amount,
+                    AVG(estimated_recovery_amount) as avg_denial_amount,
+                    COUNT(DISTINCT category) as unique_denial_categories,
+                    SUM(CASE WHEN priority_level = 'high' THEN 1 ELSE 0 END) as high_priority_denials
+                FROM rcm_denial_categories 
+                WHERE categorized_date >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            `, [timeframeHours]);
+
+            // Calculate RCM KPIs
+            const claimsData = claimsMetrics[0] || {};
+            const paymentData = paymentMetrics[0] || {};
+            const eraData = eraMetrics[0] || {};
+            const denialData = denialMetrics[0] || {};
+
+            const collectionRate = claimsData.total_claims > 0 ? 
+                (claimsData.paid_claims / claimsData.total_claims) * 100 : 0;
+            const denialRate = claimsData.total_claims > 0 ? 
+                (claimsData.denied_claims / claimsData.total_claims) * 100 : 0;
+
+            return {
+                claims: {
+                    ...claimsData,
+                    collectionRate,
+                    denialRate
+                },
+                payments: paymentData,
+                era: eraData,
+                denials: denialData,
+                kpis: {
+                    collectionRate,
+                    denialRate,
+                    avgProcessingDays: claimsData.avg_processing_days || 0,
+                    avgPaymentDelayDays: paymentData.avg_payment_delay_days || 0,
+                    eraMatchRate: eraData.avg_match_rate || 0
+                },
+                healthScore: this.calculateRCMHealthScore({
+                    collectionRate,
+                    denialRate,
+                    avgProcessingDays: claimsData.avg_processing_days,
+                    eraMatchRate: eraData.avg_match_rate
+                })
+            };
+
+        } catch (error) {
+            console.error('Error getting RCM metrics:', error);
+            return {
+                claims: {},
+                payments: {},
+                era: {},
+                denials: {},
+                kpis: {},
+                healthScore: 0
+            };
+        }
+    }
+
+    /**
+     * Get system resource metrics
+     */
+    async getSystemMetrics() {
+        try {
+            const process = require('process');
+            const os = require('os');
+
+            // Memory usage
+            const memoryUsage = process.memoryUsage();
+            const totalMemory = os.totalmem();
+            const freeMemory = os.freemem();
+            const usedMemory = totalMemory - freeMemory;
+
+            // CPU usage (simplified)
+            const cpuUsage = os.loadavg()[0]; // 1-minute load average
+            const cpuCount = os.cpus().length;
+
+            // Process uptime
+            const uptime = process.uptime();
+            const systemUptime = os.uptime();
+
+            // Disk usage (mock - would need actual disk monitoring)
+            const diskUsage = {
+                total: 100 * 1024 * 1024 * 1024, // 100GB mock
+                used: 45 * 1024 * 1024 * 1024,   // 45GB mock
+                free: 55 * 1024 * 1024 * 1024    // 55GB mock
+            };
+
+            return {
+                memory: {
+                    total: totalMemory,
+                    used: usedMemory,
+                    free: freeMemory,
+                    usagePercentage: (usedMemory / totalMemory) * 100,
+                    process: {
+                        rss: memoryUsage.rss,
+                        heapTotal: memoryUsage.heapTotal,
+                        heapUsed: memoryUsage.heapUsed,
+                        external: memoryUsage.external
+                    }
+                },
+                cpu: {
+                    loadAverage: cpuUsage,
+                    coreCount: cpuCount,
+                    usagePercentage: (cpuUsage / cpuCount) * 100
+                },
+                disk: {
+                    ...diskUsage,
+                    usagePercentage: (diskUsage.used / diskUsage.total) * 100
+                },
+                uptime: {
+                    process: uptime,
+                    system: systemUptime,
+                    processUptimeHours: uptime / 3600,
+                    systemUptimeHours: systemUptime / 3600
+                },
+                healthScore: this.calculateSystemHealthScore({
+                    memoryUsage: (usedMemory / totalMemory) * 100,
+                    cpuUsage: (cpuUsage / cpuCount) * 100,
+                    diskUsage: (diskUsage.used / diskUsage.total) * 100
+                })
+            };
+
+        } catch (error) {
+            console.error('Error getting system metrics:', error);
+            return {
+                memory: {},
+                cpu: {},
+                disk: {},
+                uptime: {},
+                healthScore: 0
+            };
+        }
+    }
+
+    /**
+     * Get error and alert metrics
+     */
+    async getErrorMetrics(connection, timeframe) {
+        try {
+            const timeframeHours = this.parseTimeframe(timeframe);
+
+            // Get error logs (if error logging is implemented)
+            const [errorStats] = await connection.execute(`
+                SELECT 
+                    error_type,
+                    COUNT(*) as error_count,
+                    MAX(created_at) as last_occurrence
+                FROM error_logs 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                GROUP BY error_type
+                ORDER BY error_count DESC
+                LIMIT 10
+            `, [timeframeHours]);
+
+            // Get critical alerts
+            const [criticalAlerts] = await connection.execute(`
+                SELECT 
+                    alert_type,
+                    alert_message,
+                    severity,
+                    created_at,
+                    resolved_at
+                FROM system_alerts 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                AND severity IN ('critical', 'high')
+                ORDER BY created_at DESC
+                LIMIT 20
+            `, [timeframeHours]);
+
+            const totalErrors = errorStats.reduce((sum, stat) => sum + parseInt(stat.error_count), 0);
+            const activeAlerts = criticalAlerts.filter(alert => !alert.resolved_at).length;
+
+            return {
+                totalErrors,
+                activeAlerts,
+                errorsByType: errorStats,
+                criticalAlerts,
+                errorRate: totalErrors / timeframeHours, // errors per hour
+                healthScore: this.calculateErrorHealthScore(totalErrors, activeAlerts)
+            };
+
+        } catch (error) {
+            console.error('Error getting error metrics:', error);
+            return {
+                totalErrors: 0,
+                activeAlerts: 0,
+                errorsByType: [],
+                criticalAlerts: [],
+                errorRate: 0,
+                healthScore: 100
+            };
+        }
+    }
+
+    /**
+     * Calculate overall performance scores
+     */
+    calculatePerformanceScores(metrics) {
+        const scores = {
+            database: metrics.dbMetrics.healthScore || 0,
+            api: metrics.apiMetrics.healthScore || 0,
+            rcm: metrics.rcmMetrics.healthScore || 0,
+            system: metrics.systemMetrics.healthScore || 0,
+            errors: metrics.errorMetrics.healthScore || 0
+        };
+
+        // Calculate weighted overall score
+        const weights = {
+            database: 0.25,
+            api: 0.20,
+            rcm: 0.30,
+            system: 0.15,
+            errors: 0.10
+        };
+
+        const overallScore = Object.keys(scores).reduce((total, key) => {
+            return total + (scores[key] * weights[key]);
+        }, 0);
+
+        return {
+            ...scores,
+            overall: Math.round(overallScore),
+            grade: this.getPerformanceGrade(overallScore)
+        };
+    }
+
+    /**
+     * Get active alerts
+     */
+    async getActiveAlerts() {
+        try {
+            const connection = await this.pool.getConnection();
+
+            const [alerts] = await connection.execute(`
+                SELECT * FROM system_alerts 
+                WHERE resolved_at IS NULL
+                ORDER BY severity DESC, created_at DESC
+                LIMIT 50
+            `);
+
+            connection.release();
+
+            return alerts.map(alert => ({
+                ...alert,
+                duration: Date.now() - new Date(alert.created_at).getTime()
+            }));
+
+        } catch (error) {
+            console.error('Error getting active alerts:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Generate performance recommendations
+     */
+    generateRecommendations(scores) {
+        const recommendations = [];
+
+        if (scores.database < 70) {
+            recommendations.push({
+                category: 'Database',
+                priority: 'High',
+                issue: 'Database performance is below optimal',
+                recommendation: 'Optimize slow queries and consider connection pool tuning',
+                expectedImpact: 'Improve response times by 20-30%'
+            });
+        }
+
+        if (scores.api < 70) {
+            recommendations.push({
+                category: 'API',
+                priority: 'High',
+                issue: 'API performance is degraded',
+                recommendation: 'Implement caching and optimize endpoint response times',
+                expectedImpact: 'Reduce API response times by 15-25%'
+            });
+        }
+
+        if (scores.rcm < 80) {
+            recommendations.push({
+                category: 'RCM',
+                priority: 'Medium',
+                issue: 'RCM processes need optimization',
+                recommendation: 'Review denial management and ERA processing workflows',
+                expectedImpact: 'Improve collection rates by 5-10%'
+            });
+        }
+
+        if (scores.system < 75) {
+            recommendations.push({
+                category: 'System',
+                priority: 'Medium',
+                issue: 'System resources are under pressure',
+                recommendation: 'Monitor memory usage and consider scaling resources',
+                expectedImpact: 'Improve overall system stability'
+            });
+        }
+
+        if (scores.errors < 90) {
+            recommendations.push({
+                category: 'Error Management',
+                priority: 'High',
+                issue: 'High error rate detected',
+                recommendation: 'Investigate and resolve recurring errors',
+                expectedImpact: 'Reduce system errors by 50-70%'
+            });
+        }
+
+        return recommendations;
+    }
+
+    // Helper methods for health score calculations
+    calculateDatabaseHealthScore(queryStats, totalConnections, activeConnections) {
+        let score = 100;
+
+        if (queryStats) {
+            if (queryStats.avg_query_time_seconds > 2) score -= 20;
+            if (queryStats.slow_queries > 10) score -= 15;
+        }
+
+        const connectionUtilization = (activeConnections / totalConnections) * 100;
+        if (connectionUtilization > 80) score -= 25;
+
+        return Math.max(0, score);
+    }
+
+    calculateAPIHealthScore(errorRate, throughput, apiStats) {
+        let score = 100;
+
+        if (errorRate > 5) score -= 30;
+        if (errorRate > 10) score -= 20;
+
+        const avgResponseTime = apiStats.length > 0 ? 
+            apiStats.reduce((sum, stat) => sum + parseFloat(stat.avg_response_time), 0) / apiStats.length : 0;
+        
+        if (avgResponseTime > 3000) score -= 25;
+        if (avgResponseTime > 5000) score -= 15;
+
+        return Math.max(0, score);
+    }
+
+    calculateRCMHealthScore(kpis) {
+        let score = 100;
+
+        if (kpis.collectionRate < 85) score -= 20;
+        if (kpis.denialRate > 10) score -= 25;
+        if (kpis.avgProcessingDays > 30) score -= 15;
+        if (kpis.eraMatchRate < 80) score -= 20;
+
+        return Math.max(0, score);
+    }
+
+    calculateSystemHealthScore(usage) {
+        let score = 100;
+
+        if (usage.memoryUsage > 85) score -= 25;
+        if (usage.cpuUsage > 80) score -= 20;
+        if (usage.diskUsage > 90) score -= 30;
+
+        return Math.max(0, score);
+    }
+
+    calculateErrorHealthScore(totalErrors, activeAlerts) {
+        let score = 100;
+
+        if (totalErrors > 50) score -= 30;
+        if (totalErrors > 100) score -= 20;
+        if (activeAlerts > 5) score -= 25;
+        if (activeAlerts > 10) score -= 25;
+
+        return Math.max(0, score);
+    }
+
+    getPerformanceGrade(score) {
+        if (score >= 90) return 'A';
+        if (score >= 80) return 'B';
+        if (score >= 70) return 'C';
+        if (score >= 60) return 'D';
+        return 'F';
+    }
+
+    parseTimeframe(timeframe) {
+        const timeframeMap = {
+            '15m': 0.25,
+            '30m': 0.5,
+            '1h': 1,
+            '6h': 6,
+            '12h': 12,
+            '24h': 24,
+            '7d': 168
+        };
+        return timeframeMap[timeframe] || 1;
+    }
+
+    /**
+     * Create performance alert
+     */
+    async createAlert(alertData) {
+        try {
+            const connection = await this.pool.getConnection();
+
+            const [result] = await connection.execute(`
+                INSERT INTO system_alerts 
+                (alert_type, alert_message, severity, metric_value, threshold_value, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            `, [
+                alertData.type,
+                alertData.message,
+                alertData.severity,
+                alertData.metricValue,
+                alertData.thresholdValue
+            ]);
+
+            connection.release();
+            return result.insertId;
+
+        } catch (error) {
+            console.error('Error creating alert:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Start performance monitoring
+     */
+    startMonitoring(intervalMinutes = 5) {
+        setInterval(async () => {
+            try {
+                const metrics = await this.getPerformanceMetrics('15m');
+                
+                // Check for alert conditions
+                await this.checkAlertConditions(metrics);
+                
+                // Store metrics for historical analysis
+                await this.storeMetrics(metrics);
+                
+            } catch (error) {
+                console.error('Performance monitoring error:', error);
+            }
+        }, intervalMinutes * 60 * 1000);
+    }
+
+    /**
+     * Check for alert conditions
+     */
+    async checkAlertConditions(metrics) {
+        const alerts = [];
+
+        // Check response time alerts
+        if (metrics.api.summary.avgResponseTime > this.alertThresholds.responseTime) {
+            alerts.push({
+                type: 'HIGH_RESPONSE_TIME',
+                message: `Average API response time (${metrics.api.summary.avgResponseTime}ms) exceeds threshold`,
+                severity: 'high',
+                metricValue: metrics.api.summary.avgResponseTime,
+                thresholdValue: this.alertThresholds.responseTime
+            });
+        }
+
+        // Check error rate alerts
+        if (metrics.api.summary.errorRate > this.alertThresholds.errorRate) {
+            alerts.push({
+                type: 'HIGH_ERROR_RATE',
+                message: `API error rate (${metrics.api.summary.errorRate}%) exceeds threshold`,
+                severity: 'critical',
+                metricValue: metrics.api.summary.errorRate,
+                thresholdValue: this.alertThresholds.errorRate
+            });
+        }
+
+        // Check system resource alerts
+        if (metrics.system.memory.usagePercentage > this.alertThresholds.memoryUsage) {
+            alerts.push({
+                type: 'HIGH_MEMORY_USAGE',
+                message: `Memory usage (${metrics.system.memory.usagePercentage.toFixed(1)}%) exceeds threshold`,
+                severity: 'high',
+                metricValue: metrics.system.memory.usagePercentage,
+                thresholdValue: this.alertThresholds.memoryUsage
+            });
+        }
+
+        // Create alerts
+        for (const alert of alerts) {
+            await this.createAlert(alert);
+        }
+    }
+
+    /**
+     * Store metrics for historical analysis
+     */
+    async storeMetrics(metrics) {
+        try {
+            const connection = await this.pool.getConnection();
+
+            await connection.execute(`
+                INSERT INTO performance_metrics_history 
+                (timestamp, database_score, api_score, rcm_score, system_score, 
+                 overall_score, response_time, error_rate, memory_usage, cpu_usage)
+                VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                metrics.scores.database,
+                metrics.scores.api,
+                metrics.scores.rcm,
+                metrics.scores.system,
+                metrics.scores.overall,
+                metrics.api.summary.avgResponseTime || 0,
+                metrics.api.summary.errorRate || 0,
+                metrics.system.memory.usagePercentage || 0,
+                metrics.system.cpu.usagePercentage || 0
+            ]);
+
+            connection.release();
+
+        } catch (error) {
+            console.error('Error storing metrics:', error);
+        }
+    }
+}
+
+module.exports = PerformanceMonitoringService;

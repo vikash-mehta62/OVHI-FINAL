@@ -96,7 +96,7 @@ const executeQuery = async (query, params = []) => {
   } catch (error) {
     const executionTime = Date.now() - startTime;
     console.error('Database query error:', {
-      query: query.substring(0, 100) + '...', // Log first 100 chars of query
+      query: typeof query === 'string' ? query.substring(0, 100) + '...' : 'Invalid query type', // Log first 100 chars of query
       params: params,
       executionTime: `${executionTime}ms`,
       error: error.message

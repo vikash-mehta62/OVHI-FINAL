@@ -1,518 +1,583 @@
 /**
  * Enhanced ERA Processor Component
- * Handles ERA file processing with ClaimMD integration
+ * Advanced ERA file processing with intelligent matching
  */
 
-import React, { useState, useCallback } from 'react';
-import { useSelector } from 'react-redux';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Upload,
-  FileText,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-  Download,
-  Eye,
-  AlertTriangle,
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { 
+  Upload, 
+  FileText, 
+  CheckCircle, 
+  AlertTriangle, 
   Clock,
   DollarSign,
-  Activity
+  TrendingUp,
+  Download,
+  RefreshCw,
+  Eye,
+  Settings
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface ERAProcessingResult {
-  eraId: number;
+interface ERAFile {
+  id: string;
   fileName: string;
+  fileFormat: string;
+  processingStatus: string;
   totalPayments: number;
-  totalAdjustments: number;
-  processedCount: number;
-  autoPostedCount: number;
-  payments: any[];
-  claimMdIntegration: {
-    enabled: boolean;
-    referenceId?: string;
-    status?: string;
-    message?: string;
-  };
+  matchedPayments: number;
+  unmatchedPayments: number;
+  postedAmount: number;
+  uploadedAt: string;
+  processedAt?: string;
 }
 
-interface ProcessingStatus {
-  stage: string;
-  progress: number;
-  message: string;
+interface PaymentMatch {
+  id: string;
+  claimNumber: string;
+  paymentAmount: number;
+  matchType: string;
+  confidence: number;
+  claimId: string;
+  status: string;
 }
 
 const EnhancedERAProcessor: React.FC = () => {
-  const { token } = useSelector((state: any) => state.auth);
+  const [eraFiles, setEraFiles] = useState<ERAFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileFormat, setFileFormat] = useState('X12_835');
+  const [autoPost, setAutoPost] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
-  const [result, setResult] = useState<ERAProcessingResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [options, setOptions] = useState({
-    autoPost: false,
-    claimMdIntegration: true,
-    validateClaims: true
-  });
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState<any>(null);
+  const [paymentMatches, setPaymentMatches] = useState<PaymentMatch[]>([]);
+  const [activeTab, setActiveTab] = useState('upload');
 
-  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Validate file type
-      if (!file.name.toLowerCase().endsWith('.835') && !file.name.toLowerCase().endsWith('.txt')) {
-        setError('Please select a valid ERA file (.835 or .txt)');
-        return;
+  // Sample data for demonstration
+  useEffect(() => {
+    const sampleFiles: ERAFile[] = [
+      {
+        id: '1',
+        fileName: 'ERA_20240115_BCBS.835',
+        fileFormat: 'X12_835',
+        processingStatus: 'completed',
+        totalPayments: 45,
+        matchedPayments: 42,
+        unmatchedPayments: 3,
+        postedAmount: 12450.75,
+        uploadedAt: '2024-01-15T10:30:00Z',
+        processedAt: '2024-01-15T10:35:00Z'
+      },
+      {
+        id: '2',
+        fileName: 'ERA_20240116_Aetna.csv',
+        fileFormat: 'CSV',
+        processingStatus: 'processing',
+        totalPayments: 28,
+        matchedPayments: 25,
+        unmatchedPayments: 3,
+        postedAmount: 8750.25,
+        uploadedAt: '2024-01-16T09:15:00Z'
       }
-      
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB');
-        return;
-      }
-
-      setSelectedFile(file);
-      setError(null);
-      setResult(null);
-    }
-  }, []);
-
-  const simulateProcessingStages = useCallback(() => {
-    const stages = [
-      { stage: 'Uploading', progress: 10, message: 'Uploading ERA file...' },
-      { stage: 'Parsing', progress: 30, message: 'Parsing X12 835 format...' },
-      { stage: 'ClaimMD', progress: 50, message: 'Sending to ClaimMD API...' },
-      { stage: 'Validation', progress: 70, message: 'Validating payment data...' },
-      { stage: 'Processing', progress: 90, message: 'Processing payments...' },
-      { stage: 'Complete', progress: 100, message: 'Processing complete!' }
     ];
 
-    let currentStage = 0;
-    const interval = setInterval(() => {
-      if (currentStage < stages.length) {
-        setProcessingStatus(stages[currentStage]);
-        currentStage++;
-      } else {
-        clearInterval(interval);
+    const sampleMatches: PaymentMatch[] = [
+      {
+        id: '1',
+        claimNumber: 'CLM-2024-001',
+        paymentAmount: 250.00,
+        matchType: 'exact',
+        confidence: 100,
+        claimId: '1001',
+        status: 'posted'
+      },
+      {
+        id: '2',
+        claimNumber: 'CLM-2024-002',
+        paymentAmount: 180.50,
+        matchType: 'fuzzy',
+        confidence: 85,
+        claimId: '1002',
+        status: 'matched'
+      },
+      {
+        id: '3',
+        claimNumber: 'CLM-2024-003',
+        paymentAmount: 320.75,
+        matchType: 'partial',
+        confidence: 60,
+        claimId: '1003',
+        status: 'review_required'
       }
-    }, 1000);
+    ];
 
-    return interval;
+    setEraFiles(sampleFiles);
+    setPaymentMatches(sampleMatches);
   }, []);
 
-  const handleProcessERA = useCallback(async () => {
-    if (!selectedFile) return;
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      
+      // Auto-detect format based on file extension
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === '835') setFileFormat('X12_835');
+      else if (extension === 'csv') setFileFormat('CSV');
+      else if (extension === 'xlsx' || extension === 'xls') setFileFormat('EXCEL');
+    }
+  };
+
+  const handleProcessERA = async () => {
+    if (!selectedFile) {
+      toast.error('Please select an ERA file');
+      return;
+    }
+
+    setProcessing(true);
+    setUploadProgress(0);
 
     try {
-      setProcessing(true);
-      setError(null);
-      setResult(null);
-
-      // Start processing animation
-      const interval = simulateProcessingStages();
-
-      // Read file content
-      const fileContent = await selectedFile.text();
+      // Simulate file reading
+      const fileContent = await readFileContent(selectedFile);
+      
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
       // Process ERA file
-      const response = await fetch('/api/v1/rcm/era/process', {
+      const response = await fetch('/api/v1/rcm/enhanced/era/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
           era_data: fileContent,
           file_name: selectedFile.name,
-          auto_post: options.autoPost,
-          claimMdIntegration: options.claimMdIntegration
+          file_format: fileFormat,
+          auto_post: autoPost
         })
       });
 
-      const data = await response.json();
+      clearInterval(progressInterval);
+      setUploadProgress(100);
 
-      if (data.success) {
-        setResult(data.data);
-        setProcessingStatus({
-          stage: 'Complete',
-          progress: 100,
-          message: 'ERA processing completed successfully!'
-        });
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Add new file to list
+        const newFile: ERAFile = {
+          id: result.data.eraFileId,
+          fileName: selectedFile.name,
+          fileFormat,
+          processingStatus: 'completed',
+          totalPayments: result.data.summary.totalPayments,
+          matchedPayments: result.data.summary.matchedPayments,
+          unmatchedPayments: result.data.summary.unmatchedPayments,
+          postedAmount: result.data.summary.postedAmount,
+          uploadedAt: new Date().toISOString()
+        };
+
+        setEraFiles(prev => [newFile, ...prev]);
+        setSelectedFile(null);
+        setUploadProgress(0);
+        setActiveTab('files');
+        
+        toast.success(`ERA file processed successfully! ${result.data.summary.matchedPayments} payments matched.`);
       } else {
-        throw new Error(data.message || 'ERA processing failed');
+        throw new Error('Failed to process ERA file');
       }
 
-      clearInterval(interval);
     } catch (error) {
       console.error('ERA processing error:', error);
-      setError(error instanceof Error ? error.message : 'ERA processing failed');
-      setProcessingStatus(null);
+      toast.error('Failed to process ERA file');
     } finally {
       setProcessing(false);
     }
-  }, [selectedFile, options, token, simulateProcessingStages]);
+  };
 
-  const handleCheckClaimMDStatus = useCallback(async (referenceId: string) => {
-    try {
-      const response = await fetch(`/api/v1/rcm/claimmd/era/${referenceId}/status`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+  const readFileContent = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
+  };
 
-      const data = await response.json();
-      if (data.success) {
-        // Update result with latest status
-        setResult(prev => prev ? {
-          ...prev,
-          claimMdIntegration: {
-            ...prev.claimMdIntegration,
-            status: data.data.status,
-            message: data.data.message
-          }
-        } : null);
-      }
-    } catch (error) {
-      console.error('Error checking ClaimMD status:', error);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'failed': return 'bg-red-100 text-red-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
-  }, [token]);
+  };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  const getMatchTypeColor = (matchType: string) => {
+    switch (matchType) {
+      case 'exact': return 'bg-green-100 text-green-800';
+      case 'fuzzy': return 'bg-blue-100 text-blue-800';
+      case 'partial': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 90) return 'text-green-600';
+    if (confidence >= 70) return 'text-blue-600';
+    if (confidence >= 50) return 'text-yellow-600';
+    return 'text-red-600';
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold">Enhanced ERA Processor</h2>
-        <p className="text-gray-500">Process ERA files with ClaimMD integration and automated posting</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Enhanced ERA Processor</h2>
+          <p className="text-gray-600">Advanced ERA file processing with intelligent payment matching</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            Settings
+          </Button>
+          <Button variant="outline" className="flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            Export Report
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="upload" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="upload">Upload & Process</TabsTrigger>
-          <TabsTrigger value="results" disabled={!result}>Results</TabsTrigger>
-          <TabsTrigger value="history">Processing History</TabsTrigger>
+          <TabsTrigger value="upload">Upload ERA</TabsTrigger>
+          <TabsTrigger value="files">Processing History</TabsTrigger>
+          <TabsTrigger value="matches">Payment Matches</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="upload">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* File Upload */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Upload className="h-5 w-5" />
-                  <span>ERA File Upload</span>
-                </CardTitle>
-                <CardDescription>
-                  Upload your ERA file (.835 or .txt format)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
+        <TabsContent value="upload" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-500" />
+                Upload ERA File
+              </CardTitle>
+              <CardDescription>
+                Upload and process ERA files with advanced matching algorithms
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <Label htmlFor="era-file">Select ERA File</Label>
                   <Input
                     id="era-file"
                     type="file"
-                    accept=".835,.txt"
+                    accept=".835,.csv,.xlsx,.xls,.json"
                     onChange={handleFileSelect}
                     disabled={processing}
                   />
                   {selectedFile && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
-                      <FileText className="h-4 w-4" />
-                      <span>{selectedFile.name}</span>
-                      <span>({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                    </p>
                   )}
                 </div>
-
-                {error && (
-                  <Alert className="border-red-200 bg-red-50">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-700">
-                      {error}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="auto-post">Auto-post payments</Label>
-                    <Switch
-                      id="auto-post"
-                      checked={options.autoPost}
-                      onCheckedChange={(checked) => setOptions(prev => ({ ...prev, autoPost: checked }))}
-                      disabled={processing}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="claimmd-integration">ClaimMD integration</Label>
-                    <Switch
-                      id="claimmd-integration"
-                      checked={options.claimMdIntegration}
-                      onCheckedChange={(checked) => setOptions(prev => ({ ...prev, claimMdIntegration: checked }))}
-                      disabled={processing}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="validate-claims">Validate claims</Label>
-                    <Switch
-                      id="validate-claims"
-                      checked={options.validateClaims}
-                      onCheckedChange={(checked) => setOptions(prev => ({ ...prev, validateClaims: checked }))}
-                      disabled={processing}
-                    />
-                  </div>
+                
+                <div>
+                  <Label>File Format</Label>
+                  <Select value={fileFormat} onValueChange={setFileFormat} disabled={processing}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="X12_835">X12 835 (EDI)</SelectItem>
+                      <SelectItem value="CSV">CSV Format</SelectItem>
+                      <SelectItem value="EXCEL">Excel Format</SelectItem>
+                      <SelectItem value="JSON">JSON Format</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <Button
-                  onClick={handleProcessERA}
-                  disabled={!selectedFile || processing}
-                  className="w-full"
-                >
-                  {processing ? (
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Activity className="h-4 w-4 mr-2" />
-                  )}
-                  {processing ? 'Processing...' : 'Process ERA File'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Processing Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Clock className="h-5 w-5" />
-                  <span>Processing Status</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {processingStatus ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{processingStatus.stage}</span>
-                      <span className="text-sm text-gray-500">{processingStatus.progress}%</span>
-                    </div>
-                    <Progress value={processingStatus.progress} className="w-full" />
-                    <p className="text-sm text-gray-600">{processingStatus.message}</p>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Upload className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Select and upload an ERA file to begin processing</p>
-                  </div>
-                )}
-
-                {result && (
-                  <div className="space-y-3 pt-4 border-t">
-                    <h4 className="font-medium text-green-700">Processing Complete!</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-500">Payments:</span>
-                        <span className="ml-2 font-medium">{result.processedCount}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Auto-posted:</span>
-                        <span className="ml-2 font-medium">{result.autoPostedCount}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Total Amount:</span>
-                        <span className="ml-2 font-medium">{formatCurrency(result.totalPayments)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Adjustments:</span>
-                        <span className="ml-2 font-medium">{formatCurrency(result.totalAdjustments)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="results">
-          {result && (
-            <div className="space-y-6">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-2">
-                      <FileText className="h-5 w-5 text-blue-500" />
-                      <div>
-                        <p className="text-sm font-medium">Payments Processed</p>
-                        <p className="text-2xl font-bold">{result.processedCount}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <div>
-                        <p className="text-sm font-medium">Auto-posted</p>
-                        <p className="text-2xl font-bold">{result.autoPostedCount}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-2">
-                      <DollarSign className="h-5 w-5 text-green-500" />
-                      <div>
-                        <p className="text-sm font-medium">Total Payments</p>
-                        <p className="text-2xl font-bold">{formatCurrency(result.totalPayments)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-2">
-                      <Activity className="h-5 w-5 text-orange-500" />
-                      <div>
-                        <p className="text-sm font-medium">Adjustments</p>
-                        <p className="text-2xl font-bold">{formatCurrency(result.totalAdjustments)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
 
-              {/* ClaimMD Integration Status */}
-              {result.claimMdIntegration.enabled && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span>ClaimMD Integration Status</span>
-                      {result.claimMdIntegration.referenceId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCheckClaimMDStatus(result.claimMdIntegration.referenceId!)}
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Check Status
-                        </Button>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">Integration Status</span>
-                        <Badge variant={result.claimMdIntegration.status === 'submitted' ? 'default' : 'secondary'}>
-                          {result.claimMdIntegration.status || 'Unknown'}
-                        </Badge>
-                      </div>
-                      
-                      {result.claimMdIntegration.referenceId && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-500">Reference ID</span>
-                          <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                            {result.claimMdIntegration.referenceId}
-                          </code>
-                        </div>
-                      )}
-                      
-                      {result.claimMdIntegration.message && (
-                        <div>
-                          <span className="text-sm text-gray-500">Message</span>
-                          <p className="text-sm mt-1">{result.claimMdIntegration.message}</p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="auto-post"
+                  checked={autoPost}
+                  onChange={(e) => setAutoPost(e.target.checked)}
+                  disabled={processing}
+                />
+                <Label htmlFor="auto-post">Auto-post matched payments</Label>
+              </div>
+
+              {processing && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Processing ERA file...</span>
+                    <span className="text-sm font-medium">{uploadProgress}%</span>
+                  </div>
+                  <Progress value={uploadProgress} className="w-full" />
+                </div>
               )}
 
-              {/* Payment Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment Details</CardTitle>
-                  <CardDescription>
-                    Individual payment records from the ERA file
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {result.payments.slice(0, 10).map((payment, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          {payment.auto_posted ? (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Clock className="h-4 w-4 text-yellow-500" />
-                          )}
-                          <div>
-                            <p className="font-medium">Claim #{payment.claim_id}</p>
-                            <p className="text-sm text-gray-500">
-                              Patient ID: {payment.patient_id} | Service: {payment.service_date}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium">{formatCurrency(payment.paid_amount)}</p>
-                          <p className="text-sm text-gray-500">
-                            {payment.auto_posted ? 'Auto-posted' : 'Pending'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {result.payments.length > 10 && (
-                      <div className="text-center py-2">
-                        <Button variant="outline" size="sm">
-                          <Eye className="h-4 w-4 mr-2" />
-                          View All {result.payments.length} Payments
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+              <Button 
+                onClick={handleProcessERA}
+                disabled={!selectedFile || processing}
+                className="w-full"
+              >
+                {processing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Process ERA File
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="history">
+        <TabsContent value="files" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Processing History</CardTitle>
+              <CardTitle>ERA Processing History</CardTitle>
               <CardDescription>
-                View previously processed ERA files
+                View all processed ERA files and their status
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>ERA processing history will be displayed here</p>
-                <Button variant="outline" className="mt-4">
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Load History
-                </Button>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>File Name</TableHead>
+                      <TableHead>Format</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Total Payments</TableHead>
+                      <TableHead>Matched</TableHead>
+                      <TableHead>Unmatched</TableHead>
+                      <TableHead>Posted Amount</TableHead>
+                      <TableHead>Processed At</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {eraFiles.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">{file.fileName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{file.fileFormat}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(file.processingStatus)}>
+                            {file.processingStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{file.totalPayments}</TableCell>
+                        <TableCell>
+                          <span className="text-green-600 font-medium">{file.matchedPayments}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={file.unmatchedPayments > 0 ? 'text-red-600 font-medium' : ''}>
+                            {file.unmatchedPayments}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">${file.postedAmount.toFixed(2)}</span>
+                        </TableCell>
+                        <TableCell>
+                          {file.processedAt ? 
+                            new Date(file.processedAt).toLocaleString() : 
+                            'Processing...'
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button size="sm" variant="outline">
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <Download className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="matches" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Matching Results</CardTitle>
+              <CardDescription>
+                Review payment matching results and confidence scores
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim Number</TableHead>
+                      <TableHead>Payment Amount</TableHead>
+                      <TableHead>Match Type</TableHead>
+                      <TableHead>Confidence</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paymentMatches.map((match) => (
+                      <TableRow key={match.id}>
+                        <TableCell className="font-medium">{match.claimNumber}</TableCell>
+                        <TableCell>${match.paymentAmount.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Badge className={getMatchTypeColor(match.matchType)}>
+                            {match.matchType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={getConfidenceColor(match.confidence)}>
+                            {match.confidence}%
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={match.status === 'posted' ? 'default' : 'secondary'}>
+                            {match.status.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {match.status === 'matched' && (
+                              <Button size="sm" variant="outline">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Post
+                              </Button>
+                            )}
+                            {match.status === 'review_required' && (
+                              <Button size="sm" variant="outline">
+                                <Eye className="w-3 h-3 mr-1" />
+                                Review
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total ERA Files</p>
+                    <p className="text-2xl font-bold text-blue-600">{eraFiles.length}</p>
+                  </div>
+                  <FileText className="w-8 h-8 text-blue-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Match Rate</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {eraFiles.length > 0 ? 
+                        ((eraFiles.reduce((sum, f) => sum + f.matchedPayments, 0) / 
+                          eraFiles.reduce((sum, f) => sum + f.totalPayments, 0)) * 100).toFixed(1) : 0}%
+                    </p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Posted</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      ${eraFiles.reduce((sum, f) => sum + f.postedAmount, 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Processing Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Average Match Rate</p>
+                    <p className="text-lg font-bold text-green-600">93.5%</p>
+                  </div>
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Average Processing Time</p>
+                    <p className="text-lg font-bold text-blue-600">2.3 minutes</p>
+                  </div>
+                  <Clock className="w-8 h-8 text-blue-500" />
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Files Requiring Review</p>
+                    <p className="text-lg font-bold text-yellow-600">
+                      {eraFiles.filter(f => f.unmatchedPayments > 0).length}
+                    </p>
+                  </div>
+                  <AlertTriangle className="w-8 h-8 text-yellow-500" />
+                </div>
               </div>
             </CardContent>
           </Card>

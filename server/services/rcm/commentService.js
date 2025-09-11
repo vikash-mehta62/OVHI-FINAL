@@ -203,7 +203,15 @@ class CommentService {
         ORDER BY cc.created_at DESC
       `;
 
-      const result = await executeQueryWithPagination(query, queryParams, page, limit);
+      // Create count query for pagination
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM claim_comments cc
+        LEFT JOIN users u ON cc.user_id = u.id
+        WHERE ${whereClause}
+      `;
+
+      const result = await executeQueryWithPagination(query, countQuery, queryParams, { page, limit });
 
       // Get replies for each comment
       const commentsWithReplies = await Promise.all(
@@ -662,7 +670,17 @@ class CommentService {
         ORDER BY cc.created_at DESC
       `;
 
-      const result = await executeQueryWithPagination(searchQuery, queryParams, page, limit);
+      // Create count query for pagination
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM claim_comments cc
+        LEFT JOIN users u ON cc.user_id = u.id
+        LEFT JOIN billings b ON cc.claim_id = b.id
+        LEFT JOIN patients p ON b.patient_id = p.id
+        WHERE ${whereClause}
+      `;
+
+      const result = await executeQueryWithPagination(searchQuery, countQuery, queryParams, { page, limit });
 
       return {
         results: result.data.map(comment => this.formatComment(comment)),
