@@ -32,7 +32,8 @@ const rpmRoutes = require("./rpm/rpmRoutes");
 const mipsRoutes = require("../routes/mipsRoutes");
 const userRoutes = require("./user/userRoutes");
 const claimsRoutes = require("./billings/claimsRoutes");
-
+const newBillingRoutes = require("./billing/billingRoutes");
+const servicesRoutes = require("../routes/servicesRoutes");
 
 // Public routes (no auth required)
 router.use('/auth', authRoutes);
@@ -52,8 +53,11 @@ router.use('/work-flow', verifyToken, workFlowRoutes);
 router.use('/mio', mioRoutes);
 router.use("/twilio", verifyToken, twilioRoutes);
 router.use("/documents", verifyToken, documentRoutes);
-router.use("/billing", verifyToken, billingRoutes);
+// router.use("/billing", verifyToken, billingRoutes);
+// Patient Billing & Invoice Module Routes
+router.use("/billings", verifyToken, newBillingRoutes);
 router.use("/claims", verifyToken, claimsRoutes);
+router.use("/services", verifyToken, servicesRoutes);
 router.use("/ccm", verifyToken, ccmRoutes);
 router.use("/encounters", verifyToken, encountersRoutes);
 router.use("/devices", verifyToken, devicesRoutes);

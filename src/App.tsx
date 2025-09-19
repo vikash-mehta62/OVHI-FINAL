@@ -79,6 +79,7 @@ import LargePractices from "./pages/solutions/LargePractices";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import RCMManagement from "./pages/RCMManagement";
+import Services from "./pages/Services";
 
 // RCM Components
 import DenialManagement from "./components/rcm/DenialManagement";
@@ -276,6 +277,7 @@ const App = () => {
                     <Route path="encounters" element={<Encounters />} />
                     <Route path="billing" element={<Billing />} />
                     <Route path="rcm" element={<RCMManagement />} />
+                    <Route path="services" element={<Services />} />
                     <Route path="intake" element={<PatientIntake />} />
                     <Route path="patient-beds" element={<PatientBeds />} />
                     <Route

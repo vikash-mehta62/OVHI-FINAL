@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Services Module Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .test-results { margin-top: 20px; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Services Management Module Test</h1>
+        <p>This page tests the Services Management module connectivity.</p>
+        
+        <div class="info">
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Make sure the backend server is running on port 8000</li>
+                <li>Make sure you're logged into the main application</li>
+                <li>Click the test buttons below to verify connectivity</li>
+            </ol>
+        </div>
+
+        <div>
+            <button onclick="testEndpoints()">Test API Endpoints</button>
+            <button onclick="testWithAuth()">Test with Authentication</button>
+            <button onclick="clearResults()">Clear Results</button>
+        </div>
+
+        <div id="results" class="test-results"></div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000/api/v1';
+        
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testEndpoints() {
+            log('🧪 Testing API endpoints...', 'info');
+            
+            try {
+                // Test services endpoint
+                const response = await fetch(`${BASE_URL}/services`);
+                if (response.status === 401) {
+                    log('✅ Services endpoint exists and requires authentication', 'success');
+                } else {
+                    log(`❌ Unexpected response: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, 'error');
+            }
+
+            try {
+                // Test categories endpoint
+                const response = await fetch(`${BASE_URL}/services/meta/categories`);
+                if (response.status === 401) {
+                    log('✅ Categories endpoint exists and requires authentication', 'success');
+                } else {
+                    log(`❌ Unexpected response: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWithAuth() {
+            log('🔐 Testing with authentication...', 'info');
+            
+            // Try to get token from localStorage (if user is logged in)
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                log('❌ No authentication token found. Please login to the main application first.', 'error');
+                return;
+            }
+
+            log('✅ Found authentication token', 'success');
+
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+
+            try {
+                // Test getting services
+                const response = await fetch(`${BASE_URL}/services`, { headers });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Successfully retrieved ${data.services?.length || 0} services`, 'success');
+                    
+                    if (data.services && data.services.length > 0) {
+                        log(`📋 Sample service: ${data.services[0].service_name} (${data.services[0].service_code})`, 'info');
+                    }
+                } else {
+                    log(`❌ Failed to get services: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Request error: ${error.message}`, 'error');
+            }
+
+            try {
+                // Test getting categories
+                const response = await fetch(`${BASE_URL}/services/meta/categories`, { headers });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Successfully retrieved ${data.categories?.length || 0} categories`, 'success');
+                    log(`📂 Categories: ${data.categories?.join(', ')}`, 'info');
+                } else {
+                    log(`❌ Failed to get categories: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Request error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run basic test on page load
+        window.onload = function() {
+            log('🚀 Services Module Test Page Loaded', 'info');
+            log('Backend URL: ' + BASE_URL, 'info');
+            log('Frontend URL: http://localhost:8080/provider/services', 'info');
+        };
+    </script>
+</body>
+</html>

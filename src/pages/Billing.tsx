@@ -1,556 +1,651 @@
-"use client";
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, Eye, DollarSign, FileText, Filter, Search, Receipt, Download } from 'lucide-react';
+import CreateBillForm from '@/components/billing/CreateBillForm';
+import InvoicePreview from '@/components/billing/InvoicePreview';
+import RecordPaymentForm from '@/components/billing/RecordPaymentForm';
+import BillDetailsDialog from '@/components/billing/BillDetailsDialog';
+import billingService, { Invoice } from '@/services/billingService';
+import pdfGenerator from '@/utils/pdfGenerator';
+import { toast } from 'sonner';
 
-import type React from "react";
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { FileText, Search, ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
-import {
-  getAllPatientsBillingAPI,
-  updateBillingStatusAPI,
-} from "@/services/operations/patient";
-import type { RootState } from "@/redux/store";
-import { useSelector } from "react-redux";
-import Loader from "@/components/Loader";
-import CMS1500Form from "@/components/billing/CMS1500Form";
-
-// Define the structure of the incoming API data
-interface CptData {
-  cpt_code_id: number;
-  code: string;
-  code_units: number;
-  created: string;
-  price: string;
-}
-
-interface PatientBillingData {
-  billing_ids: string; // Changed to string based on "1, 2, 3" in example
+interface Bill {
+  id: number;
   patient_id: number;
-  phone: string;
-  dob: string;
-  date_of_service: string; // "2025-07-31 23:59:59"
-  cpt_codes: string;
-  cpt_code_ids: string;
-  code_units: string;
-  enrolled_date: string | null;
   patient_name: string;
-  provider_name: string;
-  billing_status: number; // 0, 1, 2, 3
-  fk_physician_id: string;
-  total_minutes: number;
-  cpt_data: CptData[]; // Added
-  totalPrice: number; // Added
+  status: string;
+  total_amount: number;
+  created_at: string;
+  physician_name?: string;
+  items: Array<{
+    id: number;
+    bill_id: number;
+    service_id: number;
+    service_name: string;
+    service_code: string;
+    quantity: number;
+    unit_price: number;
+  }>;
 }
 
-interface ApiResponse {
-  success: boolean;
-  message: string;
-  data: PatientBillingData[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
+const Billing = () => {
+  const [activeTab, setActiveTab] = useState<'bills' | 'invoices'>('bills');
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [filteredBills, setFilteredBills] = useState<Bill[]>([]);
+  const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [showCreateBill, setShowCreateBill] = useState(false);
+  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showBillDetails, setShowBillDetails] = useState(false);
+  const [generatingPDF, setGeneratingPDF] = useState<number | null>(null);
 
-// Status mapping as per user request
-const BILLING_STATUS_MAP: { [key: number]: string } = {
-  0: "Draft", // Assuming 0 is an initial/draft state
-  1: "Hold",
-  2: "Approved",
-  3: "Not Approved",
-};
-
-const getStatusText = (status: number) =>
-  BILLING_STATUS_MAP[status] || "Unknown";
-
-const getStatusColor = (status: number) => {
-  switch (status) {
-    case 1: // Hold
-      return "bg-yellow-100 text-yellow-800 border-yellow-500";
-    case 2: // Approved
-      return "bg-green-100 text-green-800 border-green-500";
-    case 3: // Not Approved
-      return "bg-red-100 text-red-800 border-red-500";
-    case 0: // Draft/Initial
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-500";
-  }
-};
-
-const formatDate = (dateString: string) => {
-  if (!dateString) return "N/A";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
-const Billing: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTab, setSelectedTab] = useState("all");
-  const [billingRecords, setBillingRecords] = useState<PatientBillingData[]>(
-    []
-  );
-  const [isStatusChangeDialogOpen, setIsStatusChangeDialogOpen] =
-    useState(false);
-  const [selectedBillForStatusChange, setSelectedBillForStatusChange] =
-    useState<PatientBillingData | null>(null);
-  const [newStatusValue, setNewStatusValue] = useState<string>(""); // To hold the selected new status (1, 2, 3)
-
-  // State for View Details Dialog
-  const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
-  const [selectedBillDetails, setSelectedBillDetails] =
-    useState<PatientBillingData | null>(null);
-
-  // State for Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10); // Assuming a fixed limit for now, can be made dynamic
-  const [cms, setCms] = useState(false);
-  const { user, token } = useSelector((state: RootState) => state.auth);
-  const [loading, setLoading] = useState(false);
-  const fetchBilling = async (
-    page: number,
-    query: string,
-    statusFilter: number | null
-  ) => {
-    if (!token) {
-      console.warn("No token available for fetching billing data.");
-      return;
-    }
-    setLoading(true);
-    try {
-      // Modify getAllPatientsBillingAPI to accept statusFilter if needed, or filter client-side
-      const res: ApiResponse = await getAllPatientsBillingAPI(
-        page,
-        token,
-        query
-      );
-      console.log("API Response:", res);
-      if (res.success && Array.isArray(res.data)) {
-        let filteredData = res.data;
-        if (statusFilter !== null) {
-          filteredData = res.data.filter(
-            (record) => record.billing_status === statusFilter
-          );
-        }
-        setBillingRecords(filteredData);
-        setTotalPages(res.pagination.totalPages);
-        setCurrentPage(res.pagination.page);
-      } else {
-        toast.error("Failed to fetch billing data.");
-      }
-    } catch (error) {
-      console.error("Error fetching billing data:", error);
-      toast.error("An error occurred while fetching billing data.");
-    }
-    setLoading(false);
-  };
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const statusMap: { [key: string]: number | null } = {
-      all: null,
-      draft: 0,
-      hold: 1,
-      approved: 2,
-      "not approved": 3,
-    };
-    const statusFilter = statusMap[selectedTab];
-    fetchBilling(currentPage, searchTerm, statusFilter);
-  }, [token, currentPage, searchTerm, selectedTab]); // Depend on token, currentPage, searchTerm, and selectedTab
+    loadData();
+  }, []);
 
-  const handleStatusBadgeClick = (bill: PatientBillingData) => {
-    setSelectedBillForStatusChange(bill);
-    setNewStatusValue(String(bill.billing_status)); // Set initial value to current status
-    setIsStatusChangeDialogOpen(true);
-  };
+  useEffect(() => {
+    if (activeTab === 'bills') {
+      filterBills();
+    } else {
+      filterInvoices();
+    }
+  }, [bills, invoices, statusFilter, searchTerm, activeTab]);
 
-  const handleSaveStatusChange = async () => {
-    if (selectedBillForStatusChange && newStatusValue !== "") {
-      const updatedStatus = Number.parseInt(newStatusValue);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      // Load bills from API
       try {
-        await updateBillingStatusAPI(
-          selectedBillForStatusChange.billing_ids,
-          updatedStatus,
-          token
-        );
-        setBillingRecords((prevRecords) =>
-          prevRecords.map((record) =>
-            record.billing_ids === selectedBillForStatusChange.billing_ids
-              ? { ...record, billing_status: updatedStatus }
-              : record
-          )
-        );
-        toast.success(
-          `Status for Bill #${
-            selectedBillForStatusChange.billing_ids
-          } updated to ${getStatusText(updatedStatus)}`
-        );
-        setIsStatusChangeDialogOpen(false);
-        setSelectedBillForStatusChange(null);
-        setNewStatusValue("");
+        const billsData = await billingService.getAllBills();
+        setBills(billsData);
       } catch (error) {
-        console.error("Error updating billing status:", error);
-        toast.error("Failed to update billing status.");
+        console.error('Failed to load bills from API:', error);
+        toast.error('Failed to load bills');
+        setBills([]);
       }
+
+      // Load invoices from API
+      try {
+        const invoicesData = await billingService.getInvoices();
+        setInvoices(invoicesData);
+      } catch (error) {
+        console.error('Failed to load invoices from API:', error);
+        toast.error('Failed to load invoices');
+        setInvoices([]);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load billing data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleViewDetailsClick = (bill: PatientBillingData) => {
-    setSelectedBillDetails(bill);
-    setIsViewDetailsDialogOpen(true);
+  const filterBills = () => {
+    let filtered = bills;
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(bill => bill.status === statusFilter);
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(bill =>
+        bill.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        bill.id.toString().includes(searchTerm)
+      );
+    }
+
+    setFilteredBills(filtered);
   };
 
-  // New function to handle "View Details" click from the status change dialog
-  const handleViewDetailsFromStatusChange = () => {
-    if (selectedBillForStatusChange) {
-      // setIsStatusChangeDialogOpen(false); // Close status change dialog
-      setSelectedBillDetails(selectedBillForStatusChange); // Set details for the view dialog
-      setIsViewDetailsDialogOpen(true); // Open view details dialog
+  const filterInvoices = () => {
+    let filtered = invoices;
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(invoice => invoice.status === statusFilter);
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(invoice =>
+        invoice.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredInvoices(filtered);
+  };
+
+  const handleBillCreated = () => {
+    setShowCreateBill(false);
+    loadData();
+    toast.success('Bill created successfully');
+  };
+
+  const handlePaymentRecorded = () => {
+    setShowPaymentForm(false);
+    loadData();
+    toast.success('Payment recorded successfully');
+  };
+
+  const handleGenerateInvoice = async (billId: number) => {
+    try {
+      await billingService.generateInvoice(billId);
+      toast.success('Invoice generated successfully');
+      setActiveTab('invoices'); // Switch to invoices tab
+      loadData();
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast.error('Failed to generate invoice');
     }
   };
 
-  const handleBillingCcmForm = (bill: PatientBillingData) => {
-    setSelectedBillDetails(bill);
-    setCms(true);
-  };
+  const handleGenerateInvoicePDF = async (bill: Bill) => {
+    try {
+      setGeneratingPDF(bill.id);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
+      // Get bill data directly from database formatted for PDF
+      const billPdfData = await billingService.getBillForPDF(bill.id);
+
+      // Generate and download the PDF directly from bill data
+      pdfGenerator.downloadInvoicePDF(billPdfData);
+
+      toast.success(`PDF invoice for Bill #${bill.id} downloaded successfully!`);
+
+      // No need to switch tabs or refresh data since we're not creating an invoice
+
+    } catch (error: any) {
+      console.error('Error generating PDF from bill:', error);
+      toast.error(error.response?.data?.message || 'Failed to generate PDF invoice');
+    } finally {
+      setGeneratingPDF(null);
     }
   };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'overdue':
+        return 'bg-red-100 text-red-800';
+      case 'discarded':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const getTotalsByStatus = () => {
+    if (activeTab === 'bills') {
+      const draftTotal = bills.filter(b => b.status === 'draft').reduce((sum, b) => sum + b.total_amount, 0);
+      return {
+        pending: draftTotal,
+        paid: 0,
+        overdue: 0,
+        discarded: 0
+      };
+    } else {
+      const totals = {
+        pending: 0,
+        paid: 0,
+        overdue: 0,
+        discarded: 0
+      };
+
+      invoices.forEach(invoice => {
+        if (totals.hasOwnProperty(invoice.status)) {
+          totals[invoice.status as keyof typeof totals] += invoice.total_amount;
+        }
+      });
+
+      return totals;
+    }
+  };
+
+  const totals = getTotalsByStatus();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Billing Management
-          </h1>
-          <p className="text-muted-foreground">
-            Manage patient billing records and their statuses.
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Billing & Invoices</h1>
+          <p className="text-gray-600">Manage patient billing and invoice processing</p>
         </div>
+        <Dialog open={showCreateBill} onOpenChange={setShowCreateBill}>
+          <DialogTrigger asChild>
+            <Button className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Create Bill
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Bill</DialogTitle>
+            </DialogHeader>
+            <CreateBillForm onSuccess={handleBillCreated} />
+          </DialogContent>
+        </Dialog>
       </div>
-      <Tabs
-        value={selectedTab}
-        onValueChange={setSelectedTab}
-        className="w-full"
-      >
-        <TabsList className="grid w-full md:w-[600px] grid-cols-5">
-          <TabsTrigger value="all">All Bills</TabsTrigger>
-          <TabsTrigger value="draft">Drafts</TabsTrigger>
-          <TabsTrigger value="hold">Hold</TabsTrigger>
-          <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="not approved">Not Approved</TabsTrigger>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'bills' | 'invoices')}>
+        <TabsList className="grid w-fit grid-cols-2">
+          <TabsTrigger value="bills" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Bills (Drafts)
+          </TabsTrigger>
+          <TabsTrigger value="invoices" className="flex items-center gap-2">
+            <Receipt className="h-4 w-4" />
+            Invoices (Finalized)
+          </TabsTrigger>
         </TabsList>
-        <div className="flex flex-col md:flex-row items-center gap-4 my-4">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search bills by patient name, ID, or CPT codes..."
-              className="pl-9 w-full"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+
+        <TabsContent value="bills" className="space-y-6">
+          {/* Bills Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Draft Bills</p>
+                    <p className="text-2xl font-bold text-yellow-600">{formatCurrency(totals.pending)}</p>
+                  </div>
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <FileText className="h-6 w-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Ready to Invoice</p>
+                    <p className="text-2xl font-bold text-blue-600">{bills.filter(b => b.status === 'draft').length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Receipt className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Bills</p>
+                    <p className="text-2xl font-bold text-gray-600">{bills.length}</p>
+                  </div>
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <FileText className="h-6 w-6 text-gray-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Avg Bill Amount</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {bills.length > 0 ? formatCurrency(bills.reduce((sum, b) => sum + b.total_amount, 0) / bills.length) : '$0.00'}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <DollarSign className="h-6 w-6 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
+        </TabsContent>
+
+        <TabsContent value="invoices" className="space-y-6">
+          {/* Invoices Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-600">{formatCurrency(totals.pending)}</p>
+                  </div>
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <FileText className="h-6 w-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Paid</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totals.paid)}</p>
+                  </div>
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <DollarSign className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Overdue</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totals.overdue)}</p>
+                  </div>
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <FileText className="h-6 w-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Invoices</p>
+                    <p className="text-2xl font-bold text-blue-600">{invoices.length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Receipt className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex items-center gap-2 flex-1">
+              <Search className="h-4 w-4 text-gray-400" />
+              <Input
+                placeholder={activeTab === 'bills' ? "Search by patient name or bill ID..." : "Search by patient name or invoice number..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {activeTab === 'bills' ? (
+                    <SelectItem value="draft">Draft</SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                      <SelectItem value="discarded">Discarded</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bills Table */}
+      {activeTab === 'bills' && (
         <Card>
-          <CardHeader className="pb-0">
-            <CardTitle>Billing Records</CardTitle>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900">Bills (Drafts)</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Date of Service</TableHead>
-                  <TableHead>CPT Codes</TableHead>
-                  <TableHead>Total Minutes</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                  <TableHead className="text-right"></TableHead>{" "}
-                  {/* Empty header for CMS button */}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      <div className="h-[120px] flex justify-center items-center">
-                        <Loader />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : billingRecords.length > 0 ? (
-                  billingRecords.map((bill) => (
-                    <TableRow key={bill.billing_ids}>
-                      <TableCell>{bill.patient_name}</TableCell>
-                      <TableCell>{bill.provider_name}</TableCell>
-                      <TableCell>{formatDate(bill.date_of_service)}</TableCell>
-                      <TableCell>{bill.cpt_codes}</TableCell>
-                      <TableCell>{bill.total_minutes}</TableCell>
-                      <TableCell className="flex items-center gap-2">
-                        <Badge
-                          className={`${getStatusColor(bill.billing_status)} `}
-                          // onClick={() => handleStatusBadgeClick(bill)} // Keep this if badge itself should trigger the dialog
-                        >
-                          {getStatusText(bill.billing_status) || "Normal"}
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Bill #</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Patient</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Amount</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Status</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Date</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-700 text-sm min-w-[200px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredBills.map((bill) => (
+                    <tr key={bill.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="py-4 px-4 font-medium text-gray-900">#{bill.id}</td>
+                      <td className="py-4 px-4 text-gray-700">{bill.patient_name}</td>
+                      <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(bill.total_amount)}</td>
+                      <td className="py-4 px-4">
+                        <Badge className="bg-yellow-100 text-yellow-800 font-medium px-2.5 py-1 rounded-full text-xs">
+                          {bill.status ? bill.status.charAt(0).toUpperCase() + bill.status.slice(1) : 'Unknown'}
                         </Badge>
-                        <Button
-                          onClick={() => handleStatusBadgeClick(bill)}
-                          className="text-xs w-full px-2 h-auto min-h-[1.5rem] rounded bg-blue-600 text-white hover:bg-blue-700 transition"
-                        >
-                          Update Status
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
+                      </td>
+                      <td className="py-4 px-4 text-gray-600 text-sm">{formatDate(bill.created_at)}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center justify-center gap-2">
                           <Button
-                            variant="ghost"
                             size="sm"
-                            onClick={() => handleViewDetailsClick(bill)}
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedBill(bill);
+                              setShowBillDetails(true);
+                            }}
+                            className="h-8 w-8 p-0 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                            title="View Bill Details"
                           >
-                            <FileText className="h-4 w-4 mr-1" /> View Details
+                            <Eye className="h-4 w-4 text-gray-600" />
+                          </Button>
+
+                          {/* <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleGenerateInvoice(bill.id)}
+                            className="h-8 px-3 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50"
+                            title="Generate Invoice Only"
+                          >
+                            <Receipt className="h-3 w-3 mr-1" />
+                            <span className="text-xs font-medium">Invoice</span>
+                          </Button> */}
+
+                          <Button
+                            size="sm"
+                            onClick={() => handleGenerateInvoicePDF(bill)}
+                            disabled={generatingPDF === bill.id}
+                            className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Generate Invoice & Download PDF"
+                          >
+                            {generatingPDF === bill.id ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                <span className="text-xs font-medium">Generating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3 w-3 mr-1" />
+                                <span className="text-xs font-medium">PDF</span>
+                              </>
+                            )}
                           </Button>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleBillingCcmForm(bill)}
-                          >
-                            CMS
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-4">
-                      No billing records found. Try adjusting your search or
-                      filters.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredBills.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">No bills found</p>
+                  <p className="text-sm text-gray-500">No bills match your current search criteria</p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-end space-x-2 py-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" /> Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              Next <ChevronRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-        )}
-      </Tabs>
-      {/* Status Change Dialog */}
-      <Dialog
-        open={isStatusChangeDialogOpen}
-        onOpenChange={setIsStatusChangeDialogOpen}
-      >
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Change Billing Status</DialogTitle>
-            <DialogDescription>
-              Update the status for Bill #
-              {selectedBillForStatusChange?.billing_ids}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <Select value={newStatusValue} onValueChange={setNewStatusValue}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select new status" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(BILLING_STATUS_MAP).map(([key, value]) => (
-                  <SelectItem key={key} value={key}>
-                    {value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsStatusChangeDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleViewDetailsFromStatusChange} // New button to view details
-            >
-              View Details
-            </Button>
-            <Button onClick={handleSaveStatusChange}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* View Details Dialog */}
-      <Dialog
-        open={isViewDetailsDialogOpen}
-        onOpenChange={setIsViewDetailsDialogOpen}
-      >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              Billing Details for {selectedBillDetails?.patient_name}
-            </DialogTitle>
-            <DialogDescription>
-              Comprehensive information for Bill #
-              {selectedBillDetails?.billing_ids}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="font-medium">Patient Name:</p>
-                <p>{selectedBillDetails?.patient_name}</p>
-              </div>
-              <div>
-                <p className="font-medium">Patient ID:</p>
-                <p>{selectedBillDetails?.patient_id}</p>
-              </div>
-              <div>
-                <p className="font-medium">Provider Name:</p>
-                <p>{selectedBillDetails?.provider_name}</p>
-              </div>
-              <div>
-                <p className="font-medium">Phone:</p>
-                <p>{selectedBillDetails?.phone}</p>
-              </div>
-              <div>
-                <p className="font-medium">Date of Birth:</p>
-                <p>{formatDate(selectedBillDetails?.dob || "")}</p>
-              </div>
-              <div>
-                <p className="font-medium">Date of Service:</p>
-                <p>{formatDate(selectedBillDetails?.date_of_service || "")}</p>
-              </div>
-              <div>
-                <p className="font-medium">Enrolled Date:</p>
-                <p>{formatDate(selectedBillDetails?.enrolled_date || "")}</p>
-              </div>
-              <div>
-                <p className="font-medium">Total Minutes:</p>
-                <p>{selectedBillDetails?.total_minutes}</p>
-              </div>
-              <div>
-                <p className="font-medium">Billing Status:</p>
-                <Badge
-                  className={getStatusColor(
-                    selectedBillDetails?.billing_status || 0
-                  )}
-                >
-                  {getStatusText(selectedBillDetails?.billing_status || 0)}
-                </Badge>
-              </div>
-              <div>
-                <p className="font-medium">Total Price:</p>
-                <p>${selectedBillDetails?.totalPrice?.toFixed(2)}</p>
-              </div>
-            </div>
-            <h3 className="font-semibold mt-4 mb-2">CPT Codes Details:</h3>
-            {selectedBillDetails?.cpt_data &&
-            selectedBillDetails.cpt_data.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedBillDetails.cpt_data.map((cpt, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{cpt.code}</TableCell>
-                      <TableCell>{cpt.code_units}</TableCell>
-                      <TableCell>
-                        ${Number.parseFloat(cpt.price).toFixed(2)}
-                      </TableCell>
-                      <TableCell>{formatDate(cpt.created)}</TableCell>
-                    </TableRow>
+      )}
+
+      {/* Invoices Table */}
+      {activeTab === 'invoices' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900">Invoices (Finalized)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Invoice #</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Patient</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Amount</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Paid</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Due</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Status</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Date</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-700 text-sm min-w-[150px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredInvoices.map((invoice) => (
+                    <tr key={invoice.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="py-4 px-4 font-medium text-blue-600">{invoice.invoice_number}</td>
+                      <td className="py-4 px-4 text-gray-700">{invoice.patient_name}</td>
+                      <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(invoice.total_amount)}</td>
+                      <td className="py-4 px-4 font-medium text-green-600">{formatCurrency(invoice.amount_paid)}</td>
+                      <td className="py-4 px-4 font-medium text-red-600">{formatCurrency(invoice.amount_due)}</td>
+                      <td className="py-4 px-4">
+                        <Badge className={`${getStatusColor(invoice.status)} font-medium px-2.5 py-1 rounded-full text-xs`}>
+                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        </Badge>
+                      </td>
+                      <td className="py-4 px-4 text-gray-600 text-sm">{formatDate(invoice.created_at)}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedInvoice(invoice);
+                              setShowInvoicePreview(true);
+                            }}
+                            className="h-8 w-8 p-0 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                            title="View Invoice"
+                          >
+                            <Eye className="h-4 w-4 text-gray-600" />
+                          </Button>
+                          {invoice.status !== 'paid' && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedInvoice(invoice);
+                                setShowPaymentForm(true);
+                              }}
+                              className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700 text-white border-0 shadow-sm"
+                              title="Record Payment"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-muted-foreground">
-                No CPT data available for this bill.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsViewDetailsDialogOpen(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
+                </tbody>
+              </table>
+              {filteredInvoices.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">No invoices found</p>
+                  <p className="text-sm text-gray-500">No invoices match your current search criteria</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Invoice Preview Dialog */}
+      <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview</DialogTitle>
+          </DialogHeader>
+          {selectedInvoice && (
+            <InvoicePreview invoice={selectedInvoice} />
+          )}
         </DialogContent>
       </Dialog>
-      <CMS1500Form
-        open={cms}
-        onOpenChange={setCms}
-        selectedBillDetails={selectedBillDetails}
+
+      {/* Payment Form Dialog */}
+      <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+          </DialogHeader>
+          {selectedInvoice && (
+            <RecordPaymentForm
+              invoice={selectedInvoice}
+              onSuccess={handlePaymentRecorded}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bill Details Dialog */}
+      <BillDetailsDialog
+        bill={selectedBill}
+        open={showBillDetails}
+        onOpenChange={setShowBillDetails}
+        onBillUpdated={loadData}
       />
     </div>
   );

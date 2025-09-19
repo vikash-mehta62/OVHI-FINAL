@@ -1,7 +1,7 @@
 
-import pool from "../config/db.js";
+const pool = require("../../config/db");
 
-export const createClaim = async (req, res) => {
+const createClaim = async (req, res) => {
     try {
         const {
             claim_type,
@@ -53,7 +53,7 @@ export const createClaim = async (req, res) => {
     }
 };
 
-export const getClaims = async (req, res) => {
+ const getClaims = async (req, res) => {
     try {
         const [rows] = await pool.query("SELECT * FROM claims ORDER BY created_at DESC");
         res.json(rows);
@@ -62,7 +62,7 @@ export const getClaims = async (req, res) => {
     }
 };
 
-export const getClaimById = async (req, res) => {
+ const getClaimById = async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -84,7 +84,7 @@ export const getClaimById = async (req, res) => {
     }
 };
 
-export const deleteClaim = async (req, res) => {
+ const deleteClaim = async (req, res) => {
     try {
         const { id } = req.params;
         await pool.query("DELETE FROM claims WHERE claim_id = ?", [id]);
@@ -94,7 +94,7 @@ export const deleteClaim = async (req, res) => {
     }
 };
 
-export const changeClaimStatus = async (req, res) => {
+ const changeClaimStatus = async (req, res) => {
     try {
         const { status, notes } = req.body;
         const { id } = req.params;
@@ -117,7 +117,7 @@ export const changeClaimStatus = async (req, res) => {
     }
 };
 
-export const addCptCode = async (req, res) => {
+ const addCptCode = async (req, res) => {
     try {
         const { id } = req.params;
         const { code, description, fee, units, modifiers, dx_pointers, ndc } = req.body;
@@ -135,7 +135,7 @@ export const addCptCode = async (req, res) => {
     }
 };
 
-export const addSignature = async (req, res) => {
+ const addSignature = async (req, res) => {
     try {
         const { id } = req.params;
         const { provider_on_file, patient_on_file } = req.body;
@@ -151,7 +151,7 @@ export const addSignature = async (req, res) => {
     }
 };
 
-export const addActivityNote = async (req, res) => {
+ const addActivityNote = async (req, res) => {
     try {
         const { id } = req.params;
         const { activity, status, notes } = req.body;
@@ -165,4 +165,15 @@ export const addActivityNote = async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: "Failed to add activity" });
     }
+};
+
+module.exports = {
+    createClaim,
+    getClaims,
+    getClaimById,
+    deleteClaim,
+    changeClaimStatus,
+    addCptCode,
+    addSignature,
+    addActivityNote
 };
