@@ -165,6 +165,32 @@ class BillingService {
     return response.data.data;
   }
 
+  // Get all payments with filters
+  async getPayments(filters?: {
+    status?: string;
+    bill_id?: number;
+    from_date?: string;
+    to_date?: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: number;
+    bill_id: number;
+    patient_name: string;
+    patient_email?: string;
+    payment_method: string;
+    transaction_id?: string;
+    amount: number;
+    payment_date: string;
+    gateway_response?: any;
+    status: 'pending' | 'completed' | 'failed' | 'refunded';
+    notes?: string;
+    bill_total_amount: number;
+    created_at: string;
+  }>> {
+    const response = await apiClient.get('/billings/payments', { params: filters });
+    return response.data.data;
+  }
+
   // Get all invoices with filters
   async getInvoices(filters?: {
     status?: string;
@@ -283,6 +309,31 @@ class BillingService {
     payments: Array<any>;
   }> {
     const response = await apiClient.get(`/billings/bills/${billId}/pdf-data`);
+    console.log(response.data.data,"GENERATEPDF")
+    return response.data.data;
+  }
+
+  // Create payment for a bill
+  async createPayment(paymentData: {
+    bill_id: number;
+    payment_method: string;
+    transaction_id?: string;
+    amount: number;
+    notes?: string;
+  }): Promise<any> {
+    const response = await apiClient.post('/billings/payments/create', paymentData);
+    return response.data.data;
+  }
+
+  // Refund payment
+  async refundPayment(paymentId: number): Promise<any> {
+    const response = await apiClient.post(`/billings/payments/${paymentId}/refund`);
+    return response.data.data;
+  }
+
+  // Get payment by ID
+  async getPaymentById(paymentId: number): Promise<any> {
+    const response = await apiClient.get(`/billings/payments/${paymentId}`);
     return response.data.data;
   }
 

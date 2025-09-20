@@ -8,11 +8,13 @@ const billSchema = Joi.object({
         Joi.object({
             service_id: Joi.number().integer().positive().required(),
             quantity: Joi.number().integer().positive().default(1),
-            unit_price: Joi.number().positive().required()
+            unit_price: Joi.number().positive().required(),
+            line_total: Joi.number().positive().optional() // Allow line_total from frontend
         })
     ).min(1).required(),
     notes: Joi.string().allow('', null),
-    created_by: Joi.number().integer().positive()
+    created_by: Joi.number().integer().positive(),
+    total: Joi.number().positive().optional() // Allow total from frontend
 });
 
 const paymentSchema = Joi.object({
@@ -113,8 +115,10 @@ class BillingService {
             items
         };
     }
-    async getAllBills(limit, offset) {
-        // Fetch bills
+    async getAllBills(limit, offset, req) {
+        const { user_id } = req.user; // logged-in physician
+    
+        // Fetch bills for patients mapped to this physician
         const [bills] = await connection.execute(
             `
             SELECT 
@@ -138,38 +142,45 @@ class BillingService {
                 up.address_line_2,
                 CONCAT(up2.firstname, " ", up2.lastname) AS physician_name
             FROM bills b
-            JOIN user_profiles up ON b.patient_id = up.fk_userid
-            LEFT JOIN users_mappings um ON b.patient_id = up.fk_userid
-            JOIN user_profiles up2 ON um.fk_physician_id = up2.fk_userid
+            JOIN user_profiles up 
+                ON b.patient_id = up.fk_userid
+            JOIN users_mappings um 
+                ON um.user_id = b.patient_id
+            JOIN user_profiles up2 
+                ON um.fk_physician_id = up2.fk_userid
+            WHERE um.fk_physician_id = ?
             GROUP BY b.id
             ORDER BY b.created_at DESC
             LIMIT ? OFFSET ?
             `,
-            [limit, offset]
+            [user_id, limit, offset]
         );
-
-
+    
         if (bills.length === 0) {
             return [];
         }
-
-        // Attach bill items to each bill
+    
+        // Attach bill items
         for (const bill of bills) {
             const [items] = await connection.execute(
                 `
-                SELECT bi.*, s.name AS service_name, s.cpt_codes AS service_code
+                SELECT 
+                    bi.*, 
+                    s.name AS service_name, 
+                    s.cpt_codes AS service_code
                 FROM bill_items bi
                 JOIN services s ON bi.service_id = s.service_id
                 WHERE bi.bill_id = ?
                 `,
                 [bill.id]
             );
-
-            bill.items = items; // add items to bill
+    
+            bill.items = items;
         }
-
+    
         return bills;
     }
+    
 
     // Update bill status
     async updateBillStatus(billId, status) {
@@ -569,56 +580,109 @@ class BillingService {
     }
 
     // Get invoice summary with enhanced details
+    // async getInvoiceSummary(filters = {}) {
+    //     let query = `
+    //         SELECT 
+    //             ins.*,
+    //             CONCAT(up.firstname, ' ', up.lastname) as patient_name,
+    //             up.work_email as patient_email,
+    //             up.phone as patient_phone,
+    //             b.created_by as bill_created_by,
+    //             CONCAT(up2.firstname, ' ', up2.lastname) as bill_creator_name
+    //         FROM invoice_summary ins
+    //         JOIN user_profiles up ON ins.patient_id = up.fk_userid
+    //         LEFT JOIN bills b ON ins.id = (SELECT invoice_id FROM invoices WHERE bill_id = b.id LIMIT 1)
+    //         LEFT JOIN user_profiles up2 ON b.created_by = up2.fk_userid
+    //         WHERE 1=1
+    //     `;
+
+    //     const params = [];
+
+    //     if (filters.status) {
+    //         query += ' AND ins.current_status = ?';
+    //         params.push(filters.status);
+    //     }
+
+    //     if (filters.patient_id) {
+    //         query += ' AND ins.patient_id = ?';
+    //         params.push(filters.patient_id);
+    //     }
+
+    //     if (filters.overdue_only) {
+    //         query += ' AND ins.current_status = "overdue"';
+    //     }
+
+    //     if (filters.from_date) {
+    //         query += ' AND DATE(ins.created_at) >= ?';
+    //         params.push(filters.from_date);
+    //     }
+
+    //     if (filters.to_date) {
+    //         query += ' AND DATE(ins.created_at) <= ?';
+    //         params.push(filters.to_date);
+    //     }
+
+    //     query += ' ORDER BY ins.created_at DESC';
+
+    //     if (filters.limit) {
+    //         query += ' LIMIT ?';
+    //         params.push(parseInt(filters.limit));
+    //     }
+
+    //     const [results] = await connection.execute(query, params);
+    //     return results;
+    // }
     async getInvoiceSummary(filters = {}) {
-        let query = `
-            SELECT 
-                ins.*,
-                CONCAT(up.firstname, ' ', up.lastname) as patient_name,
-                up.work_email as patient_email,
-                up.phone as patient_phone,
-                b.created_by as bill_created_by,
-                CONCAT(up2.firstname, ' ', up2.lastname) as bill_creator_name
-            FROM invoice_summary ins
-            JOIN user_profiles up ON ins.patient_id = up.fk_userid
-            LEFT JOIN bills b ON ins.id = (SELECT invoice_id FROM invoices WHERE bill_id = b.id LIMIT 1)
-            LEFT JOIN user_profiles up2 ON b.created_by = up2.fk_userid
-            WHERE 1=1
-        `;
+        // let query = `
+        //     SELECT 
+        //         ins.*,
+        //         CONCAT(up.firstname, ' ', up.lastname) as patient_name,
+        //         up.work_email as patient_email,
+        //         up.phone as patient_phone,
+        //         b.created_by as bill_created_by,
+        //         CONCAT(up2.firstname, ' ', up2.lastname) as bill_creator_name
+        //     FROM invoice_summary ins
+        //     JOIN user_profiles up ON ins.patient_id = up.fk_userid
+        //     LEFT JOIN bills b ON ins.id = (SELECT invoice_id FROM invoices WHERE bill_id = b.id LIMIT 1)
+        //     LEFT JOIN user_profiles up2 ON b.created_by = up2.fk_userid
+        //     WHERE 1=1
+        // `;
 
-        const params = [];
+        // const params = [];
 
-        if (filters.status) {
-            query += ' AND ins.current_status = ?';
-            params.push(filters.status);
-        }
+        // if (filters.status) {
+        //     query += ' AND ins.current_status = ?';
+        //     params.push(filters.status);
+        // }
 
-        if (filters.patient_id) {
-            query += ' AND ins.patient_id = ?';
-            params.push(filters.patient_id);
-        }
+        // if (filters.patient_id) {
+        //     query += ' AND ins.patient_id = ?';
+        //     params.push(filters.patient_id);
+        // }
 
-        if (filters.overdue_only) {
-            query += ' AND ins.current_status = "overdue"';
-        }
+        // if (filters.overdue_only) {
+        //     query += ' AND ins.current_status = "overdue"';
+        // }
 
-        if (filters.from_date) {
-            query += ' AND DATE(ins.created_at) >= ?';
-            params.push(filters.from_date);
-        }
+        // if (filters.from_date) {
+        //     query += ' AND DATE(ins.created_at) >= ?';
+        //     params.push(filters.from_date);
+        // }
 
-        if (filters.to_date) {
-            query += ' AND DATE(ins.created_at) <= ?';
-            params.push(filters.to_date);
-        }
+        // if (filters.to_date) {
+        //     query += ' AND DATE(ins.created_at) <= ?';
+        //     params.push(filters.to_date);
+        // }
 
-        query += ' ORDER BY ins.created_at DESC';
+        // query += ' ORDER BY ins.created_at DESC';
 
-        if (filters.limit) {
-            query += ' LIMIT ?';
-            params.push(parseInt(filters.limit));
-        }
+        // if (filters.limit) {
+        //     query += ' LIMIT ?';
+        //     params.push(parseInt(filters.limit));
+        // }
 
-        const [results] = await connection.execute(query, params);
+        // const [results] = await connection.execute(query, params);
+        let results = [];
         return results;
     }
 
@@ -695,46 +759,199 @@ class BillingService {
             conn.release();
         }
     }
-    // Get bill data for PDF generation (without creating invoice)
-    async getBillForPDF(billId) {
+    // Get all payments with filters
+    async getPayments(filters = {}, req) {
+        const { user_id } = req.user; // logged-in physician
+        
+        let query = `
+            SELECT 
+                p.*,
+                CONCAT(up.firstname, " ", up.lastname) as patient_name,
+                up.work_email as patient_email,
+                b.total_amount as bill_total_amount
+            FROM payments p
+            JOIN bills b ON p.bill_id = b.id
+            JOIN user_profiles up ON b.patient_id = up.fk_userid
+            JOIN users_mappings um ON um.user_id = b.patient_id
+            WHERE um.fk_physician_id = ?
+        `;
+        const params = [user_id];
+
+        if (filters.status) {
+            query += ' AND p.status = ?';
+            params.push(filters.status);
+        }
+
+        if (filters.bill_id) {
+            query += ' AND p.bill_id = ?';
+            params.push(filters.bill_id);
+        }
+
+        if (filters.from_date) {
+            query += ' AND DATE(p.payment_date) >= ?';
+            params.push(filters.from_date);
+        }
+
+        if (filters.to_date) {
+            query += ' AND DATE(p.payment_date) <= ?';
+            params.push(filters.to_date);
+        }
+
+        query += ' ORDER BY p.payment_date DESC';
+
+        if (filters.limit) {
+            query += ' LIMIT ?';
+            params.push(parseInt(filters.limit));
+        }
+
+        const [payments] = await connection.execute(query, params);
+        return payments;
+    }
+
+    // Create payment for a bill
+    async createPayment(paymentData, req) {
+        const { user_id } = req.user;
+        const { bill_id, payment_method, transaction_id, amount, notes } = paymentData;
+
         try {
-            // Get bill with patient details
+            // Validate bill exists and belongs to this physician
+            const [bills] = await connection.execute(`
+                SELECT b.*, um.fk_physician_id
+                FROM bills b
+                JOIN users_mappings um ON um.user_id = b.patient_id
+                WHERE b.id = ? AND um.fk_physician_id = ?
+            `, [bill_id, user_id]);
+
+            if (bills.length === 0) {
+                throw new Error('Bill not found or access denied');
+            }
+
+            const bill = bills[0];
+
+            // Insert payment
+            const [result] = await connection.execute(`
+                INSERT INTO payments (bill_id, payment_method, transaction_id, amount, notes, status)
+                VALUES (?, ?, ?, ?, ?, 'completed')
+            `, [bill_id, payment_method, transaction_id || null, amount, notes || null]);
+
+            // Get the created payment with patient info
+            const [payments] = await connection.execute(`
+                SELECT 
+                    p.*,
+                    CONCAT(up.firstname, " ", up.lastname) as patient_name,
+                    up.work_email as patient_email,
+                    b.total_amount as bill_total_amount
+                FROM payments p
+                JOIN bills b ON p.bill_id = b.id
+                JOIN user_profiles up ON b.patient_id = up.fk_userid
+                WHERE p.id = ?
+            `, [result.insertId]);
+
+            return payments[0];
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // Get payment by ID
+    async getPaymentById(paymentId) {
+        const [payments] = await connection.execute(`
+            SELECT 
+                p.*,
+                CONCAT(up.firstname, " ", up.lastname) as patient_name,
+                up.work_email as patient_email,
+                b.total_amount as bill_total_amount
+            FROM payments p
+            JOIN bills b ON p.bill_id = b.id
+            JOIN user_profiles up ON b.patient_id = up.fk_userid
+            WHERE p.id = ?
+        `, [paymentId]);
+
+        if (payments.length === 0) {
+            throw new Error('Payment not found');
+        }
+
+        return payments[0];
+    }
+
+    // Refund payment
+    async refundPayment(paymentId) {
+        try {
+            // Check if payment exists and is completed
+            const [payments] = await connection.execute(`
+                SELECT * FROM payments WHERE id = ? AND status = 'completed'
+            `, [paymentId]);
+
+            if (payments.length === 0) {
+                throw new Error('Payment not found or cannot be refunded');
+            }
+
+            // Update payment status to refunded
+            await connection.execute(`
+                UPDATE payments 
+                SET status = 'refunded', updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            `, [paymentId]);
+
+            return await this.getPaymentById(paymentId);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // Get bill data for PDF generation (without creating invoice)
+    async getBillForPDF(billId, providerId) {
+        try {
+            // Get bill with patient + provider details (from logged-in providerId)
             const [bills] = await connection.execute(`
                 SELECT 
                     b.*,
-                     CASE b.status
-        WHEN 0 THEN 'Pending'
-        WHEN 1 THEN 'Approved'
-        WHEN 3 THEN 'Partially Paid'
-        WHEN 4 THEN 'Paid'
-        WHEN 5 THEN 'Cancelled / Voided'
-        ELSE 'Unknown'
-    END AS status,
+                    CASE b.status
+                        WHEN 0 THEN 'Pending'
+                        WHEN 1 THEN 'Approved'
+                        WHEN 3 THEN 'Partially Paid'
+                        WHEN 4 THEN 'Paid'
+                        WHEN 5 THEN 'Cancelled / Voided'
+                        ELSE 'Unknown'
+                    END AS status,
+                    -- Patient info
                     CONCAT(up.firstname, " ", up.lastname) AS patient_name,
                     up.work_email AS patient_email,
                     up.phone AS patient_phone,
                     CONCAT(up.address_line, 
                            CASE WHEN up.address_line_2 IS NOT NULL AND up.address_line_2 != '' 
                                 THEN CONCAT(', ', up.address_line_2) 
-                                ELSE '' 
-                           END,
+                                ELSE '' END,
                            CASE WHEN up.city IS NOT NULL THEN CONCAT(', ', up.city) ELSE '' END,
                            CASE WHEN up.state IS NOT NULL THEN CONCAT(', ', up.state) ELSE '' END,
                            CASE WHEN up.zip IS NOT NULL THEN CONCAT(' ', up.zip) ELSE '' END
                     ) AS patient_address,
-                    CONCAT(up2.firstname, " ", up2.lastname) AS physician_name
+    
+                    -- Logged-in provider info
+                    CONCAT(up2.firstname, " ", up2.lastname) AS physician_name,
+                    phc.logo_url,
+                    phc.organization_name_value,
+                    phc.address_value,
+                    up2.phone AS provider_phone,
+                    phc.email_value,
+                    phc.website_value,
+                    phc.fax_value,
+                    up2.taxonomy,
+                    up2.work_email AS physician_mail,
+                    up2.npi
+    
                 FROM bills b
                 JOIN user_profiles up ON b.patient_id = up.fk_userid
-                LEFT JOIN users_mappings um ON b.patient_id = up.fk_userid
-                LEFT JOIN user_profiles up2 ON um.fk_physician_id = up2.fk_userid
+                JOIN user_profiles up2 ON up2.fk_userid = ?
+                LEFT JOIN pdf_header_configs phc ON phc.providerId = up2.fk_userid
                 WHERE b.id = ?
-            `, [billId]);
-
+            `, [providerId, billId]);
+    
             if (bills.length === 0) {
                 throw new Error('Bill not found');
             }
-
-            // Get bill items with service details
+    
+            // Bill items
             const [items] = await connection.execute(`
                 SELECT 
                     bi.*,
@@ -745,32 +962,51 @@ class BillingService {
                 JOIN services s ON bi.service_id = s.service_id
                 WHERE bi.bill_id = ?
             `, [billId]);
-
+    
             const bill = bills[0];
-
-            // Generate a temporary invoice number for PDF
+    
+            // Temp invoice number
             const year = new Date().getFullYear();
             const tempInvoiceNumber = `INV-${year}-${billId.toString().padStart(4, '0')}`;
-
-            // Calculate due date (30 days from now)
+    
+            // Due date (30 days)
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + 30);
-
+    
             return {
+                // Invoice details
                 invoice_number: tempInvoiceNumber,
                 bill_id: bill.id,
+                issued_date: bill.created_at,
+                due_date: dueDate.toISOString(),
+                total_amount: parseFloat(bill.total_amount),
+                amount_paid: 0,
+                balance_due: parseFloat(bill.total_amount),
+                status: bill.status,
+                notes: bill.notes,
+    
+                // Patient info
                 patient_name: bill.patient_name,
                 patient_email: bill.patient_email,
                 patient_phone: bill.patient_phone,
                 patient_address: bill.patient_address,
+    
+                // Provider/Organization info
+                logo_url: bill.logo_url,
+                organization_name_value: bill.organization_name_value,
+                address_value: bill.address_value,
+                provider_phone: bill.provider_phone,
+                email_value: bill.email_value,
+                website_value: bill.website_value,
+                fax_value: bill.fax_value,
+    
+                // Physician info
                 physician_name: bill.physician_name,
-                issued_date: bill.created_at,
-                due_date: dueDate.toISOString(),
-                total_amount: parseFloat(bill.total_amount),
-                amount_paid: 0, // Bills haven't been paid yet
-                balance_due: parseFloat(bill.total_amount),
-                status: bill.status,
-                notes: bill.notes,
+                physician_mail: bill.physician_mail,
+                taxonomy: bill.taxonomy,
+                npi: bill.npi,
+    
+                // Service items
                 items: items.map(item => ({
                     service_name: item.service_name,
                     service_code: item.service_code,
@@ -778,13 +1014,16 @@ class BillingService {
                     unit_price: parseFloat(item.unit_price),
                     line_total: parseFloat(item.line_total)
                 })),
-                payments: [] // No payments for draft bills
+    
+                // Payments
+                payments: []
             };
         } catch (error) {
             console.error("Error getting bill for PDF:", error);
             throw error;
         }
     }
+    
 
     // Search patients
     async searchPatient(searchTerm, userId = null) {

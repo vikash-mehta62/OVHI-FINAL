@@ -72,6 +72,7 @@ const apiRoutes = require("./services/index")
 app.use("/api/v1", apiRoutes)
 app.use("/api/v1/tenovi", require("./routes/tenoviRoutes"));
 app.use("/api/v1/patient-outreach", require("./routes/patientOutreachRoutes"));
+app.use("/api/v1/image", require("./routes/imageProxyRoutes"));
 
 app.use("/check", (req, res) => {
   res.send({

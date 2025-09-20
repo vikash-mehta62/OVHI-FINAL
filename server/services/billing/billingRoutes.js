@@ -78,8 +78,10 @@ router.get('/bills/:id', async (req, res) => {
 
 // Get bill data formatted for PDF generation
 router.get('/bills/:id/pdf-data', async (req, res) => {
+    // console.log(req.user)
+    const {user_id} = req.user;
     try {
-        const billPdfData = await billingService.getBillForPDF(req.params.id);
+        const billPdfData = await billingService.getBillForPDF(req.params.id,user_id);
         res.json({
             success: true,
             data: billPdfData
@@ -145,7 +147,7 @@ router.get('/get-all-bills', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
     try {
-        const bills = await billingService.getAllBills(limit, offset);
+        const bills = await billingService.getAllBills(limit, offset,req);
         res.json({
             success: true,
             data: bills
@@ -358,6 +360,22 @@ router.post('/invoices/:id/payments', async (req, res) => {
 });
 
 // Legacy payment endpoint for backward compatibility
+router.get('/payments', async (req, res) => {
+    try {
+        const payments = await billingService.getPayments({},req);
+        res.status(201).json({
+            success: true,
+            data: payments,
+            message: 'Payment recorded successfully'
+        });
+    } catch (error) {
+        console.error('Error recording payment:', error);
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
 router.post('/payments', async (req, res) => {
     try {
         const invoice = await billingService.recordPayment(req.body);
@@ -725,6 +743,7 @@ router.get('/patients/search', async (req, res) => {
 router.post("/search-patients", async (req, res) => {
     try {
         const { searchTerm } = req.body;
+        const {user_id} = req.user;
 
         // Return empty array if no search term provided
         if (!searchTerm || searchTerm.trim() === '') {
@@ -735,7 +754,7 @@ router.post("/search-patients", async (req, res) => {
             });
         }
 
-        const patients = await billingService.searchPatient(searchTerm.trim());
+        const patients = await billingService.searchPatient(searchTerm.trim(),user_id);
 
         res.status(200).json({
             success: true,

@@ -6,36 +6,44 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import billingService, { Invoice, PaymentData } from '@/services/billingService';
+import billingService from '@/services/billingService';
 import { toast } from 'sonner';
 
+interface Bill {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  status: string;
+  total_amount: number;
+  created_at: string;
+  physician_name?: string;
+}
+
 interface RecordPaymentFormProps {
-  invoice: Invoice;
+  bill: Bill;
   onSuccess: () => void;
 }
 
 interface PaymentFormData {
-  amount_paid: string;
-  payment_method: 'cash' | 'card' | 'check' | 'bank_transfer' | 'insurance';
+  amount: string;
+  payment_method: 'card' | 'cash' | 'bank_transfer' | 'insurance' | 'check';
   transaction_id: string;
-  reference_number: string;
   notes: string;
 }
 
-const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSuccess }) => {
+const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ bill, onSuccess }) => {
   const [loading, setLoading] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<PaymentFormData>({
     defaultValues: {
-      amount_paid: invoice.amount_due.toString(),
+      amount: bill.total_amount.toString(),
       payment_method: 'card',
       transaction_id: '',
-      reference_number: '',
       notes: ''
     }
   });
 
-  const watchedAmount = watch('amount_paid');
+  const watchedAmount = watch('amount');
   const watchedMethod = watch('payment_method');
 
   const formatCurrency = (amount: number) => {
@@ -49,28 +57,28 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSucces
     try {
       setLoading(true);
 
-      const amount = parseFloat(data.amount_paid);
+      const amount = parseFloat(data.amount);
       
       if (amount <= 0) {
         toast.error('Payment amount must be greater than 0');
         return;
       }
 
-      if (amount > invoice.amount_due) {
-        toast.error('Payment amount cannot exceed the amount due');
+      if (amount > bill.total_amount) {
+        toast.error('Payment amount cannot exceed the bill total');
         return;
       }
 
-      const paymentData: PaymentData = {
-        invoice_id: invoice.id,
-        amount_paid: amount,
+      const paymentData = {
+        bill_id: bill.id,
+        amount: amount,
         payment_method: data.payment_method,
         transaction_id: data.transaction_id || undefined,
-        reference_number: data.reference_number || undefined,
         notes: data.notes || undefined
       };
 
-      await billingService.recordPayment(paymentData);
+      await billingService.createPayment(paymentData);
+      toast.success('Payment recorded successfully');
       onSuccess();
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -81,38 +89,40 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSucces
   };
 
   const setFullPayment = () => {
-    setValue('amount_paid', invoice.amount_due.toString());
+    setValue('amount', bill.total_amount.toString());
   };
 
   return (
     <div className="space-y-6">
-      {/* Invoice Summary */}
+      {/* Bill Summary */}
       <Card>
         <CardHeader>
-          <CardTitle>Invoice Summary</CardTitle>
+          <CardTitle>Bill Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-gray-600">Invoice Number:</span>
-              <span className="font-medium">{invoice.invoice_number}</span>
+              <span className="text-gray-600">Bill Number:</span>
+              <span className="font-medium">#{bill.id}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Patient:</span>
-              <span className="font-medium">{invoice.patient_name}</span>
+              <span className="font-medium">{bill.patient_name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Total Amount:</span>
-              <span className="font-medium">{formatCurrency(invoice.total_amount)}</span>
+              <span className="font-medium">{formatCurrency(bill.total_amount)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Amount Paid:</span>
-              <span className="font-medium text-green-600">{formatCurrency(invoice.amount_paid)}</span>
+              <span className="text-gray-600">Status:</span>
+              <span className="font-medium capitalize">{bill.status}</span>
             </div>
-            <div className="flex justify-between border-t pt-2">
-              <span className="text-gray-900 font-semibold">Amount Due:</span>
-              <span className="font-bold text-red-600">{formatCurrency(invoice.amount_due)}</span>
-            </div>
+            {bill.physician_name && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Physician:</span>
+                <span className="font-medium">{bill.physician_name}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -121,7 +131,7 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSucces
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <Label htmlFor="amount_paid">Payment Amount *</Label>
+            <Label htmlFor="amount">Payment Amount *</Label>
             <Button
               type="button"
               variant="outline"
@@ -132,19 +142,19 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSucces
             </Button>
           </div>
           <Input
-            {...register('amount_paid', {
+            {...register('amount', {
               required: 'Payment amount is required',
               min: { value: 0.01, message: 'Amount must be greater than 0' },
-              max: { value: invoice.amount_due, message: 'Amount cannot exceed amount due' }
+              max: { value: bill.total_amount, message: 'Amount cannot exceed bill total' }
             })}
             type="number"
             step="0.01"
             min="0.01"
-            max={invoice.amount_due}
+            max={bill.total_amount}
             placeholder="0.00"
           />
-          {errors.amount_paid && (
-            <p className="text-sm text-red-600">{errors.amount_paid.message}</p>
+          {errors.amount && (
+            <p className="text-sm text-red-600">{errors.amount.message}</p>
           )}
           {watchedAmount && (
             <p className="text-sm text-gray-600">
@@ -172,42 +182,12 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ invoice, onSucces
           </Select>
         </div>
 
-        {watchedMethod === 'card' && (
+        {(watchedMethod === 'card' || watchedMethod === 'bank_transfer') && (
           <div className="space-y-2">
             <Label htmlFor="transaction_id">Transaction ID</Label>
             <Input
               {...register('transaction_id')}
               placeholder="Enter transaction ID from payment processor"
-            />
-          </div>
-        )}
-
-        {watchedMethod === 'check' && (
-          <div className="space-y-2">
-            <Label htmlFor="reference_number">Check Number</Label>
-            <Input
-              {...register('reference_number')}
-              placeholder="Enter check number"
-            />
-          </div>
-        )}
-
-        {watchedMethod === 'bank_transfer' && (
-          <div className="space-y-2">
-            <Label htmlFor="reference_number">Reference Number</Label>
-            <Input
-              {...register('reference_number')}
-              placeholder="Enter bank transfer reference"
-            />
-          </div>
-        )}
-
-        {watchedMethod === 'insurance' && (
-          <div className="space-y-2">
-            <Label htmlFor="reference_number">Claim Number</Label>
-            <Input
-              {...register('reference_number')}
-              placeholder="Enter insurance claim number"
             />
           </div>
         )}

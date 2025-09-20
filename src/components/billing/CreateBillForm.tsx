@@ -481,14 +481,14 @@ const CreateBillForm: React.FC<CreateBillFormProps> = ({ onSuccess }) => {
         >
           {loading ? 'Creating...' : 'Save as Draft'}
         </Button>
-        <Button
+        {/* <Button
           type="button"
           onClick={handleSubmit(createAndGenerateInvoice)}
           disabled={loading || generatingInvoice}
         >
           <FileText className="h-4 w-4 mr-2" />
           {generatingInvoice ? 'Generating...' : 'Create & Generate Invoice'}
-        </Button>
+        </Button> */}
       </div>
     </form>
   );

@@ -6,13 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Eye, DollarSign, FileText, Filter, Search, Receipt, Download } from 'lucide-react';
+import { Plus, Eye, DollarSign, FileText, Filter, Search, Receipt, Download, CreditCard } from 'lucide-react';
 import CreateBillForm from '@/components/billing/CreateBillForm';
-import InvoicePreview from '@/components/billing/InvoicePreview';
+import PaymentDetailsDialog from '@/components/billing/PaymentDetailsDialog';
 import RecordPaymentForm from '@/components/billing/RecordPaymentForm';
 import BillDetailsDialog from '@/components/billing/BillDetailsDialog';
-import billingService, { Invoice } from '@/services/billingService';
-import pdfGenerator from '@/utils/pdfGenerator';
+import billingService from '@/services/billingService';
+import enhancedPdfGenerator from '@/utils/enhancedPdfGenerator';
 import { toast } from 'sonner';
 
 interface Bill {
@@ -34,17 +34,33 @@ interface Bill {
   }>;
 }
 
+interface Payment {
+  id: number;
+  bill_id: number;
+  patient_name: string;
+  patient_email?: string;
+  payment_method: string;
+  transaction_id?: string;
+  amount: number;
+  payment_date: string;
+  gateway_response?: any;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  notes?: string;
+  bill_total_amount: number;
+  created_at: string;
+}
+
 const Billing = () => {
-  const [activeTab, setActiveTab] = useState<'bills' | 'invoices'>('bills');
+  const [activeTab, setActiveTab] = useState<'bills' | 'payments'>('bills');
   const [bills, setBills] = useState<Bill[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredBills, setFilteredBills] = useState<Bill[]>([]);
-  const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
+  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [showCreateBill, setShowCreateBill] = useState(false);
-  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showBillDetails, setShowBillDetails] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState<number | null>(null);
@@ -61,9 +77,9 @@ const Billing = () => {
     if (activeTab === 'bills') {
       filterBills();
     } else {
-      filterInvoices();
+      filterPayments();
     }
-  }, [bills, invoices, statusFilter, searchTerm, activeTab]);
+  }, [bills, payments, statusFilter, searchTerm, activeTab]);
 
   const loadData = async () => {
     try {
@@ -79,14 +95,14 @@ const Billing = () => {
         setBills([]);
       }
 
-      // Load invoices from API
+      // Load payments from API
       try {
-        const invoicesData = await billingService.getInvoices();
-        setInvoices(invoicesData);
+        const paymentsData = await billingService.getPayments();
+        setPayments(paymentsData);
       } catch (error) {
-        console.error('Failed to load invoices from API:', error);
-        toast.error('Failed to load invoices');
-        setInvoices([]);
+        console.error('Failed to load payments from API:', error);
+        toast.error('Failed to load payments');
+        setPayments([]);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -113,21 +129,22 @@ const Billing = () => {
     setFilteredBills(filtered);
   };
 
-  const filterInvoices = () => {
-    let filtered = invoices;
+  const filterPayments = () => {
+    let filtered = payments;
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(invoice => invoice.status === statusFilter);
+      filtered = filtered.filter(payment => payment.status === statusFilter);
     }
 
     if (searchTerm) {
-      filtered = filtered.filter(invoice =>
-        invoice.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(payment =>
+        payment.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.transaction_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.id.toString().includes(searchTerm)
       );
     }
 
-    setFilteredInvoices(filtered);
+    setFilteredPayments(filtered);
   };
 
   const handleBillCreated = () => {
@@ -142,15 +159,13 @@ const Billing = () => {
     toast.success('Payment recorded successfully');
   };
 
-  const handleGenerateInvoice = async (billId: number) => {
+  const handleCreatePayment = async (billId: number) => {
     try {
-      await billingService.generateInvoice(billId);
-      toast.success('Invoice generated successfully');
-      setActiveTab('invoices'); // Switch to invoices tab
-      loadData();
+      setSelectedBill(bills.find(b => b.id === billId) || null);
+      setShowPaymentForm(true);
     } catch (error) {
-      console.error('Error generating invoice:', error);
-      toast.error('Failed to generate invoice');
+      console.error('Error opening payment form:', error);
+      toast.error('Failed to open payment form');
     }
   };
 
@@ -161,8 +176,8 @@ const Billing = () => {
       // Get bill data directly from database formatted for PDF
       const billPdfData = await billingService.getBillForPDF(bill.id);
 
-      // Generate and download the PDF directly from bill data
-      pdfGenerator.downloadInvoicePDF(billPdfData);
+      // Generate and download the PDF directly from bill data using enhanced generator
+      await enhancedPdfGenerator.downloadInvoicePDF(billPdfData);
 
       toast.success(`PDF invoice for Bill #${bill.id} downloaded successfully!`);
 
@@ -191,6 +206,32 @@ const Billing = () => {
     }
   };
 
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'failed':
+        return 'bg-red-100 text-red-800';
+      case 'refunded':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
+    }
+  };
+
+  const handleRefundPayment = async (paymentId: number) => {
+    try {
+      await billingService.refundPayment(paymentId);
+      toast.success('Payment refunded successfully');
+      loadData();
+    } catch (error) {
+      console.error('Error refunding payment:', error);
+      toast.error('Failed to refund payment');
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -214,14 +255,14 @@ const Billing = () => {
     } else {
       const totals = {
         pending: 0,
-        paid: 0,
-        overdue: 0,
-        discarded: 0
+        completed: 0,
+        failed: 0,
+        refunded: 0
       };
 
-      invoices.forEach(invoice => {
-        if (totals.hasOwnProperty(invoice.status)) {
-          totals[invoice.status as keyof typeof totals] += invoice.total_amount;
+      payments.forEach(payment => {
+        if (totals.hasOwnProperty(payment.status)) {
+          totals[payment.status as keyof typeof totals] += payment.amount;
         }
       });
 
@@ -244,8 +285,8 @@ const Billing = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Billing & Invoices</h1>
-          <p className="text-gray-600">Manage patient billing and invoice processing</p>
+          <h1 className="text-3xl font-bold text-gray-900">Billing & Payments</h1>
+          <p className="text-gray-600">Manage patient billing and payment processing</p>
         </div>
         <Dialog open={showCreateBill} onOpenChange={setShowCreateBill}>
           <DialogTrigger asChild>
@@ -264,15 +305,15 @@ const Billing = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'bills' | 'invoices')}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'bills' | 'payments')}>
         <TabsList className="grid w-fit grid-cols-2">
           <TabsTrigger value="bills" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Bills (Drafts)
           </TabsTrigger>
-          <TabsTrigger value="invoices" className="flex items-center gap-2">
-            <Receipt className="h-4 w-4" />
-            Invoices (Finalized)
+          <TabsTrigger value="payments" className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
+            Payments
           </TabsTrigger>
         </TabsList>
 
@@ -339,18 +380,18 @@ const Billing = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="invoices" className="space-y-6">
-          {/* Invoices Summary Cards */}
+        <TabsContent value="payments" className="space-y-6">
+          {/* Payments Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Pending</p>
-                    <p className="text-2xl font-bold text-yellow-600">{formatCurrency(totals.pending)}</p>
+                    <p className="text-2xl font-bold text-yellow-600">{formatCurrency(totals.pending || 0)}</p>
                   </div>
                   <div className="p-2 bg-yellow-100 rounded-lg">
-                    <FileText className="h-6 w-6 text-yellow-600" />
+                    <CreditCard className="h-6 w-6 text-yellow-600" />
                   </div>
                 </div>
               </CardContent>
@@ -360,8 +401,8 @@ const Billing = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Paid</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totals.paid)}</p>
+                    <p className="text-sm text-gray-600">Completed</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totals.completed || 0)}</p>
                   </div>
                   <div className="p-2 bg-green-100 rounded-lg">
                     <DollarSign className="h-6 w-6 text-green-600" />
@@ -374,8 +415,8 @@ const Billing = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Overdue</p>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totals.overdue)}</p>
+                    <p className="text-sm text-gray-600">Failed</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totals.failed || 0)}</p>
                   </div>
                   <div className="p-2 bg-red-100 rounded-lg">
                     <FileText className="h-6 w-6 text-red-600" />
@@ -388,11 +429,11 @@ const Billing = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Invoices</p>
-                    <p className="text-2xl font-bold text-blue-600">{invoices.length}</p>
+                    <p className="text-sm text-gray-600">Total Payments</p>
+                    <p className="text-2xl font-bold text-blue-600">{payments.length}</p>
                   </div>
                   <div className="p-2 bg-blue-100 rounded-lg">
-                    <Receipt className="h-6 w-6 text-blue-600" />
+                    <CreditCard className="h-6 w-6 text-blue-600" />
                   </div>
                 </div>
               </CardContent>
@@ -408,7 +449,7 @@ const Billing = () => {
             <div className="flex items-center gap-2 flex-1">
               <Search className="h-4 w-4 text-gray-400" />
               <Input
-                placeholder={activeTab === 'bills' ? "Search by patient name or bill ID..." : "Search by patient name or invoice number..."}
+                placeholder={activeTab === 'bills' ? "Search by patient name or bill ID..." : "Search by patient name or transaction ID..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-1"
@@ -427,9 +468,9 @@ const Billing = () => {
                   ) : (
                     <>
                       <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
-                      <SelectItem value="discarded">Discarded</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                      <SelectItem value="refunded">Refunded</SelectItem>
                     </>
                   )}
                 </SelectContent>
@@ -443,7 +484,7 @@ const Billing = () => {
       {activeTab === 'bills' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">Bills (Drafts)</CardTitle>
+            <CardTitle className="text-lg font-semibold text-gray-900">Billings</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -498,6 +539,16 @@ const Billing = () => {
 
                           <Button
                             size="sm"
+                            onClick={() => handleCreatePayment(bill.id)}
+                            className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white border-0 shadow-sm"
+                            title="Create Payment"
+                          >
+                            <DollarSign className="h-3 w-3 mr-1" />
+                            <span className="text-xs font-medium">Add Payment</span>
+                          </Button>
+
+                          <Button
+                            size="sm"
                             onClick={() => handleGenerateInvoicePDF(bill)}
                             disabled={generatingPDF === bill.id}
                             className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -511,7 +562,7 @@ const Billing = () => {
                             ) : (
                               <>
                                 <Download className="h-3 w-3 mr-1" />
-                                <span className="text-xs font-medium">PDF</span>
+                                <span className="text-xs font-medium">Download PDF</span>
                               </>
                             )}
                           </Button>
@@ -533,66 +584,66 @@ const Billing = () => {
         </Card>
       )}
 
-      {/* Invoices Table */}
-      {activeTab === 'invoices' && (
+      {/* Payments Table */}
+      {activeTab === 'payments' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">Invoices (Finalized)</CardTitle>
+            <CardTitle className="text-lg font-semibold text-gray-900">Payments</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Invoice #</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Payment #</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Patient</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Bill #</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Amount</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Paid</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Due</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Method</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Transaction ID</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Status</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Date</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-700 text-sm min-w-[150px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="py-4 px-4 font-medium text-blue-600">{invoice.invoice_number}</td>
-                      <td className="py-4 px-4 text-gray-700">{invoice.patient_name}</td>
-                      <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(invoice.total_amount)}</td>
-                      <td className="py-4 px-4 font-medium text-green-600">{formatCurrency(invoice.amount_paid)}</td>
-                      <td className="py-4 px-4 font-medium text-red-600">{formatCurrency(invoice.amount_due)}</td>
+                  {filteredPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="py-4 px-4 font-medium text-blue-600">#{payment.id}</td>
+                      <td className="py-4 px-4 text-gray-700">{payment.patient_name}</td>
+                      <td className="py-4 px-4 font-medium text-gray-900">#{payment.bill_id}</td>
+                      <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(payment.amount)}</td>
+                      <td className="py-4 px-4 text-gray-700 capitalize">{payment.payment_method.replace('_', ' ')}</td>
+                      <td className="py-4 px-4 text-gray-600 text-sm">{payment.transaction_id || 'N/A'}</td>
                       <td className="py-4 px-4">
-                        <Badge className={`${getStatusColor(invoice.status)} font-medium px-2.5 py-1 rounded-full text-xs`}>
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        <Badge className={`${getPaymentStatusColor(payment.status)} font-medium px-2.5 py-1 rounded-full text-xs`}>
+                          {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                         </Badge>
                       </td>
-                      <td className="py-4 px-4 text-gray-600 text-sm">{formatDate(invoice.created_at)}</td>
+                      <td className="py-4 px-4 text-gray-600 text-sm">{formatDate(payment.payment_date)}</td>
                       <td className="py-4 px-4">
                         <div className="flex items-center justify-center gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              setSelectedInvoice(invoice);
-                              setShowInvoicePreview(true);
+                              setSelectedPayment(payment);
+                              setShowPaymentDetails(true);
                             }}
                             className="h-8 w-8 p-0 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-                            title="View Invoice"
+                            title="View Payment Details"
                           >
                             <Eye className="h-4 w-4 text-gray-600" />
                           </Button>
-                          {invoice.status !== 'paid' && (
+                          {payment.status === 'completed' && (
                             <Button
                               size="sm"
-                              onClick={() => {
-                                setSelectedInvoice(invoice);
-                                setShowPaymentForm(true);
-                              }}
-                              className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700 text-white border-0 shadow-sm"
-                              title="Record Payment"
+                              variant="outline"
+                              onClick={() => handleRefundPayment(payment.id)}
+                              className="h-8 px-3 border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
+                              title="Refund Payment"
                             >
-                              <DollarSign className="h-4 w-4" />
+                              <span className="text-xs font-medium">Refund</span>
                             </Button>
                           )}
                         </div>
@@ -601,11 +652,11 @@ const Billing = () => {
                   ))}
                 </tbody>
               </table>
-              {filteredInvoices.length === 0 && (
+              {filteredPayments.length === 0 && (
                 <div className="text-center py-12 text-gray-500">
-                  <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-lg font-medium text-gray-900 mb-2">No invoices found</p>
-                  <p className="text-sm text-gray-500">No invoices match your current search criteria</p>
+                  <CreditCard className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">No payments found</p>
+                  <p className="text-sm text-gray-500">No payments match your current search criteria</p>
                 </div>
               )}
             </div>
@@ -613,14 +664,14 @@ const Billing = () => {
         </Card>
       )}
 
-      {/* Invoice Preview Dialog */}
-      <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
+      {/* Payment Details Dialog */}
+      <Dialog open={showPaymentDetails} onOpenChange={setShowPaymentDetails}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Invoice Preview</DialogTitle>
+            <DialogTitle>Payment Details</DialogTitle>
           </DialogHeader>
-          {selectedInvoice && (
-            <InvoicePreview invoice={selectedInvoice} />
+          {selectedPayment && (
+            <PaymentDetailsDialog payment={selectedPayment} />
           )}
         </DialogContent>
       </Dialog>
@@ -631,9 +682,9 @@ const Billing = () => {
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
           </DialogHeader>
-          {selectedInvoice && (
+          {selectedBill && (
             <RecordPaymentForm
-              invoice={selectedInvoice}
+              bill={selectedBill}
               onSuccess={handlePaymentRecorded}
             />
           )}

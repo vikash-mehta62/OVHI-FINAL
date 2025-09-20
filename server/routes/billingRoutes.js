@@ -141,6 +141,82 @@ router.get('/patients', async (req, res) => {
   }
 });
 
+// Get all bills
+router.get('/get-all-bills', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    const bills = await billingService.getAllBills(limit, offset, req);
+    res.json({
+      success: true,
+      data: bills
+    });
+  } catch (error) {
+    console.error('Error fetching bills:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Update bill status
+router.patch('/bills/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const result = await billingService.updateBillStatus(req.params.id, status);
+    res.json({
+      success: true,
+      data: result,
+      message: 'Bill status updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating bill status:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Update bill items
+router.put('/bills/:id/items', async (req, res) => {
+  try {
+    const { items } = req.body;
+    const result = await billingService.updateBillItems(req.params.id, items);
+    res.json({
+      success: true,
+      data: result,
+      message: 'Bill items updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating bill items:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Get bill data for PDF
+router.get('/bills/:id/pdf-data', async (req, res) => {
+  try {
+    const providerId = req.user?.user_id;
+    const billData = await billingService.getBillForPDF(req.params.id, providerId);
+    res.json({
+      success: true,
+      data: billData
+    });
+  } catch (error) {
+    console.error('Error getting bill PDF data:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 // Update invoice status
 router.patch('/invoices/:id/status', async (req, res) => {
   try {
@@ -174,6 +250,76 @@ router.post('/search-patients', async (req, res) => {
   } catch (error) {
     console.error('Error searching patients:', error);
     res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Get all payments with filters
+router.get('/payments', async (req, res) => {
+  try {
+    const payments = await billingService.getPayments(req.query, req);
+    res.json({
+      success: true,
+      data: payments
+    });
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Create payment for a bill
+router.post('/payments/create', async (req, res) => {
+  try {
+    const payment = await billingService.createPayment(req.body, req);
+    res.status(201).json({
+      success: true,
+      data: payment,
+      message: 'Payment created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating payment:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Get payment by ID
+router.get('/payments/:id', async (req, res) => {
+  try {
+    const payment = await billingService.getPaymentById(req.params.id);
+    res.json({
+      success: true,
+      data: payment
+    });
+  } catch (error) {
+    console.error('Error fetching payment:', error);
+    res.status(404).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Refund payment
+router.post('/payments/:id/refund', async (req, res) => {
+  try {
+    const payment = await billingService.refundPayment(req.params.id);
+    res.json({
+      success: true,
+      data: payment,
+      message: 'Payment refunded successfully'
+    });
+  } catch (error) {
+    console.error('Error refunding payment:', error);
+    res.status(400).json({
       success: false,
       message: error.message
     });
