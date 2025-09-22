@@ -79,9 +79,9 @@ router.get('/bills/:id', async (req, res) => {
 // Get bill data formatted for PDF generation
 router.get('/bills/:id/pdf-data', async (req, res) => {
     // console.log(req.user)
-    const {user_id} = req.user;
+    const { user_id } = req.user;
     try {
-        const billPdfData = await billingService.getBillForPDF(req.params.id,user_id);
+        const billPdfData = await billingService.getBillForPDF(req.params.id, user_id);
         res.json({
             success: true,
             data: billPdfData
@@ -120,7 +120,7 @@ router.get('/bills', async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
         const offset = (page - 1) * limit;
-        
+
         const bills = await billingService.getAllBills(limit, offset);
         res.json({
             success: true,
@@ -147,7 +147,7 @@ router.get('/get-all-bills', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
     try {
-        const bills = await billingService.getAllBills(limit, offset,req);
+        const bills = await billingService.getAllBills(limit, offset, req);
         res.json({
             success: true,
             data: bills
@@ -166,7 +166,7 @@ router.patch('/bills/:billId/status', async (req, res) => {
     try {
         const { billId } = req.params;
         const { status } = req.body;
-        
+
         if (!status) {
             return res.status(400).json({
                 success: false,
@@ -193,7 +193,7 @@ router.put('/bills/:billId/items', async (req, res) => {
     try {
         const { billId } = req.params;
         const { items } = req.body;
-        
+
         if (!items || !Array.isArray(items)) {
             return res.status(400).json({
                 success: false,
@@ -343,7 +343,7 @@ router.post('/invoices/:id/payments', async (req, res) => {
             ...req.body,
             invoice_id: parseInt(req.params.id)
         };
-        
+
         const invoice = await billingService.recordPayment(paymentData);
         res.status(201).json({
             success: true,
@@ -362,7 +362,23 @@ router.post('/invoices/:id/payments', async (req, res) => {
 // Legacy payment endpoint for backward compatibility
 router.get('/payments', async (req, res) => {
     try {
-        const payments = await billingService.getPayments({},req);
+        const payments = await billingService.getPayments({}, req);
+        res.status(201).json({
+            success: true,
+            data: payments,
+            message: 'Payment recorded successfully'
+        });
+    } catch (error) {
+        console.error('Error recording payment:', error);
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+router.get('/payments/create', async (req, res) => {
+    try {
+        const payments = await billingService.createPayment(req.body, req);
         res.status(201).json({
             success: true,
             data: payments,
@@ -541,7 +557,7 @@ router.get('/invoices/:id/payments', async (req, res) => {
             const invoice = await billingService.getInvoiceById(req.params.id);
             payments = invoice.payments || [];
         }
-        
+
         res.json({
             success: true,
             data: payments
@@ -583,14 +599,14 @@ router.post('/invoices/:id/cancel', async (req, res) => {
     try {
         const { reason } = req.body;
         let invoice;
-        
+
         if (typeof billingService.cancelInvoice === 'function') {
             invoice = await billingService.cancelInvoice(req.params.id, reason);
         } else {
             // Fallback to status update
             invoice = await billingService.updateInvoiceStatus(req.params.id, 'cancelled');
         }
-        
+
         res.json({
             success: true,
             message: 'Invoice cancelled successfully',
@@ -633,13 +649,13 @@ router.post('/payments/:id/void', async (req, res) => {
     try {
         const { reason } = req.body;
         let result;
-        
+
         if (typeof billingService.voidPayment === 'function') {
             result = await billingService.voidPayment(req.params.id, reason);
         } else {
             throw new Error('Payment void functionality not available');
         }
-        
+
         res.json({
             success: true,
             message: 'Payment voided successfully',
@@ -673,14 +689,14 @@ router.get('/reports/aging', async (req, res) => {
     try {
         const patientId = req.query.patient_id;
         let report;
-        
+
         if (typeof billingService.getAgingReport === 'function') {
             report = await billingService.getAgingReport(patientId);
         } else {
             // Fallback - return empty report structure
             report = [];
         }
-        
+
         res.json({
             success: true,
             data: report
@@ -716,7 +732,7 @@ router.get('/reports/aging', async (req, res) => {
 router.get('/patients/search', async (req, res) => {
     try {
         const { q: searchTerm, user_id } = req.query;
-        
+
         if (!searchTerm || searchTerm.trim() === '') {
             return res.status(200).json({
                 success: true,
@@ -743,7 +759,7 @@ router.get('/patients/search', async (req, res) => {
 router.post("/search-patients", async (req, res) => {
     try {
         const { searchTerm } = req.body;
-        const {user_id} = req.user;
+        const { user_id } = req.user;
 
         // Return empty array if no search term provided
         if (!searchTerm || searchTerm.trim() === '') {
@@ -754,7 +770,7 @@ router.post("/search-patients", async (req, res) => {
             });
         }
 
-        const patients = await billingService.searchPatient(searchTerm.trim(),user_id);
+        const patients = await billingService.searchPatient(searchTerm.trim(), user_id);
 
         res.status(200).json({
             success: true,

@@ -199,6 +199,25 @@ router.put('/bills/:id/items', async (req, res) => {
   }
 });
 
+// Update bill amount_paid
+router.patch('/bills/:id/amount-paid', async (req, res) => {
+  try {
+    const { amount_paid } = req.body;
+    const result = await billingService.updateBillAmountPaid(req.params.id, amount_paid);
+    res.json({
+      success: true,
+      data: result,
+      message: 'Bill amount paid updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating bill amount paid:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 // Get bill data for PDF
 router.get('/bills/:id/pdf-data', async (req, res) => {
   try {

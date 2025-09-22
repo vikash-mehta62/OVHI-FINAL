@@ -14,7 +14,8 @@ const billSchema = Joi.object({
     ).min(1).required(),
     notes: Joi.string().allow('', null),
     created_by: Joi.number().integer().positive(),
-    total: Joi.number().positive().optional() // Allow total from frontend
+    total: Joi.number().positive().optional(), // Allow total from frontend
+    amount_paid: Joi.number().min(0).optional() // Allow amount_paid from frontend
 });
 
 const paymentSchema = Joi.object({
@@ -27,6 +28,15 @@ const paymentSchema = Joi.object({
     gateway_transaction_id: Joi.string().allow('', null),
     notes: Joi.string().allow('', null),
     created_by: Joi.number().integer().positive()
+});
+
+const billPaymentSchema = Joi.object({
+    bill_id: Joi.number().integer().positive().required(),
+    amount: Joi.number().positive().required(),
+    payment_method: Joi.string().valid('cash', 'card', 'check', 'bank_transfer', 'insurance').required(),
+    transaction_id: Joi.string().allow('', null),
+    notes: Joi.string().allow('', null),
+    status: Joi.string().valid('completed', 'pending', 'failed').default('completed')
 });
 
 class BillingService {
@@ -48,10 +58,19 @@ class BillingService {
         return value;
     }
 
+    // Validate bill payment data
+    validateBillPaymentData(paymentData) {
+        const { error, value } = billPaymentSchema.validate(paymentData);
+        if (error) {
+            throw new Error(`Validation error: ${error.details[0].message}`);
+        }
+        return value;
+    }
+
     // Create a new bill draft
     async createBill(billData) {
         const validatedData = this.validateBillData(billData);
-        const { patient_id, items, notes, created_by } = validatedData;
+        const { patient_id, items, notes, created_by, amount_paid } = validatedData;
 
         const conn = await connection.getConnection();
 
@@ -66,8 +85,8 @@ class BillingService {
 
             // Create the bill
             const [billResult] = await conn.query(
-                'INSERT INTO bills (patient_id, notes, total_amount, created_by) VALUES (?, ?, ?, ?)',
-                [patient_id, notes || null, totalAmount, created_by || null]
+                'INSERT INTO bills (patient_id, notes, total_amount, amount_paid, created_by) VALUES (?, ?, ?, ?, ?)',
+                [patient_id, notes || null, totalAmount, amount_paid || 0, created_by || null]
             );
 
             const billId = billResult.insertId;
@@ -93,7 +112,11 @@ class BillingService {
     // Get bill by ID with items
     async getBillById(billId) {
         const [bills] = await connection.execute(`
-      SELECT b.*, CONCAT(up.firstname, " ", up.lastname) as patient_name, up.work_email as patient_email
+      SELECT b.*, 
+             COALESCE(b.amount_paid, 0) as amount_paid,
+             (b.total_amount - COALESCE(b.amount_paid, 0)) as amount_due,
+             CONCAT(up.firstname, " ", up.lastname) as patient_name, 
+             up.work_email as patient_email
       FROM bills b
       JOIN user_profiles up ON b.patient_id = up.fk_userid
       WHERE b.id = ?
@@ -123,6 +146,8 @@ class BillingService {
             `
             SELECT 
                 b.*,
+                COALESCE(b.amount_paid, 0) as amount_paid,
+                (b.total_amount - COALESCE(b.amount_paid, 0)) as amount_due,
                 CASE b.status
                     WHEN 0 THEN 'pending'
                     WHEN 1 THEN 'approved'
@@ -240,6 +265,45 @@ class BillingService {
         } catch (error) {
             // Rollback transaction on error
             console.error('Error updating bill items:', error);
+            throw error;
+        }
+    }
+
+    // Update bill amount_paid
+    async updateBillAmountPaid(billId, amountPaid) {
+        try {
+            // Validate amount_paid is not negative
+            if (amountPaid < 0) {
+                throw new Error('Amount paid cannot be negative');
+            }
+
+            // Get current bill to validate amount_paid doesn't exceed total
+            const [bills] = await connection.execute(`
+                SELECT total_amount FROM bills WHERE id = ?
+            `, [billId]);
+
+            if (bills.length === 0) {
+                throw new Error('Bill not found');
+            }
+
+            const bill = bills[0];
+            if (amountPaid > bill.total_amount) {
+                throw new Error('Amount paid cannot exceed total amount');
+            }
+
+            // Update amount_paid
+            await connection.execute(`
+                UPDATE bills 
+                SET amount_paid = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            `, [amountPaid, billId]);
+
+            console.log(`Bill ${billId} amount_paid updated to: ${amountPaid}`);
+            
+            // Return updated bill
+            return await this.getBillById(billId);
+        } catch (error) {
+            console.error('Error updating bill amount_paid:', error);
             throw error;
         }
     }
@@ -810,8 +874,9 @@ class BillingService {
 
     // Create payment for a bill
     async createPayment(paymentData, req) {
+        const validatedData = this.validateBillPaymentData(paymentData);
         const { user_id } = req.user;
-        const { bill_id, payment_method, transaction_id, amount, notes } = paymentData;
+        const { bill_id, payment_method, transaction_id, amount, notes, status } = validatedData;
 
         try {
             // Validate bill exists and belongs to this physician
@@ -831,8 +896,16 @@ class BillingService {
             // Insert payment
             const [result] = await connection.execute(`
                 INSERT INTO payments (bill_id, payment_method, transaction_id, amount, notes, status)
-                VALUES (?, ?, ?, ?, ?, 'completed')
-            `, [bill_id, payment_method, transaction_id || null, amount, notes || null]);
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [bill_id, payment_method, transaction_id || null, amount, notes || null, status || 'completed']);
+
+            // Update bill amount_paid
+            await connection.execute(`
+                UPDATE bills 
+                SET amount_paid = COALESCE(amount_paid, 0) + ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `, [amount, bill_id]);
 
             // Get the created payment with patient info
             const [payments] = await connection.execute(`

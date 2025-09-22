@@ -320,6 +320,7 @@ class BillingService {
     transaction_id?: string;
     amount: number;
     notes?: string;
+    status?: string;
   }): Promise<any> {
     const response = await apiClient.post('/billings/payments/create', paymentData);
     return response.data.data;

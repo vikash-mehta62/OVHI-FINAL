@@ -29,6 +29,7 @@ interface PaymentFormData {
   payment_method: 'card' | 'cash' | 'bank_transfer' | 'insurance' | 'check';
   transaction_id: string;
   notes: string;
+  status: 'completed' | 'pending' | 'failed';
 }
 
 const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ bill, onSuccess }) => {
@@ -39,7 +40,8 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ bill, onSuccess }
       amount: bill.total_amount.toString(),
       payment_method: 'card',
       transaction_id: '',
-      notes: ''
+      notes: '',
+      status: 'completed'
     }
   });
 
@@ -74,7 +76,8 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ bill, onSuccess }
         amount: amount,
         payment_method: data.payment_method,
         transaction_id: data.transaction_id || undefined,
-        notes: data.notes || undefined
+        notes: data.notes || undefined,
+        status: data.status
       };
 
       await billingService.createPayment(paymentData);
@@ -178,6 +181,23 @@ const RecordPaymentForm: React.FC<RecordPaymentFormProps> = ({ bill, onSuccess }
               <SelectItem value="check">Check</SelectItem>
               <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
               <SelectItem value="insurance">Insurance Payment</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="status">Payment Status *</Label>
+          <Select
+            onValueChange={(value) => setValue('status', value as PaymentFormData['status'])}
+            defaultValue="completed"
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select payment status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
             </SelectContent>
           </Select>
         </div>

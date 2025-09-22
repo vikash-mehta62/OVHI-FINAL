@@ -21,6 +21,8 @@ interface Bill {
   patient_name: string;
   status: string;
   total_amount: number;
+  amount_paid: number;
+  amount_due: number;
   created_at: string;
   physician_name?: string;
   items: Array<{
@@ -493,7 +495,9 @@ const Billing = () => {
                   <tr>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Bill #</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Patient</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Amount</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Total</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Paid</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Due</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Status</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700 text-sm">Date</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-700 text-sm min-w-[200px]">Actions</th>
@@ -505,6 +509,8 @@ const Billing = () => {
                       <td className="py-4 px-4 font-medium text-gray-900">#{bill.id}</td>
                       <td className="py-4 px-4 text-gray-700">{bill.patient_name}</td>
                       <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(bill.total_amount)}</td>
+                      <td className="py-4 px-4 font-medium text-green-600">{formatCurrency(bill.amount_paid || 0)}</td>
+                      <td className="py-4 px-4 font-medium text-red-600">{formatCurrency(bill.amount_due || bill.total_amount)}</td>
                       <td className="py-4 px-4">
                         <Badge className="bg-yellow-100 text-yellow-800 font-medium px-2.5 py-1 rounded-full text-xs">
                           {bill.status ? bill.status.charAt(0).toUpperCase() + bill.status.slice(1) : 'Unknown'}
