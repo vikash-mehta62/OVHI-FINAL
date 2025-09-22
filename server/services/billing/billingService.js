@@ -140,7 +140,7 @@ class BillingService {
     }
     async getAllBills(limit, offset, req) {
         const { user_id } = req.user; // logged-in physician
-    
+
         // Fetch bills for patients mapped to this physician
         const [bills] = await connection.execute(
             `
@@ -180,11 +180,11 @@ class BillingService {
             `,
             [user_id, limit, offset]
         );
-    
+
         if (bills.length === 0) {
             return [];
         }
-    
+
         // Attach bill items
         for (const bill of bills) {
             const [items] = await connection.execute(
@@ -199,13 +199,13 @@ class BillingService {
                 `,
                 [bill.id]
             );
-    
+
             bill.items = items;
         }
-    
+
         return bills;
     }
-    
+
 
     // Update bill status
     async updateBillStatus(billId, status) {
@@ -299,7 +299,7 @@ class BillingService {
             `, [amountPaid, billId]);
 
             console.log(`Bill ${billId} amount_paid updated to: ${amountPaid}`);
-            
+
             // Return updated bill
             return await this.getBillById(billId);
         } catch (error) {
@@ -341,9 +341,9 @@ class BillingService {
 
             // Create invoice
             const [invoiceResult] = await conn.query(`
-                INSERT INTO invoices (invoice_number, bill_id, patient_id, total_amount, due_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [invoiceNumber, billId, bill.patient_id, bill.total_amount, dueDate, bill.notes]);
+                INSERT INTO invoices (invoice_number, bill_id, patient_id, total_amount, amount_paid, due_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [invoiceNumber, billId, bill.patient_id, bill.total_amount, bill.amount_paid || 0, dueDate, bill.notes]);
 
             const invoiceId = invoiceResult.insertId;
 
@@ -354,6 +354,13 @@ class BillingService {
                     VALUES (?, ?, ?, ?, ?, ?)
                 `, [invoiceId, item.service_id, item.service_name, item.service_code, item.quantity, item.unit_price]);
             }
+
+            // Migrate bill payments to invoice payments
+            await conn.query(`
+                UPDATE payments 
+                SET invoice_id = ?, bill_id = NULL 
+                WHERE bill_id = ?
+            `, [invoiceId, billId]);
 
             // Mark bill as finalized
             await conn.query(
@@ -434,7 +441,7 @@ class BillingService {
     `, [invoiceId]);
 
         const [payments] = await connection.execute(`
-      SELECT * FROM payments WHERE invoice_id = ? ORDER BY paid_at DESC
+      SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date DESC, paid_at DESC
     `, [invoiceId]);
 
         return {
@@ -826,7 +833,7 @@ class BillingService {
     // Get all payments with filters
     async getPayments(filters = {}, req) {
         const { user_id } = req.user; // logged-in physician
-        
+
         let query = `
             SELECT 
                 p.*,
@@ -872,14 +879,15 @@ class BillingService {
         return payments;
     }
 
-    // Create payment for a bill
     async createPayment(paymentData, req) {
         const validatedData = this.validateBillPaymentData(paymentData);
+        console.log(validatedData)
         const { user_id } = req.user;
         const { bill_id, payment_method, transaction_id, amount, notes, status } = validatedData;
 
         try {
-            // Validate bill exists and belongs to this physician
+
+            // ✅ Step 1: Validate bill exists and belongs to this physician
             const [bills] = await connection.execute(`
                 SELECT b.*, um.fk_physician_id
                 FROM bills b
@@ -893,36 +901,85 @@ class BillingService {
 
             const bill = bills[0];
 
-            // Insert payment
+            // ✅ Step 2: Prevent overpayment
+            const totalAmount   = parseFloat(bill.total_amount || 0);
+            const prevPaid      = parseFloat(bill.amount_paid || 0);
+            const paymentAmt    = parseFloat(amount || 0);
+            const newAmountPaid = parseFloat((prevPaid + paymentAmt).toFixed(2));
+            console.log(newAmountPaid,'amountpaiud')
+
+            // ✅ Step 3: Insert payment
             const [result] = await connection.execute(`
                 INSERT INTO payments (bill_id, payment_method, transaction_id, amount, notes, status)
                 VALUES (?, ?, ?, ?, ?, ?)
-            `, [bill_id, payment_method, transaction_id || null, amount, notes || null, status || 'completed']);
+            `, [
+                bill_id,
+                payment_method,
+                transaction_id || null,
+                Number(amount),
+                notes || null,
+                status && status.trim() ? status : 'completed'
+            ]);
 
-            // Update bill amount_paid
+            // ✅ Step 4: Update bill amount_paid
             await connection.execute(`
                 UPDATE bills 
-                SET amount_paid = COALESCE(amount_paid, 0) + ?,
+                SET amount_paid = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            `, [amount, bill_id]);
+            `, [newAmountPaid, bill_id]);
 
-            // Get the created payment with patient info
+            // ✅ Step 5: Update bill status based on payment progress\
+// Ensure numeric (2 decimal precision)
+
+
+// Round to 2 decimals to avoid float issues
+
+
+let newStatus = bill.status;
+
+// If bill is cancelled/voided, keep it unchanged
+if (bill.status === 5) {
+    newStatus = 5;
+} else {
+    if (newAmountPaid >= totalAmount) {
+        newStatus = 4; // Paid
+    } else if (newAmountPaid > 0) {
+        newStatus = 3; // Partially Paid
+    } else {
+        newStatus = 0; // Pending
+    }
+}
+
+            // console.log(newStatus)
+            await connection.execute(`
+                UPDATE bills
+                SET status = ?
+                WHERE id = ?
+            `, [newStatus, bill_id]);
+
+            // ✅ Step 6: Get the created payment with patient info
             const [payments] = await connection.execute(`
                 SELECT 
                     p.*,
                     CONCAT(up.firstname, " ", up.lastname) as patient_name,
                     up.work_email as patient_email,
-                    b.total_amount as bill_total_amount
+                    b.total_amount as bill_total_amount,
+                    b.amount_paid as bill_amount_paid,
+                    b.status as bill_status
                 FROM payments p
                 JOIN bills b ON p.bill_id = b.id
                 JOIN user_profiles up ON b.patient_id = up.fk_userid
                 WHERE p.id = ?
             `, [result.insertId]);
 
+            // await connection.commit();
             return payments[0];
         } catch (error) {
+            // await conn.rollback();
             throw error;
+        } finally {
+            // conn.release();
         }
     }
 
@@ -1019,11 +1076,11 @@ class BillingService {
                 LEFT JOIN pdf_header_configs phc ON phc.providerId = up2.fk_userid
                 WHERE b.id = ?
             `, [providerId, billId]);
-    
+
             if (bills.length === 0) {
                 throw new Error('Bill not found');
             }
-    
+
             // Bill items
             const [items] = await connection.execute(`
                 SELECT 
@@ -1035,17 +1092,17 @@ class BillingService {
                 JOIN services s ON bi.service_id = s.service_id
                 WHERE bi.bill_id = ?
             `, [billId]);
-    
+
             const bill = bills[0];
-    
+
             // Temp invoice number
             const year = new Date().getFullYear();
             const tempInvoiceNumber = `INV-${year}-${billId.toString().padStart(4, '0')}`;
-    
+
             // Due date (30 days)
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + 30);
-    
+
             return {
                 // Invoice details
                 invoice_number: tempInvoiceNumber,
@@ -1057,13 +1114,13 @@ class BillingService {
                 balance_due: parseFloat(bill.total_amount),
                 status: bill.status,
                 notes: bill.notes,
-    
+
                 // Patient info
                 patient_name: bill.patient_name,
                 patient_email: bill.patient_email,
                 patient_phone: bill.patient_phone,
                 patient_address: bill.patient_address,
-    
+
                 // Provider/Organization info
                 logo_url: bill.logo_url,
                 organization_name_value: bill.organization_name_value,
@@ -1072,13 +1129,13 @@ class BillingService {
                 email_value: bill.email_value,
                 website_value: bill.website_value,
                 fax_value: bill.fax_value,
-    
+
                 // Physician info
                 physician_name: bill.physician_name,
                 physician_mail: bill.physician_mail,
                 taxonomy: bill.taxonomy,
                 npi: bill.npi,
-    
+
                 // Service items
                 items: items.map(item => ({
                     service_name: item.service_name,
@@ -1087,7 +1144,7 @@ class BillingService {
                     unit_price: parseFloat(item.unit_price),
                     line_total: parseFloat(item.line_total)
                 })),
-    
+
                 // Payments
                 payments: []
             };
@@ -1096,7 +1153,7 @@ class BillingService {
             throw error;
         }
     }
-    
+
 
     // Search patients
     async searchPatient(searchTerm, userId = null) {

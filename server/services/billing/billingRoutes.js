@@ -376,7 +376,7 @@ router.get('/payments', async (req, res) => {
         });
     }
 });
-router.get('/payments/create', async (req, res) => {
+router.post('/payments/create', async (req, res) => {
     try {
         const payments = await billingService.createPayment(req.body, req);
         res.status(201).json({
