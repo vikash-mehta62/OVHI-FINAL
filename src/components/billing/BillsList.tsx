@@ -22,6 +22,8 @@ interface Bill {
     patient_id: number;
     status: string;
     total_amount: number;
+    amount_paid: number;
+    amount_due: number;
     patient_name: string;
     physician_name?: string;
     created_at: string;

@@ -192,7 +192,6 @@ const Patients: React.FC = () => {
                   <TableRow>
                     <TableHead>PatientID</TableHead>
                     <TableHead>Patient(DOB)</TableHead>
-                    <TableHead>Age</TableHead>
                     <TableHead>Gender</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
@@ -225,7 +224,7 @@ const Patients: React.FC = () => {
                               <p className="font-bold">
                                 <a
                                   href={`/provider/patients/${patient.patientId}`}
-                                  target="_blank"
+                                  // target="_blank"
                                   rel="noopener noreferrer"
                                   className="uppercase text-[#1e3a8a] hover:text-[#2563eb] hover:underline transition-colors duration-200"
                                 >
@@ -240,9 +239,7 @@ const Patients: React.FC = () => {
                           </div>
                         </TableCell>
 
-                        <TableCell>
-                          {calculateAge(patient.birthDate)} years
-                        </TableCell>
+
                         <TableCell>{patient.gender}</TableCell>
                         <TableCell>{patient.phone}</TableCell>
                         <TableCell>

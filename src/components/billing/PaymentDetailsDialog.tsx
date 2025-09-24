@@ -2,22 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { CreditCard, Calendar, DollarSign, FileText, User } from 'lucide-react';
-
-interface Payment {
-  id: number;
-  bill_id: number;
-  patient_name: string;
-  patient_email?: string;
-  payment_method: string;
-  transaction_id?: string;
-  amount: number;
-  payment_date: string;
-  gateway_response?: any;
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
-  notes?: string;
-  bill_total_amount: number;
-  created_at: string;
-}
+import { Payment } from '@/types/billing';
 
 interface PaymentDetailsDialogProps {
   payment: Payment;
@@ -131,7 +116,7 @@ const PaymentDetailsDialog = ({ payment }: PaymentDetailsDialogProps) => {
             
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Bill #:</span>
-              <span className="font-medium">#{payment.bill_id}</span>
+              <span className="font-medium">#{payment.bill_id || payment.invoice_id || 'N/A'}</span>
             </div>
             
             <div className="flex justify-between items-center">

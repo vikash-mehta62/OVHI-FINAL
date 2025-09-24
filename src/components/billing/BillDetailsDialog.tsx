@@ -17,6 +17,8 @@ interface Bill {
   patient_name: string;
   status: string;
   total_amount: number;
+  amount_paid: number;
+  amount_due: number;
   created_at: string;
   physician_name?: string;
   items: Array<{

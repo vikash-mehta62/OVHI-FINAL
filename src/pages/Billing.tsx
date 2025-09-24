@@ -14,43 +14,7 @@ import BillDetailsDialog from '@/components/billing/BillDetailsDialog';
 import billingService from '@/services/billingService';
 import enhancedPdfGenerator from '@/utils/enhancedPdfGenerator';
 import { toast } from 'sonner';
-
-interface Bill {
-  id: number;
-  patient_id: number;
-  patient_name: string;
-  status: string;
-  total_amount: number;
-  amount_paid: number;
-  amount_due: number;
-  created_at: string;
-  physician_name?: string;
-  items: Array<{
-    id: number;
-    bill_id: number;
-    service_id: number;
-    service_name: string;
-    service_code: string;
-    quantity: number;
-    unit_price: number;
-  }>;
-}
-
-interface Payment {
-  id: number;
-  bill_id: number;
-  patient_name: string;
-  patient_email?: string;
-  payment_method: string;
-  transaction_id?: string;
-  amount: number;
-  payment_date: string;
-  gateway_response?: any;
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
-  notes?: string;
-  bill_total_amount: number;
-  created_at: string;
-}
+import { Bill, Payment } from '@/types/billing';
 
 const Billing = () => {
   const [activeTab, setActiveTab] = useState<'bills' | 'payments'>('bills');
@@ -193,20 +157,7 @@ const Billing = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'overdue':
-        return 'bg-red-100 text-red-800';
-      case 'discarded':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
-    }
-  };
+
 
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
@@ -248,11 +199,14 @@ const Billing = () => {
   const getTotalsByStatus = () => {
     if (activeTab === 'bills') {
       const draftTotal = bills.filter(b => b.status === 'draft').reduce((sum, b) => sum + b.total_amount, 0);
+      const paidTotal = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + b.total_amount, 0);
+      const overdueTotal = bills.filter(b => b.status === 'overdue').reduce((sum, b) => sum + b.total_amount, 0);
+
       return {
         pending: draftTotal,
-        paid: 0,
-        overdue: 0,
-        discarded: 0
+        completed: paidTotal, // Map 'paid' to 'completed' for consistency
+        failed: overdueTotal, // Map 'overdue' to 'failed' for consistency
+        refunded: 0
       };
     } else {
       const totals = {
@@ -641,7 +595,7 @@ const Billing = () => {
                           >
                             <Eye className="h-4 w-4 text-gray-600" />
                           </Button>
-                          {payment.status === 'completed' && (
+                          {/* {payment.status === 'completed' && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -651,7 +605,7 @@ const Billing = () => {
                             >
                               <span className="text-xs font-medium">Refund</span>
                             </Button>
-                          )}
+                          )} */}
                         </div>
                       </td>
                     </tr>

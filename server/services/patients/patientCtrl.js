@@ -869,9 +869,10 @@ WHEN 3 THEN 'Normal'
 ELSE 'NA'
 END AS status,
     address_line AS address,
-   service_type
+   service_type,
+  DATE_FORMAT(u.created, '%m-%d-%Y') AS enrollDate
   FROM user_profiles`
-      + ' LEFT JOIN users_mappings ON user_profiles.fk_userid = users_mappings.user_id WHERE users_mappings.fk_role_id = 7';
+      + ' LEFT JOIN users_mappings ON user_profiles.fk_userid = users_mappings.user_id LEFT JOIN users u ON u.user_id = users_mappings.user_id WHERE users_mappings.fk_role_id = 7';
     if (roleid == 6) {
       getAllQ += ` AND users_mappings.fk_physician_id = ${providerid}`;
     }
@@ -917,7 +918,8 @@ END AS status,
         patient.diagnosis = rows || [];
       }
     }
-    // WHERE u.fk_roleid = 6
+
+
     return res.status(200).json({
       success: true,
       message: "Patients fetched successfully",

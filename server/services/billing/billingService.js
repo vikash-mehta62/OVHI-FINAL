@@ -1076,11 +1076,13 @@ if (bill.status === 5) {
                 LEFT JOIN pdf_header_configs phc ON phc.providerId = up2.fk_userid
                 WHERE b.id = ?
             `, [providerId, billId]);
-
+    
             if (bills.length === 0) {
                 throw new Error('Bill not found');
             }
-
+    
+            const bill = bills[0];
+    
             // Bill items
             const [items] = await connection.execute(`
                 SELECT 
@@ -1092,17 +1094,31 @@ if (bill.status === 5) {
                 JOIN services s ON bi.service_id = s.service_id
                 WHERE bi.bill_id = ?
             `, [billId]);
-
-            const bill = bills[0];
-
+    
+            // Payments for this bill
+            const [payments] = await connection.execute(`
+                SELECT 
+                    payment_method,
+                    transaction_id,
+                    amount,
+                    payment_date,
+                    status
+                FROM payments
+                WHERE bill_id = ?
+            `, [billId]);
+    
             // Temp invoice number
             const year = new Date().getFullYear();
             const tempInvoiceNumber = `INV-${year}-${billId.toString().padStart(4, '0')}`;
-
+    
             // Due date (30 days)
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + 30);
-
+    
+            // Calculate total paid
+            const amount_paid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+            const balance_due = parseFloat(bill.total_amount) - amount_paid;
+    
             return {
                 // Invoice details
                 invoice_number: tempInvoiceNumber,
@@ -1110,17 +1126,17 @@ if (bill.status === 5) {
                 issued_date: bill.created_at,
                 due_date: dueDate.toISOString(),
                 total_amount: parseFloat(bill.total_amount),
-                amount_paid: 0,
-                balance_due: parseFloat(bill.total_amount),
+                amount_paid: amount_paid,
+                balance_due: balance_due,
                 status: bill.status,
                 notes: bill.notes,
-
+    
                 // Patient info
                 patient_name: bill.patient_name,
                 patient_email: bill.patient_email,
                 patient_phone: bill.patient_phone,
                 patient_address: bill.patient_address,
-
+    
                 // Provider/Organization info
                 logo_url: bill.logo_url,
                 organization_name_value: bill.organization_name_value,
@@ -1129,13 +1145,13 @@ if (bill.status === 5) {
                 email_value: bill.email_value,
                 website_value: bill.website_value,
                 fax_value: bill.fax_value,
-
+    
                 // Physician info
                 physician_name: bill.physician_name,
                 physician_mail: bill.physician_mail,
                 taxonomy: bill.taxonomy,
                 npi: bill.npi,
-
+    
                 // Service items
                 items: items.map(item => ({
                     service_name: item.service_name,
@@ -1144,15 +1160,22 @@ if (bill.status === 5) {
                     unit_price: parseFloat(item.unit_price),
                     line_total: parseFloat(item.line_total)
                 })),
-
+    
                 // Payments
-                payments: []
+                payments: payments.map(p => ({
+                    payment_method: p.payment_method,
+                    transaction_id: p.transaction_id,
+                    amount: parseFloat(p.amount),
+                    payment_date: p.payment_date,
+                    status: p.status
+                }))
             };
         } catch (error) {
             console.error("Error getting bill for PDF:", error);
             throw error;
         }
     }
+    
 
 
     // Search patients
