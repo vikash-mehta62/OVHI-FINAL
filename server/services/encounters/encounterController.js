@@ -67,6 +67,7 @@ const createEncounterTemplate = async (req, res) => {
       template_id: result.insertId
     });
   } catch (error) {
+    console.log(error)
     res.status(500).json({ success: false, error: 'Failed to create template', details: error.message });
   }
 };
