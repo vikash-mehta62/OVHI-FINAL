@@ -4,75 +4,58 @@ const logAudit = require("../../utils/logAudit");
 
 // Joi Validation Schemas
 const encounterValidationSchemas = {
-    // Create encounter validation
+    // Create encounter validation - Updated to match new schema
     createEncounter: Joi.object({
-        patient_id: Joi.number().integer().positive().required(),
-        encounter_date: Joi.date().iso().default(() => new Date()),
-        duration_minutes: Joi.number().integer().min(1).max(480).default(30),
-        type: Joi.string().valid('routine', 'acute', 'follow-up', 'consultation', 'emergency', 'telehealth').required(),
-        reason_for_visit: Joi.string().max(500).optional().allow(null, ''),
-        template_type: Joi.string().max(100).optional().allow(null, ''),
-        category: Joi.string().max(100).optional().allow(null, ''),
-        complexity: Joi.string().valid('low', 'moderate', 'high').default('moderate'),
-        status: Joi.string().valid('scheduled', 'in-progress', 'completed', 'cancelled', 'no-show').default('scheduled'),
-        completed_at: Joi.date().iso().optional().allow(null),
-        claim_id: Joi.number().integer().positive().optional().allow(null),
-        subjective: Joi.string().max(2000).optional().allow(null, ''),
-        objective: Joi.string().max(2000).optional().allow(null, ''),
-        assessment: Joi.array().items(Joi.string().max(200)).optional().allow(null),
-        plan: Joi.array().items(Joi.string().max(200)).optional().allow(null),
-        vitals: Joi.object({
-            blood_pressure: Joi.string().pattern(/^\d{2,3}\/\d{2,3}$/).optional(),
-            heart_rate: Joi.number().integer().min(30).max(200).optional(),
-            temperature: Joi.number().min(90).max(110).optional(),
-            respiratory_rate: Joi.number().integer().min(8).max(40).optional(),
-            oxygen_saturation: Joi.number().min(70).max(100).optional(),
-            weight: Joi.number().min(0).max(1000).optional(),
-            height: Joi.number().min(0).max(300).optional(),
-            bmi: Joi.number().min(10).max(80).optional()
-        }).optional().allow(null),
-        diagnosis_codes: Joi.array().items(Joi.string().max(20)).optional().allow(null),
-        procedure_codes: Joi.array().items(Joi.string().max(20)).optional().allow(null)
+        patient: Joi.object({
+            id: Joi.alternatives().try(Joi.number(), Joi.string()).required(),
+            name: Joi.string().optional(),
+            age: Joi.number().optional(),
+            gender: Joi.string().optional(),
+            lastVisit: Joi.string().optional(),
+            conditions: Joi.array().items(Joi.string()).optional(),
+            allergies: Joi.array().items(Joi.string()).optional(),
+            medications: Joi.array().items(Joi.string()).optional()
+        }).required(),
+        type: Joi.string().valid('acute', 'chronic', 'wellness').required(),
+        duration: Joi.number().integer().min(1).max(480).optional(),
+        template: Joi.object().optional(),
+        soapNotes: Joi.object({
+            subjective: Joi.string().optional().allow(''),
+            objective: Joi.string().optional().allow(''),
+            assessment: Joi.string().optional().allow(''),
+            plan: Joi.string().optional().allow('')
+        }).optional(),
+        completedAt: Joi.date().iso().optional()
     }),
 
-    // Update encounter validation
+    // Update encounter validation - Updated to match new schema
     updateEncounter: Joi.object({
-        patient_id: Joi.number().integer().positive().optional(),
-        provider_id: Joi.number().integer().positive().optional(),
-        encounter_date: Joi.date().iso().optional(),
-        duration_minutes: Joi.number().integer().min(1).max(480).optional(),
-        type: Joi.string().valid('routine', 'acute', 'follow-up', 'consultation', 'emergency', 'telehealth').optional(),
-        reason_for_visit: Joi.string().max(500).optional().allow(null, ''),
-        template_type: Joi.string().max(100).optional().allow(null, ''),
-        category: Joi.string().max(100).optional().allow(null, ''),
-        complexity: Joi.string().valid('low', 'moderate', 'high').optional(),
-        status: Joi.string().valid('scheduled', 'in-progress', 'completed', 'cancelled', 'no-show').optional(),
-        completed_at: Joi.date().iso().optional().allow(null),
-        claim_id: Joi.number().integer().positive().optional().allow(null),
-        subjective: Joi.string().max(2000).optional().allow(null, ''),
-        objective: Joi.string().max(2000).optional().allow(null, ''),
-        assessment: Joi.array().items(Joi.string().max(200)).optional().allow(null),
-        plan: Joi.array().items(Joi.string().max(200)).optional().allow(null),
-        vitals: Joi.object({
-            blood_pressure: Joi.string().pattern(/^\d{2,3}\/\d{2,3}$/).optional(),
-            heart_rate: Joi.number().integer().min(30).max(200).optional(),
-            temperature: Joi.number().min(90).max(110).optional(),
-            respiratory_rate: Joi.number().integer().min(8).max(40).optional(),
-            oxygen_saturation: Joi.number().min(70).max(100).optional(),
-            weight: Joi.number().min(0).max(1000).optional(),
-            height: Joi.number().min(0).max(300).optional(),
-            bmi: Joi.number().min(10).max(80).optional()
-        }).optional().allow(null),
-        diagnosis_codes: Joi.array().items(Joi.string().max(20)).optional().allow(null),
-        procedure_codes: Joi.array().items(Joi.string().max(20)).optional().allow(null)
+        patient: Joi.object({
+            id: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
+            name: Joi.string().optional(),
+            age: Joi.number().optional(),
+            gender: Joi.string().optional(),
+            lastVisit: Joi.string().optional(),
+            conditions: Joi.array().items(Joi.string()).optional(),
+            allergies: Joi.array().items(Joi.string()).optional(),
+            medications: Joi.array().items(Joi.string()).optional()
+        }).optional(),
+        type: Joi.string().valid('acute', 'chronic', 'wellness').optional(),
+        duration: Joi.number().integer().min(1).max(480).optional(),
+        template: Joi.object().optional(),
+        soapNotes: Joi.object({
+            subjective: Joi.string().optional().allow(''),
+            objective: Joi.string().optional().allow(''),
+            assessment: Joi.string().optional().allow(''),
+            plan: Joi.string().optional().allow('')
+        }).optional(),
+        completedAt: Joi.date().iso().optional()
     }),
 
-    // Query parameters validation
+    // Query parameters validation - Updated to match new schema
     encounterQuery: Joi.object({
         patient_id: Joi.number().integer().positive().optional(),
-        provider_id: Joi.number().integer().positive().optional(),
-        status: Joi.string().valid('scheduled', 'in-progress', 'completed', 'cancelled', 'no-show').optional(),
-        type: Joi.string().valid('routine', 'acute', 'follow-up', 'consultation', 'emergency', 'telehealth').optional(),
+        type: Joi.string().valid('acute', 'chronic', 'wellness').optional(),
         date_from: Joi.date().iso().optional(),
         date_to: Joi.date().iso().optional(),
         page: Joi.number().integer().min(1).default(1),
@@ -85,52 +68,73 @@ const encounterValidationSchemas = {
     })
 };
 
-// Helper function to format encounter data for database
+// Helper function to format encounter data for database - Updated for new schema
 const formatEncounterForDB = (data) => {
-    const formatted = { ...data };
+    const formatted = {};
 
-    // Convert arrays to JSON strings for database storage
-    if (formatted.assessment && Array.isArray(formatted.assessment)) {
-        formatted.assessment = JSON.stringify(formatted.assessment);
+    // Map incoming data to database schema
+    if (data.patient && data.patient.id) {
+        formatted.patient_id = parseInt(data.patient.id);
     }
-    if (formatted.plan && Array.isArray(formatted.plan)) {
-        formatted.plan = JSON.stringify(formatted.plan);
+
+    if (data.type) {
+        formatted.type = data.type;
     }
-    if (formatted.vitals && typeof formatted.vitals === 'object') {
-        formatted.vitals = JSON.stringify(formatted.vitals);
+
+    if (data.duration) {
+        formatted.duration_minutes = data.duration;
     }
-    if (formatted.diagnosis_codes && Array.isArray(formatted.diagnosis_codes)) {
-        formatted.diagnosis_codes = JSON.stringify(formatted.diagnosis_codes);
+
+    if (data.completedAt) {
+        formatted.completed_at = new Date(data.completedAt);
     }
-    if (formatted.procedure_codes && Array.isArray(formatted.procedure_codes)) {
-        formatted.procedure_codes = JSON.stringify(formatted.procedure_codes);
+
+    // Store template as JSON
+    if (data.template) {
+        formatted.template = JSON.stringify(data.template);
     }
+
+    // Store SOAP notes as JSON
+    if (data.soapNotes) {
+        formatted.soap_notes = JSON.stringify(data.soapNotes);
+    }
+
+    // Store raw payload for reference
+    formatted.raw_payload = JSON.stringify(data);
 
     return formatted;
 };
 
-// Helper function to format encounter data from database
+// Helper function to format encounter data from database - Updated for new schema
 const formatEncounterFromDB = (data) => {
     if (!data) return null;
 
-    const formatted = { ...data };
+    const formatted = {
+        id: data.id,
+        patient: {
+            id: data.patient_id.toString()
+        },
+        type: data.type,
+        duration: data.duration_minutes,
+        completedAt: data.completed_at
+    };
 
-    // Parse JSON strings back to objects/arrays
+    // Parse JSON fields back to objects
     try {
-        if (formatted.assessment && typeof formatted.assessment === 'string') {
-            formatted.assessment = JSON.parse(formatted.assessment);
+        if (data.template && typeof data.template === 'string') {
+            formatted.template = JSON.parse(data.template);
         }
-        if (formatted.plan && typeof formatted.plan === 'string') {
-            formatted.plan = JSON.parse(formatted.plan);
+
+        if (data.soap_notes && typeof data.soap_notes === 'string') {
+            formatted.soapNotes = JSON.parse(data.soap_notes);
         }
-        if (formatted.vitals && typeof formatted.vitals === 'string') {
-            formatted.vitals = JSON.parse(formatted.vitals);
-        }
-        if (formatted.diagnosis_codes && typeof formatted.diagnosis_codes === 'string') {
-            formatted.diagnosis_codes = JSON.parse(formatted.diagnosis_codes);
-        }
-        if (formatted.procedure_codes && typeof formatted.procedure_codes === 'string') {
-            formatted.procedure_codes = JSON.parse(formatted.procedure_codes);
+
+        if (data.raw_payload && typeof data.raw_payload === 'string') {
+            const rawData = JSON.parse(data.raw_payload);
+            // Merge patient data from raw payload if available
+            if (rawData.patient) {
+                formatted.patient = { ...formatted.patient, ...rawData.patient };
+            }
         }
     } catch (error) {
         console.error('Error parsing JSON fields:', error);
@@ -139,12 +143,12 @@ const formatEncounterFromDB = (data) => {
     return formatted;
 };
 
-// Create new encounter
+// Create new encounter - Updated for new schema
 const createNewEncounter = async (req, res) => {
     try {
         // Extract values using patient controller pattern
-        const incomingData = { ...req.body, ...req.query,...req.params };
-        
+        const incomingData = { ...req.body, ...req.query, ...req.params };
+
         // Validate request data
         const { error, value } = encounterValidationSchemas.createEncounter.validate(incomingData);
         if (error) {
@@ -155,13 +159,7 @@ const createNewEncounter = async (req, res) => {
             });
         }
 
-        // Set provider_id from authenticated user if not provided
-        const { user_id, roleid } = req.user;
-        if (!value.provider_id) {
-            value.provider_id = user_id;
-        }
-
-        // Format data for database
+        // Format data for database according to new schema
         const encounterData = formatEncounterForDB(value);
 
         // Build dynamic query
@@ -170,22 +168,30 @@ const createNewEncounter = async (req, res) => {
         const values = Object.values(encounterData);
 
         const query = `
-      INSERT INTO encounters (${fields.join(', ')}, created_at, updated_at) 
-      VALUES (${placeholders}, NOW(), NOW())
-    `;
+            INSERT INTO encounters (${fields.join(', ')}, created_at) 
+            VALUES (${placeholders}, NOW())
+        `;
 
         const [result] = await connection.query(query, values);
 
         // Log audit
         await logAudit(req, 'CREATE', 'ENCOUNTER', result.insertId,
-            `New encounter created for patient ${value.patient_id}`);
+            `New encounter created for patient ${value.patient.id}`);
+
+        // Fetch the created encounter to return formatted data
+        const [createdEncounter] = await connection.query(
+            'SELECT * FROM encounters WHERE id = ?',
+            [result.insertId]
+        );
+
+        const formattedEncounter = formatEncounterFromDB(createdEncounter[0]);
 
         res.status(201).json({
             success: true,
             message: 'Encounter created successfully',
             data: {
-                encounter_id: result.insertId,
-                ...value
+                id: result.insertId,
+                ...formattedEncounter
             }
         });
 
@@ -199,12 +205,12 @@ const createNewEncounter = async (req, res) => {
     }
 };
 
-// Get encounters with filtering and pagination
+// Get encounters with filtering and pagination - Updated for new schema
 const getNewEncounters = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const values = { ...req.body, ...req.query };
-        
+
         // Validate query parameters
         const { error, value } = encounterValidationSchemas.encounterQuery.validate(values);
         if (error) {
@@ -217,26 +223,19 @@ const getNewEncounters = async (req, res) => {
 
         const { page, limit, ...filters } = value;
         const offset = (page - 1) * limit;
-        const { user_id, roleid } = req.user;
 
         // Build WHERE clause
         let whereConditions = [];
         let queryParams = [];
 
-        // Role-based access control (following patient controller pattern)
-        if (roleid !== 1) { // Not admin (assuming 1 is admin role)
-            whereConditions.push('provider_id = ?');
-            queryParams.push(user_id);
-        }
-
         // Add filters
         Object.entries(filters).forEach(([key, val]) => {
             if (val !== undefined && val !== null && val !== '') {
                 if (key === 'date_from') {
-                    whereConditions.push('encounter_date >= ?');
+                    whereConditions.push('created_at >= ?');
                     queryParams.push(val);
                 } else if (key === 'date_to') {
-                    whereConditions.push('encounter_date <= ?');
+                    whereConditions.push('created_at <= ?');
                     queryParams.push(val);
                 } else {
                     whereConditions.push(`${key} = ?`);
@@ -245,45 +244,47 @@ const getNewEncounters = async (req, res) => {
             }
         });
 
-
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
         // Get total count
- 
         const countQuery = `SELECT COUNT(*) as total FROM encounters ${whereClause}`;
         const [countResult] = await connection.query(countQuery, queryParams);
         const total = countResult[0].total;
 
-        // Get encounters (following patient controller pattern)
-        const fixedWhereClause = whereClause.replace(/\bstatus\b/g, 'e.status');
-
+        // Get encounters with patient information
         const query = `
-      SELECT e.*, 
-             -- Patient Information
-             up.firstname as patient_first_name, 
-             up.lastname as patient_last_name, 
-             up.middlename as patient_middle_name,
-             up.dob as patient_date_of_birth, 
-             up.phone as patient_phone, 
-             up.work_email as patient_email,
-             
-             -- Provider Information
-             CONCAT(up2.firstname," ",up2.lastname) as provider_name,
-             up2.phone as provider_phone,
-             up2.work_email as provider_email
-             
-      FROM encounters e
-      LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
-      LEFT JOIN user_profiles up2 ON up2.fk_userid = e.provider_id
-      ${fixedWhereClause}
-      ORDER BY e.encounter_date DESC, e.created_at DESC
-      LIMIT ? OFFSET ?
-    `;
+            SELECT e.*, 
+                   up.firstname as patient_first_name, 
+                   up.lastname as patient_last_name, 
+                   up.middlename as patient_middle_name,
+                   up.dob as patient_date_of_birth, 
+                   up.phone as patient_phone, 
+                   up.work_email as patient_email,
+                   up.gender as patient_gender
+            FROM encounters e
+            LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
+            ${whereClause}
+            ORDER BY e.created_at DESC
+            LIMIT ? OFFSET ?
+        `;
 
         const [encounters] = await connection.query(query, [...queryParams, limit, offset]);
 
         // Format encounters
-        const formattedEncounters = encounters.map(formatEncounterFromDB);
+        const formattedEncounters = encounters.map(encounter => {
+            const formatted = formatEncounterFromDB(encounter);
+
+            // Add patient details from joined data
+            if (formatted && formatted.patient) {
+                formatted.patient.name = `${encounter.patient_first_name || ''} ${encounter.patient_last_name || ''}`.trim();
+                formatted.patient.gender = encounter.patient_gender;
+                formatted.patient.phone = encounter.patient_phone;
+                formatted.patient.email = encounter.patient_email;
+                formatted.patient.dob = encounter.patient_date_of_birth;
+            }
+
+            return formatted;
+        });
 
         res.status(200).json({
             success: true,
@@ -306,63 +307,41 @@ const getNewEncounters = async (req, res) => {
     }
 };
 
-// Get encounter by ID
+// Get encounter by ID - Updated for new schema
 const getNewEncounterById = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const values = { ...req.params, ...req.query };
-        
+
         // Validate encounter ID
-        const { error, value } = encounterValidationSchemas.encounterId.validate(values);
-        if (error) {
+        const encounterId = values.id || values.encounter_id;
+        if (!encounterId) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid encounter ID',
-                details: error.details.map(detail => detail.message)
+                message: 'Encounter ID is required'
             });
         }
 
-        const { encounter_id } = value;
-
         const query = `
-      SELECT e.*, 
-             -- Patient Information (following patient controller pattern)
-             up.firstname as patient_first_name, 
-             up.lastname as patient_last_name, 
-             up.middlename as patient_middle_name,
-             up.dob as patient_date_of_birth, 
-             up.phone as patient_phone, 
-             up.work_email as patient_email,
-             up.gender as patient_gender,
-             up.address_line as patient_address1,
-             up.address_line_2 as patient_address2,
-             up.city as patient_city,
-             up.state as patient_state,
-             up.zip as patient_zip,
-             
-             -- Provider Information (following patient controller pattern)
-             CONCAT(up2.firstname," ",up2.lastname) as provider_name,
-             up2.phone as provider_phone,
-             up2.work_email as provider_email,
-             up2.address_line as provider_address1,
-             up2.city as provider_city,
-             up2.state as provider_state,
-             
-             -- Practice Information
-             pp.practice_name,
-             pp.address_line1 as practice_address1,
-             pp.practice_phone,
-             pp.practice_email
-             
-      FROM encounters e
-      LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
-      LEFT JOIN users_mappings um ON um.user_id = e.patient_id
-      LEFT JOIN user_profiles up2 ON up2.fk_userid = e.provider_id
-      LEFT JOIN provider_practices pp ON pp.provider_id = e.provider_id
-      WHERE e.encounter_id = ?
-    `;
+            SELECT e.*, 
+                   up.firstname as patient_first_name, 
+                   up.lastname as patient_last_name, 
+                   up.middlename as patient_middle_name,
+                   up.dob as patient_date_of_birth, 
+                   up.phone as patient_phone, 
+                   up.work_email as patient_email,
+                   up.gender as patient_gender,
+                   up.address_line as patient_address1,
+                   up.address_line_2 as patient_address2,
+                   up.city as patient_city,
+                   up.state as patient_state,
+                   up.zip as patient_zip
+            FROM encounters e
+            LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
+            WHERE e.id = ?
+        `;
 
-        const [encounters] = await connection.query(query, [encounter_id]);
+        const [encounters] = await connection.query(query, [encounterId]);
 
         if (encounters.length === 0) {
             return res.status(404).json({
@@ -372,6 +351,22 @@ const getNewEncounterById = async (req, res) => {
         }
 
         const encounter = formatEncounterFromDB(encounters[0]);
+
+        // Add patient details from joined data
+        if (encounter && encounter.patient) {
+            encounter.patient.name = `${encounters[0].patient_first_name || ''} ${encounters[0].patient_last_name || ''}`.trim();
+            encounter.patient.gender = encounters[0].patient_gender;
+            encounter.patient.phone = encounters[0].patient_phone;
+            encounter.patient.email = encounters[0].patient_email;
+            encounter.patient.dob = encounters[0].patient_date_of_birth;
+            encounter.patient.address = {
+                line1: encounters[0].patient_address1,
+                line2: encounters[0].patient_address2,
+                city: encounters[0].patient_city,
+                state: encounters[0].patient_state,
+                zip: encounters[0].patient_zip
+            };
+        }
 
         res.status(200).json({
             success: true,
@@ -388,20 +383,19 @@ const getNewEncounterById = async (req, res) => {
     }
 };
 
-// Update encounter
+// Update encounter - Updated for new schema
 const updateNewEncounter = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const paramValues = { ...req.params, ...req.query };
         const bodyValues = { ...req.body, ...req.query };
-        
-        // Validate encounter ID
-        const { error: idError, value: idValue } = encounterValidationSchemas.encounterId.validate(paramValues);
-        if (idError) {
+
+        // Get encounter ID
+        const encounterId = paramValues.id || paramValues.encounter_id;
+        if (!encounterId) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid encounter ID',
-                details: idError.details.map(detail => detail.message)
+                message: 'Encounter ID is required'
             });
         }
 
@@ -415,13 +409,10 @@ const updateNewEncounter = async (req, res) => {
             });
         }
 
-        const { encounter_id } = idValue;
-        const { user_id, roleid } = req.user;
-
-        // Check if encounter exists and user has permission
+        // Check if encounter exists
         const [existingEncounter] = await connection.query(
-            'SELECT * FROM encounters WHERE encounter_id = ?',
-            [encounter_id]
+            'SELECT * FROM encounters WHERE id = ?',
+            [encounterId]
         );
 
         if (existingEncounter.length === 0) {
@@ -431,37 +422,41 @@ const updateNewEncounter = async (req, res) => {
             });
         }
 
-        // Check permission (following patient controller pattern)
-        if (roleid !== 1 && existingEncounter[0].provider_id !== user_id) { // Not admin and not owner
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to update this encounter'
-            });
-        }
-
         // Format data for database
         const encounterData = formatEncounterForDB(value);
 
         // Build dynamic update query
         const fields = Object.keys(encounterData);
-        const setClause = fields.map(field => `${field} = ?`).join(', ');
-        const values = [...Object.values(encounterData), encounter_id];
+        if (fields.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid fields to update'
+            });
+        }
 
-        const query = `
-      UPDATE encounters 
-      SET ${setClause}, updated_at = NOW()
-      WHERE encounter_id = ?
-    `;
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = [...Object.values(encounterData), encounterId];
+
+        const query = `UPDATE encounters SET ${setClause} WHERE id = ?`;
 
         await connection.query(query, values);
 
         // Log audit
-        await logAudit(req, 'UPDATE', 'ENCOUNTER', encounter_id,
+        await logAudit(req, 'UPDATE', 'ENCOUNTER', encounterId,
             `Encounter updated for patient ${existingEncounter[0].patient_id}`);
+
+        // Fetch updated encounter
+        const [updatedEncounter] = await connection.query(
+            'SELECT * FROM encounters WHERE id = ?',
+            [encounterId]
+        );
+
+        const formattedEncounter = formatEncounterFromDB(updatedEncounter[0]);
 
         res.status(200).json({
             success: true,
-            message: 'Encounter updated successfully'
+            message: 'Encounter updated successfully',
+            data: formattedEncounter
         });
 
     } catch (error) {
@@ -474,29 +469,25 @@ const updateNewEncounter = async (req, res) => {
     }
 };
 
-// Delete encounter
+// Delete encounter - Updated for new schema
 const deleteNewEncounter = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const values = { ...req.params, ...req.query };
-        
-        // Validate encounter ID
-        const { error, value } = encounterValidationSchemas.encounterId.validate(values);
-        if (error) {
+
+        // Get encounter ID
+        const encounterId = values.id || values.encounter_id;
+        if (!encounterId) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid encounter ID',
-                details: error.details.map(detail => detail.message)
+                message: 'Encounter ID is required'
             });
         }
 
-        const { encounter_id } = value;
-        const { user_id, roleid } = req.user;
-
-        // Check if encounter exists and user has permission
+        // Check if encounter exists
         const [existingEncounter] = await connection.query(
-            'SELECT * FROM encounters WHERE encounter_id = ?',
-            [encounter_id]
+            'SELECT * FROM encounters WHERE id = ?',
+            [encounterId]
         );
 
         if (existingEncounter.length === 0) {
@@ -506,20 +497,11 @@ const deleteNewEncounter = async (req, res) => {
             });
         }
 
-        // Check permission (following patient controller pattern)
-        if (roleid !== 1 && existingEncounter[0].provider_id !== user_id) { // Not admin and not owner
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to delete this encounter'
-            });
-        }
-
-        // Soft delete or hard delete based on business rules
-        // For now, we'll do hard delete
-        await connection.query('DELETE FROM encounters WHERE encounter_id = ?', [encounter_id]);
+        // Hard delete
+        await connection.query('DELETE FROM encounters WHERE id = ?', [encounterId]);
 
         // Log audit
-        await logAudit(req, 'DELETE', 'ENCOUNTER', encounter_id,
+        await logAudit(req, 'DELETE', 'ENCOUNTER', encounterId,
             `Encounter deleted for patient ${existingEncounter[0].patient_id}`);
 
         res.status(200).json({
@@ -537,29 +519,25 @@ const deleteNewEncounter = async (req, res) => {
     }
 };
 
-// Complete encounter (change status to completed)
+// Complete encounter - Updated for new schema
 const completeEncounter = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const values = { ...req.params, ...req.query };
-        
-        // Validate encounter ID
-        const { error, value } = encounterValidationSchemas.encounterId.validate(values);
-        if (error) {
+
+        // Get encounter ID
+        const encounterId = values.id || values.encounter_id;
+        if (!encounterId) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid encounter ID',
-                details: error.details.map(detail => detail.message)
+                message: 'Encounter ID is required'
             });
         }
 
-        const { encounter_id } = value;
-        const { user_id, roleid } = req.user;
-
-        // Check if encounter exists and user has permission
+        // Check if encounter exists
         const [existingEncounter] = await connection.query(
-            'SELECT * FROM encounters WHERE encounter_id = ?',
-            [encounter_id]
+            'SELECT * FROM encounters WHERE id = ?',
+            [encounterId]
         );
 
         if (existingEncounter.length === 0) {
@@ -569,22 +547,14 @@ const completeEncounter = async (req, res) => {
             });
         }
 
-        // Check permission (following patient controller pattern)
-        if (roleid !== 1 && existingEncounter[0].provider_id !== user_id) { // Not admin and not owner
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to complete this encounter'
-            });
-        }
-
-        // Update status to completed
+        // Update completed_at timestamp
         await connection.query(
-            'UPDATE encounters SET status = ?, completed_at = NOW(), updated_at = NOW() WHERE encounter_id = ?',
-            ['completed', encounter_id]
+            'UPDATE encounters SET completed_at = NOW() WHERE id = ?',
+            [encounterId]
         );
 
         // Log audit
-        await logAudit(req, 'UPDATE', 'ENCOUNTER', encounter_id,
+        await logAudit(req, 'UPDATE', 'ENCOUNTER', encounterId,
             `Encounter completed for patient ${existingEncounter[0].patient_id}`);
 
         res.status(200).json({
@@ -602,37 +572,25 @@ const completeEncounter = async (req, res) => {
     }
 };
 
-// Get encounter statistics
+// Get encounter statistics - Updated for new schema
 const getEncounterStats = async (req, res) => {
     try {
-        // Following patient controller pattern for role-based access
-        const { user_id, roleid } = req.user;
-        
-        let whereClause = '';
-        let queryParams = [];
-
-        // Role-based filtering (following patient controller pattern)
-        if (roleid !== 1) { // Not admin
-            whereClause = 'WHERE provider_id = ?';
-            queryParams.push(user_id);
-        }
-
         const statsQuery = `
-      SELECT 
-        COUNT(*) as total_encounters,
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_encounters,
-        COUNT(CASE WHEN status = 'scheduled' THEN 1 END) as scheduled_encounters,
-        COUNT(CASE WHEN status = 'in-progress' THEN 1 END) as in_progress_encounters,
-        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_encounters,
-        COUNT(CASE WHEN DATE(encounter_date) = CURDATE() THEN 1 END) as today_encounters,
-        COUNT(CASE WHEN WEEK(encounter_date) = WEEK(CURDATE()) AND YEAR(encounter_date) = YEAR(CURDATE()) THEN 1 END) as this_week_encounters,
-        COUNT(CASE WHEN MONTH(encounter_date) = MONTH(CURDATE()) AND YEAR(encounter_date) = YEAR(CURDATE()) THEN 1 END) as this_month_encounters,
-        AVG(duration_minutes) as avg_duration
-      FROM encounters 
-      ${whereClause}
-    `;
+            SELECT 
+                COUNT(*) as total_encounters,
+                COUNT(CASE WHEN completed_at IS NOT NULL THEN 1 END) as completed_encounters,
+                COUNT(CASE WHEN completed_at IS NULL THEN 1 END) as pending_encounters,
+                COUNT(CASE WHEN type = 'acute' THEN 1 END) as acute_encounters,
+                COUNT(CASE WHEN type = 'chronic' THEN 1 END) as chronic_encounters,
+                COUNT(CASE WHEN type = 'wellness' THEN 1 END) as wellness_encounters,
+                COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN 1 END) as today_encounters,
+                COUNT(CASE WHEN WEEK(created_at) = WEEK(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN 1 END) as this_week_encounters,
+                COUNT(CASE WHEN MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN 1 END) as this_month_encounters,
+                AVG(duration_minutes) as avg_duration
+            FROM encounters
+        `;
 
-        const [stats] = await connection.query(statsQuery, queryParams);
+        const [stats] = await connection.query(statsQuery);
 
         res.status(200).json({
             success: true,
@@ -649,68 +607,52 @@ const getEncounterStats = async (req, res) => {
     }
 };
 
-module.exports = {
-    createNewEncounter,
-    getNewEncounters,
-    getNewEncounterById,
-    updateNewEncounter,
-    deleteNewEncounter,
-    completeEncounter,
-    getEncounterStats,
-    encounterValidationSchemas
-};
-// Additional helper function following patient controller pattern
+// Additional helper function - Updated for new schema
 const getEncountersByPatientId = async (req, res) => {
     try {
         // Extract values using patient controller pattern
         const values = { ...req.params, ...req.query };
-        const { user_id, roleid } = req.user;
-        
-        // Role-based patient ID determination (following patient controller pattern)
-        let patientId;
-        if (roleid === 6) { // Provider
-            patientId = values.patientId;
-            if (!patientId) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: 'patientId is required for provider' 
-                });
-            }
-        } else if (roleid === 7) { // Patient
-            patientId = user_id;
-        } else {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'Unauthorized role' 
+
+        const patientId = values.patientId || values.patient_id;
+        if (!patientId) {
+            return res.status(400).json({
+                success: false,
+                message: 'patientId is required'
             });
         }
 
         const query = `
             SELECT e.*, 
-                   -- Patient Information (following patient controller pattern)
                    up.firstname as patient_first_name, 
                    up.lastname as patient_last_name, 
                    up.middlename as patient_middle_name,
                    up.dob as patient_date_of_birth, 
                    up.phone as patient_phone, 
                    up.work_email as patient_email,
-                   
-                   -- Provider Information
-                   CONCAT(up2.firstname," ",up2.lastname) as provider_name,
-                   up2.phone as provider_phone,
-                   up2.work_email as provider_email
-                   
+                   up.gender as patient_gender
             FROM encounters e
             LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
-            LEFT JOIN user_profiles up2 ON up2.fk_userid = e.provider_id
             WHERE e.patient_id = ?
-            ORDER BY e.encounter_date DESC, e.created_at DESC
+            ORDER BY e.created_at DESC
         `;
 
         const [encounters] = await connection.query(query, [patientId]);
 
         // Format encounters
-        const formattedEncounters = encounters.map(formatEncounterFromDB);
+        const formattedEncounters = encounters.map(encounter => {
+            const formatted = formatEncounterFromDB(encounter);
+
+            // Add patient details from joined data
+            if (formatted && formatted.patient) {
+                formatted.patient.name = `${encounter.patient_first_name || ''} ${encounter.patient_last_name || ''}`.trim();
+                formatted.patient.gender = encounter.patient_gender;
+                formatted.patient.phone = encounter.patient_phone;
+                formatted.patient.email = encounter.patient_email;
+                formatted.patient.dob = encounter.patient_date_of_birth;
+            }
+
+            return formatted;
+        });
 
         res.status(200).json({
             success: true,
@@ -728,12 +670,11 @@ const getEncountersByPatientId = async (req, res) => {
     }
 };
 
-// Search encounters function following patient controller pattern
+// Search encounters function - Updated for new schema
 const searchEncounters = async (req, res) => {
     try {
-        const { user_id, roleid } = req.user;
         const { searchterm } = req.query;
-        
+
         if (!searchterm) {
             return res.status(400).json({
                 success: false,
@@ -741,28 +682,23 @@ const searchEncounters = async (req, res) => {
             });
         }
 
-        let whereClause = `WHERE (up.firstname LIKE '%${searchterm}%' 
+        const whereClause = `WHERE (up.firstname LIKE '%${searchterm}%' 
                           OR up.lastname LIKE '%${searchterm}%' 
                           OR up.middlename LIKE '%${searchterm}%'
-                          OR e.reason_for_visit LIKE '%${searchterm}%'
-                          OR e.subjective LIKE '%${searchterm}%'
-                          OR e.objective LIKE '%${searchterm}%')`;
-        
-        // Role-based filtering
-        if (roleid !== 1) { // Not admin
-            whereClause += ` AND e.provider_id = ${user_id}`;
-        }
+                          OR e.type LIKE '%${searchterm}%'
+                          OR JSON_EXTRACT(e.soap_notes, '$.subjective') LIKE '%${searchterm}%'
+                          OR JSON_EXTRACT(e.soap_notes, '$.objective') LIKE '%${searchterm}%'
+                          OR JSON_EXTRACT(e.soap_notes, '$.assessment') LIKE '%${searchterm}%'
+                          OR JSON_EXTRACT(e.soap_notes, '$.plan') LIKE '%${searchterm}%')`;
 
         const query = `
-            SELECT e.encounter_id, e.encounter_date, e.type, e.status, e.reason_for_visit,
+            SELECT e.id, e.created_at, e.type, e.completed_at, e.duration_minutes,
                    CONCAT(up.firstname," ",up.lastname) as patient_name,
-                   up.fk_userid as patient_id,
-                   CONCAT(up2.firstname," ",up2.lastname) as provider_name
+                   up.fk_userid as patient_id
             FROM encounters e
             LEFT JOIN user_profiles up ON e.patient_id = up.fk_userid
-            LEFT JOIN user_profiles up2 ON up2.fk_userid = e.provider_id
             ${whereClause}
-            ORDER BY e.encounter_date DESC
+            ORDER BY e.created_at DESC
             LIMIT 50
         `;
 
@@ -792,7 +728,7 @@ module.exports = {
     deleteNewEncounter,
     completeEncounter,
     getEncounterStats,
-    getEncountersByPatientId,  // New function following patient controller pattern
-    searchEncounters,          // New function following patient controller pattern
+    getEncountersByPatientId,
+    searchEncounters,
     encounterValidationSchemas
 };

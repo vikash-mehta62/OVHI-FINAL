@@ -34,8 +34,8 @@ router.post('/template/provider/update', updateProviderEncounterTemplate);
 
 // ===== NEW ROUTES (Enhanced with Joi Validation) =====
 // Encounter management routes
-router.post('/ehr/encounters', createNewEncounter);                   // Create new encounter
-router.get('/ehr/encounters', getNewEncounters);                      // Get encounters with filtering & pagination
+router.post('/ehr/create-new-encounter', createNewEncounter);                   // Create new encounter
+router.get('/ehr/get-all-encounters', getNewEncounters);                      // Get encounters with filtering & pagination
 router.get('/ehr/encounters/stats', getEncounterStats);               // Get encounter statistics
 router.get('/ehr/encounters/search', searchEncounters);               // Search encounters
 router.get('/ehr/encounters/patient/:patientId', getEncountersByPatientId); // Get encounters by patient ID
