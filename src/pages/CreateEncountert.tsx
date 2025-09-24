@@ -5,16 +5,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { SmartEncounterWorkflow } from "@/components/encounter/SmartEncounterWorkflow";
-
+import {creteNewEncounterAPI} from "@/services/operations/encounter"
+import { useSelector } from "react-redux";
+import { RootState } from "@/redux/store";
 interface CreateEncounterProps {
   onSuccess?: () => void;
 }
 
 const CreateEncounter: React.FC<CreateEncounterProps> = ({ onSuccess }) => {
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
+  const { user, token } = useSelector((state: RootState) => state.auth);
 
-  const handleEncounterComplete = (encounterData: any) => {
+  const handleEncounterComplete = async(encounterData: any) => {
     console.log("Encounter completed:", encounterData);
+    await creteNewEncounterAPI(encounterData, token)
     setIsWorkflowOpen(false);
     onSuccess?.();
   };

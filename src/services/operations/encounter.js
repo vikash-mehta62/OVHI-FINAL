@@ -15,7 +15,8 @@ const {
   DELETE_ENCOUNTER_API,
 
   CREATE_CLAIM_FROM_ENCOUNTER_API,
-  SUBMIT_CLAIM_API
+  SUBMIT_CLAIM_API,
+  CRETE_NEW_ENCOUNTER
 } = encounter
 
 export const createTemplateApi = async (formData, token) => {
@@ -328,6 +329,31 @@ export const submitClaimApi = async (claimId, token) => {
     toast.dismiss(loadingToastId);
     toast.error(error?.response?.data?.message || "Failed to submit claim.");
     console.error("submit claim ERROR:", error);
+    return null;
+  }
+};
+
+
+export const creteNewEncounterAPI = async (formData, token) => {
+  const loadingToastId = toast.loading("Creating Task...");
+  try {
+    const response = await apiConnector("POST", `${CRETE_NEW_ENCOUNTER}`, formData,
+      {
+        Authorization: `Bearer ${token}`,
+      });
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+
+    toast.dismiss(loadingToastId);
+    toast.success(response?.data?.message);
+    return response.data;
+
+  } catch (error) {
+    toast.dismiss(loadingToastId);
+    toast.error(error?.response?.data?.message || "Failed to create new encounter.");
+    console.error("create encounter ERROR:", error);
     return null;
   }
 };

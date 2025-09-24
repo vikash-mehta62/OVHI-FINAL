@@ -56,8 +56,8 @@ const PatientMonitoring: React.FC = () => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const navigate = useNavigate();
   const { token } = useSelector((state: RootState) => state.auth);
+  const navigate = useNavigate();
 
   const fetchPatients = async (page = 1, searchQuery = "") => {
     try {

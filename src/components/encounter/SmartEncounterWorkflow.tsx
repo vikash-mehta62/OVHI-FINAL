@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
+import { getAllPatientsAPI } from "@/services/operations/patient";
+
 import {
   Clock,
   User,
@@ -25,14 +26,37 @@ import { toast } from "sonner";
 import StreamlinedSoapInterface from './StreamlinedSoapInterface';
 import { ENCOUNTER_TEMPLATES, getTemplatesByType, type EncounterTemplate } from './EncounterTemplates';
 import { ENCOUNTER_TYPE_CONFIGS } from './EncounterTypeConfig';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 
+// Helper function to calculate age from birth date
+const calculateAge = (birthDate: string): number => {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// Updated Patient interface to match the new API response structure
 interface Patient {
-  id: string;
-  name: string;
-  age: number;
+  patientId: number;
+  firstname: string;
+  middlename: string;
+  lastname: string;
+  birthDate: string;
   gender: string;
-  lastVisit?: string;
-  conditions?: string[];
+  lastVisit: string;
+  diagnosis: {
+    icd10: string;
+    diagnosis: string;
+    status: string;
+    id: number;
+    type: string;
+  }[];
   allergies?: string[];
   medications?: string[];
 }
@@ -88,37 +112,81 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
   const [soapData, setSoapData] = useState<any>(null);
   const [encounterTypeSearch, setEncounterTypeSearch] = useState('');
   const [currentProviderSettings, setCurrentProviderSettings] = useState<ProviderSettings>(defaultProviderSettings);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  // Mock patient data
+  // Mock patient data for a fallback in case the API call fails
   const mockPatients: Patient[] = [
     {
-      id: '1',
-      name: 'John Doe',
-      age: 45,
+      patientId: 1,
+      firstname: 'John',
+      lastname: 'Doe',
+      middlename: '',
+      birthDate: '1978-01-18T18:30:00.000Z',
       gender: 'Male',
-      lastVisit: '2024-01-15',
-      conditions: ['Hypertension', 'Type 2 Diabetes'],
+      lastVisit: '2025-05-21T18:30:00.000Z',
+      diagnosis: [{
+        icd10: 'I10',
+        diagnosis: 'Essential (primary) hypertension',
+        status: 'Active',
+        id: 54,
+        type: 'Co-morbidity'
+      }],
       allergies: ['Penicillin'],
       medications: ['Metformin', 'Lisinopril']
     },
     {
-      id: '2',
-      name: 'Jane Smith',
-      age: 32,
+      patientId: 2,
+      firstname: 'Jane',
+      lastname: 'Smith',
+      middlename: '',
+      birthDate: '1992-07-21T18:30:00.000Z',
       gender: 'Female',
-      lastVisit: '2024-01-20',
-      conditions: ['Asthma'],
+      lastVisit: '2025-07-20T18:30:00.000Z',
+      diagnosis: [{
+        icd10: 'J45.909',
+        diagnosis: 'Unspecified asthma, uncomplicated',
+        status: 'Active',
+        id: 55,
+        type: 'Primary'
+      }],
       allergies: ['Shellfish'],
       medications: ['Albuterol']
     }
   ];
 
-  // Auto-select first patient for testing
-  useEffect(() => {
-    if (!selectedPatient && mockPatients.length > 0) {
-      setSelectedPatient(mockPatients[0]);
+  const fetchPatients = async (page = 1, searchQuery = "") => {
+    try {
+      setLoading(true);
+      const res = await getAllPatientsAPI(page, token, searchQuery);
+      if (res?.data) {
+        const limitedPatients = res.data.slice(0, 10);
+        setPatients(limitedPatients);
+        // Automatically select the first patient if one is not already selected
+        if (limitedPatients.length > 0 && !selectedPatient) {
+          setSelectedPatient(limitedPatients[0]);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch patients:", error);
+      toast.error("Failed to load patients. Using mock data as a fallback.");
+      // Fallback to mock data on error
+      setPatients(mockPatients);
+      if (mockPatients.length > 0 && !selectedPatient) {
+        setSelectedPatient(mockPatients[0]);
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [selectedPatient]);
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchPatients(1, search);
+    }
+  }, [token, search]);
 
   // Specialty-based filtering logic
   const getFilteredEncounterTypes = useCallback(() => {
@@ -424,14 +492,14 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
                   {selectedPatient ? (
                     <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
                       <div>
-                        <h3 className="font-semibold">{selectedPatient.name}</h3>
+                        <h3 className="font-semibold">{selectedPatient.firstname} {selectedPatient.lastname}</h3>
                         <p className="text-sm text-gray-600">
-                          {selectedPatient.age}y • {selectedPatient.gender} • Last visit: {selectedPatient.lastVisit}
+                          {calculateAge(selectedPatient.birthDate)}y • {selectedPatient.gender} • Last visit: {new Date(selectedPatient.lastVisit).toLocaleDateString()}
                         </p>
                         <div className="flex gap-2 mt-2">
-                          {selectedPatient.conditions?.map((condition) => (
-                            <Badge key={condition} variant="secondary" className="text-xs">
-                              {condition}
+                          {selectedPatient.diagnosis.length > 0 && selectedPatient.diagnosis.map((d) => (
+                            <Badge key={d.id} variant="secondary" className="text-xs">
+                              {d.diagnosis}
                             </Badge>
                           ))}
                         </div>
@@ -442,16 +510,16 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
                     </div>
                   ) : (
                     <Select onValueChange={(value) => {
-                      const patient = mockPatients.find(p => p.id === value);
+                      const patient = patients.find(p => p.patientId.toString() === value);
                       setSelectedPatient(patient || null);
                     }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a patient" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mockPatients.map((patient) => (
-                          <SelectItem key={patient.id} value={patient.id}>
-                            {patient.name} - {patient.age}y {patient.gender}
+                        {patients.map((patient) => (
+                          <SelectItem key={patient.patientId} value={patient.patientId.toString()}>
+                            {patient.firstname} {patient.lastname} - {calculateAge(patient.birthDate)}y {patient.gender}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -529,8 +597,8 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
                                         </div>
                                         <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                           type.complexity === 'high' ? 'bg-red-100 text-red-700' :
-                                          type.complexity === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-green-100 text-green-700'
+                                            type.complexity === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                                              'bg-green-100 text-green-700'
                                         }`}>
                                           {type.complexity}
                                         </div>
@@ -594,7 +662,7 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
                                 </Badge>
                                 <Badge variant={
                                   template.complexity === 'high' ? 'destructive' :
-                                  template.complexity === 'moderate' ? 'default' : 'secondary'
+                                    template.complexity === 'moderate' ? 'default' : 'secondary'
                                 } className="text-xs">
                                   {template.complexity}
                                 </Badge>
@@ -651,15 +719,15 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
               <StreamlinedSoapInterface
                 appointment={appointment}
                 patientContext={{
-                  name: selectedPatient?.name || '',
-                  age: selectedPatient?.age || 0,
+                  name: `${selectedPatient?.firstname} ${selectedPatient?.lastname}` || '',
+                  age: selectedPatient ? calculateAge(selectedPatient.birthDate) : 0,
                   gender: selectedPatient?.gender || '',
                   chiefComplaint: 'Follow-up visit',
                   vitals: {},
                   allergies: selectedPatient?.allergies || [],
                   medications: selectedPatient?.medications || [],
                   medicalHistory: [],
-                  conditions: selectedPatient?.conditions || []
+                  conditions: selectedPatient?.diagnosis.map(d => d.diagnosis) || []
                 }}
                 onSave={handleSoapSave}
                 onComplete={handleEncounterComplete}
@@ -682,7 +750,7 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <Label className="font-medium">Patient:</Label>
-                        <p>{selectedPatient?.name}</p>
+                        <p>{selectedPatient?.firstname} {selectedPatient?.lastname}</p>
                       </div>
                       <div>
                         <Label className="font-medium">Encounter Type:</Label>
@@ -715,5 +783,3 @@ export const SmartEncounterWorkflow: React.FC<EncounterWorkflowProps> = ({
     </Dialog>
   );
 };
-
-export default SmartEncounterWorkflow;
