@@ -63,11 +63,9 @@ const EncounterTable = () => {
       if (response?.success) {
         setEncounters(response.data || []);
       } else {
-        toast.error("Failed to fetch encounters");
       }
     } catch (error) {
       console.error("Error fetching encounters:", error);
-      toast.error("Failed to fetch encounters");
     } finally {
       setIsLoading(false);
     }
@@ -123,110 +121,11 @@ const EncounterTable = () => {
 
   return (
     <div className="w-full p-6 space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-2xl font-bold">
-              Encounter Management
-            </CardTitle>
-            <div className="flex gap-2">
-              <Button
-                onClick={fetchEncounters}
-                variant="outline"
-                size="sm"
-                disabled={isLoading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </Button>
+      <div>
+             
               <CreateEncounter onSuccess={handleOperationSuccess} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-              Loading encounters...
-            </div>
-          ) : encounters.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No encounters found. Create your first encounter to get started.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Encounter Type</TableHead>
-                    <TableHead>Reason for Visit</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Diagnosis Codes</TableHead>
-                    <TableHead>Procedure Codes</TableHead>
-                    <TableHead>follow Up plan</TableHead>
-                    <TableHead>Created Date</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {encounters.map((encounter) => (
-                    <TableRow key={encounter._id}>
-                      <TableCell className="font-medium">
-                        {encounter?.patient_id}
-                      </TableCell>
-                      <TableCell>{encounter?.encounter_type}</TableCell>
 
-                      <TableCell className="max-w-xs truncate">
-                        {encounter.reason_for_visit}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(encounter.status)}>
-                          {encounter.status.charAt(0).toUpperCase() +
-                            encounter.status.slice(1)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {encounter?.diagnosis_codes || "N/A"}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {encounter.procedure_codes || "N/A"}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {encounter.follow_up_plan || "N/A"}
-                      </TableCell>
-                      <TableCell>{formatDate(encounter.created)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => handleEdit(encounter)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            onClick={() =>
-                              handleDelete(encounter?.encounter_id)
-                            }
-                            variant="outline"
-                            size="sm"
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Edit Dialog */}
        {selectedEncounter && (

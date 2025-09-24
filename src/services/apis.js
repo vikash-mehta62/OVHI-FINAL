@@ -181,6 +181,7 @@ export const encounter = {
   CREATE_CLAIM_FROM_ENCOUNTER_API: BASE_URL + "/encounters/create-claim",
   SUBMIT_CLAIM_API: BASE_URL + "/encounters/submit-claim",
   CRETE_NEW_ENCOUNTER : BASE_URL + "/encounters/ehr/create-new-encounter",
+  GET_NEW_ENCOUNTER : BASE_URL + "/encounters/ehr/get-all-encounters",
 }
 export const device = {
 

@@ -16,7 +16,8 @@ const {
 
   CREATE_CLAIM_FROM_ENCOUNTER_API,
   SUBMIT_CLAIM_API,
-  CRETE_NEW_ENCOUNTER
+  CRETE_NEW_ENCOUNTER,
+  GET_NEW_ENCOUNTER
 } = encounter
 
 export const createTemplateApi = async (formData, token) => {
@@ -355,5 +356,29 @@ export const creteNewEncounterAPI = async (formData, token) => {
     toast.error(error?.response?.data?.message || "Failed to create new encounter.");
     console.error("create encounter ERROR:", error);
     return null;
+  }
+};
+
+
+export const getAllNewEncounterAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${GET_NEW_ENCOUNTER}`, null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error("error in get template api ERROR:", error);
+    toast.error(error || "Something went wrong.")
+
+    return [];
   }
 };
