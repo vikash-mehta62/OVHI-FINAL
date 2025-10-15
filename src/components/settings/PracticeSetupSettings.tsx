@@ -336,6 +336,11 @@ fetchPractish();
     
   };
 
+  useEffect(()=>{
+
+    console.log(practiceData);
+  },[practiceData])
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -515,32 +520,32 @@ fetchPractish();
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {DAYS_OF_WEEK.map((day) => (
+          {DAYS_OF_WEEK && DAYS_OF_WEEK?.map((day) => (
             <div key={day} className="flex items-center gap-4">
               <div className="w-20 capitalize font-medium">{day}</div>
               <Checkbox
-                checked={!practiceData.operatingHours[day as keyof typeof practiceData.operatingHours].closed}
+                checked={!practiceData?.operatingHours[day as keyof typeof practiceData.operatingHours]?.closed}
                 onCheckedChange={(checked) => handleOperatingHoursChange(day, 'closed', !checked)}
               />
               <Label className="text-sm">Open</Label>
-              {!practiceData.operatingHours[day as keyof typeof practiceData.operatingHours].closed && (
+              {!practiceData.operatingHours[day as keyof typeof practiceData.operatingHours]?.closed && (
                 <>
                   <Input
                     type="time"
-                    value={practiceData.operatingHours[day as keyof typeof practiceData.operatingHours].open}
+                    value={practiceData?.operatingHours[day as keyof typeof practiceData.operatingHours]?.open}
                     onChange={(e) => handleOperatingHoursChange(day, 'open', e.target.value)}
                     className="w-32"
                   />
                   <span>to</span>
                   <Input
                     type="time"
-                    value={practiceData.operatingHours[day as keyof typeof practiceData.operatingHours].close}
+                    value={practiceData.operatingHours[day as keyof typeof practiceData.operatingHours]?.close}
                     onChange={(e) => handleOperatingHoursChange(day, 'close', e.target.value)}
                     className="w-32"
                   />
                 </>
               )}
-              {practiceData.operatingHours[day as keyof typeof practiceData.operatingHours].closed && (
+              {practiceData.operatingHours[day as keyof typeof practiceData.operatingHours]?.closed && (
                 <span className="text-muted-foreground">Closed</span>
               )}
             </div>

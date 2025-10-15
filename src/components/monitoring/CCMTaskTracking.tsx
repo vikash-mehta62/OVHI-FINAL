@@ -188,6 +188,7 @@ const CCMTaskTracking: React.FC<CCMTaskTrackingProps> = ({
     try {
       setLoading(true);
       const res = await getSinglePatientAPI(id, token);
+      console.log(res, "single patient data");
       if (res) {
         setPatient(res);
       }

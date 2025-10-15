@@ -403,7 +403,7 @@ const getPatientDataById = async (req, res) => {
         lastVisit: profile.last_visit,
         emergencyContact: profile.emergency_contact,
         ethnicity: profile.ethnicity,
-        patientService: profile.service_type,
+        patientService: JSON.parse(profile.service_type || '[]'),
         allergies,
         insurance: insurances,
         currentMedications,

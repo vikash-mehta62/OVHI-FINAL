@@ -60,7 +60,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
   // Mock user data - replace with actual Redux selector
   const { user, token } = useSelector((state: RootState) => state.auth);
-
+console.log("User in header:", user);
   useEffect(() => {
     const updateStatus = () => {
       setIsConnected(ringCentralStore.isConnected);
@@ -280,8 +280,8 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
               >
                 <Avatar className="h-8 w-8 flex-shrink-0">
                   <AvatarFallback>
-                    {user.firstname[0]}
-                    {user.lastname[0]}
+                    {user?.firstname &&  user?.firstname[0] }
+                    {user?.lastname && user?.lastname[0] }
                   </AvatarFallback>
                 </Avatar>
               </Button>

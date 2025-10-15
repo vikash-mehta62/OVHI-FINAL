@@ -126,7 +126,8 @@ const updateProviderInformation = async (req, res) => {
   try {
     const { user_id } = req.user;
     const { npi, taxonomy, taxId, faxId,firstName,lastName } = req.body;
-
+console.log(req.body)
+console.log( req.user ,"USE")
     if (!user_id) {
       return res.status(400).json({success:false, message: 'Missing userId in request params.' });
     }

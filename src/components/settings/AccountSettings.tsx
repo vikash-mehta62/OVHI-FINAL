@@ -358,6 +358,7 @@ const AccountSettings: React.FC = () => {
     }
   };
 
+
   const fetchSinglePatient = async () => {
     if (!user?.id) return;
 
@@ -377,6 +378,7 @@ const AccountSettings: React.FC = () => {
 
   useEffect(() => {
     fetchSinglePatient();
+    console.log(token);
   }, [user]);
 
   const handlePatientChange = (field: string, value: string) => {
