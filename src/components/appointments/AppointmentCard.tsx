@@ -145,7 +145,8 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
     >
       <div className="flex items-center justify-between">
         <HoverCard>
-          <HoverCardTrigger>
+          <HoverCardTrigger>   
+            <span className='font-bold pb-2'>APN - {appointment.id}</span> {/* APN = Appointment ID */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer" >
               <div className="text-center sm:text-left sm:min-w-[70px] bg-primary/5 p-1.5 rounded-md">
                 <div className="text-xs text-muted-foreground">

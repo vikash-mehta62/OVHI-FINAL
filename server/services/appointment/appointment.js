@@ -91,10 +91,101 @@ const rawDateTime = date.replace("T", " ") + ":00"; // "2025-08-28 13:30:00"
   }
 };
 
+exports.rescheduleAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params; 
+    const {
+      patient,
+      date,            // raw ISO date: "2025-08-06T10:00:00"
+      duration,        // e.g., "30 minutes"
+      type,
+      status,
+      hasBilling,
+      providerId,
+      locationId,
+      template_id,
+      reason,
+    } = req.body;
 
+    if (!appointmentId || !providerId || !patient?.id || !date || !duration || !template_id) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
 
+    const durationMinutes = parseInt(duration);
+    if (isNaN(durationMinutes)) {
+      return res.status(400).json({ success: false, message: "Invalid duration format" });
+    }
 
+    // ✅ Use the raw date string, don't parse it
+    const startTime = date.replace("T", " ") + ":00"; // e.g., "2025-08-06 10:00:00"
 
+    // ✅ For end time calculation only (duration), use JS Date (optional)
+    const startDate = new Date(date);
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+    const endTime = endDate.toISOString().replace("T", " ").slice(0, 19); // "2025-08-06 10:30:00"
+
+    // Check for overlap using raw local time (startTime is assumed local)
+    const [existing] = await db.execute(
+      `
+      SELECT * FROM appointment 
+      WHERE provider_id = ?
+        AND id != ?  -- Exclude current appointment
+      AND (
+        (date < ? AND DATE_ADD(date, INTERVAL duration MINUTE) > ?)
+      )
+      `,
+      [providerId, appointmentId, endTime, startTime]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: "Time slot already booked for this provider",
+      });
+    }
+
+    const rawDateTime = date.replace("T", " ") + ":00"; // "2025-08-28 13:30:00"
+
+    // Update appointment with exact time from frontend
+    const updateQuery = `
+      UPDATE appointment SET
+        patient_id = ?, patient_name = ?, patient_phone = ?, patient_email = ?,
+        date = ?, duration = ?, type = ?, status = ?, has_billing = ?,
+        provider_id = ?, location_id = ?, reason = ?, template_id = ?
+      WHERE id = ?
+    `;
+
+    const values = [
+      patient.id,
+      patient.name,
+      patient.phone,
+      patient.email,
+      rawDateTime,               // Store exactly what frontend sent (formatted)
+      durationMinutes,
+      type,
+      status,
+      hasBilling || false,
+      providerId,
+      locationId,
+      reason,
+      template_id,
+      appointmentId
+    ];
+
+    const [result] = await db.execute(updateQuery, values);
+    
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+    await logAudit(req, 'UPDATE', 'APPOINTMENT', patient.id, 'Appointment rescheduled successfully');
+
+    return res.status(200).json({ success: true, message: "Appointment rescheduled successfully" });
+  } catch (err) {
+    console.error("Error rescheduling appointment:", err);
+    return res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
 
 exports.getAppointmentsByProviderId = async (req, res) => {
   try {

@@ -43,6 +43,7 @@ import { getAllPatientsAPI } from "@/services/operations/patient";
 import AddPatientDialog from "../patient/AddPatientDialog";
 import {
   createAppointment,
+  rescheduleAppointment,
   getAppointmentsByProviderId,
 } from "@/services/operations/appointment";
 import { convertISTToEST, formatDateForAPI, EST_TIMEZONE, IST_TIMEZONE } from "@/utils/timezoneUtils";
@@ -254,7 +255,11 @@ const AddAppointmentDialog: React.FC<AddAppointmentDialogProps> = ({
     "17:30",
   ];
 
+
+  console.log("Selected Patient:", prefilledData);
+
   const handleSubmit = async () => {
+    console.log("Submitting appointment...");
     const currentPatientName = selectedPatient
       ? selectedPatient.name
       : patientName;
@@ -301,7 +306,7 @@ const AddAppointmentDialog: React.FC<AddAppointmentDialogProps> = ({
       console.log("Formatted EST DateTime for API:", formattedESTDateTime);
 
       const newAppointment = {
-        id: `app-${Math.random().toString(36).substring(2, 9)}`,
+        id: prefilledData.isReschedule ? prefilledData.appointmentId : `app-${Math.random().toString(36).substring(2, 9)}`,
         patient: {
           id: currentPatientId,
           name: currentPatientName,
@@ -312,7 +317,7 @@ const AddAppointmentDialog: React.FC<AddAppointmentDialogProps> = ({
         date: formattedESTDateTime,
         duration,
         type,
-        status: prefilledData ? "rescheduled" : "scheduled",
+        status: prefilledData.isReschedule ? "rescheduled" : "scheduled",
         hasBilling: false,
         providerId: user.id,
         template_id: selectedTemplateId || null,
@@ -324,22 +329,42 @@ const AddAppointmentDialog: React.FC<AddAppointmentDialogProps> = ({
 
       console.log("Final appointment object:", newAppointment);
 
-      if(prefilledData){
-console.log("prefilledData",newAppointment)
-return
-      }else{
-
-        await createAppointment(newAppointment, token);
+      if(prefilledData.isReschedule){
+        console.log("Rescheduling appointment, ID:", prefilledData.appointmentId);
       }
+
+      // Inside handleSubmit function, replace the API call section:
+      if(prefilledData.isReschedule && prefilledData.appointmentId){
+        // Use rescheduleAppointment API for updates
+        const response = await rescheduleAppointment(prefilledData.appointmentId, newAppointment, token);
+        console.log("Reschedule appointment API response:", response);
+        if (!response.success) {
+          throw new Error(response.message || "API error");
+        }
+      } else {
+        // Use createAppointment API for new appointments
+        const response = await createAppointment(newAppointment, token);
+        console.log("Create appointment API response:", response);
+        if (!response.success) {
+          throw new Error(response.message || "API error");
+        }
+      }
+
 
 
       // Show success message with both IST and EST times for clarity
       const estTimeString = formatInTimeZone(estDateTime, EST_TIMEZONE, 'HH:mm');
       const istTimeString = appointmentTime;
 
-      toast.success("Appointment created successfully", {
-        description: `Appointment scheduled for ${currentPatientName} on ${appointmentDate.toLocaleDateString()} at ${istTimeString} IST (${estTimeString} EST)`,
-      });
+      // toast.success("Appointment created successfully", {
+      //   description: `Appointment scheduled for ${currentPatientName} on ${appointmentDate.toLocaleDateString()} at ${istTimeString} IST (${estTimeString} EST)`,
+      // });
+      toast.success(
+        prefilledData.isReschedule ? "Appointment rescheduled successfully" : "Appointment created successfully", 
+        {
+          description: `Appointment ${prefilledData.isReschedule ? 'rescheduled' : 'scheduled'} for ${currentPatientName} on ${appointmentDate.toLocaleDateString()} at ${istTimeString} IST (${estTimeString} EST)`,
+        }
+      );
 
       // Reset form
       setSelectedPatient(null);
@@ -358,8 +383,13 @@ return
       onOpenChange?.(false);
       onDataChange?.();
     } catch (error) {
-      console.error("Error creating appointment:", error);
-      toast.error("Failed to create appointment. Please try again.");
+      toast.error(
+        prefilledData.isReschedule ? "Failed to reschedule appointment. Please try again." : "Faileds to create appointment. Please try again."
+      )
+      console.error(
+        prefilledData.isReschedule ? "Reschedule appointment error:" : "Create appointment error:", error
+      );
+      // toast.error("Failed to create appointment. Please try again.");
     }
   };
 

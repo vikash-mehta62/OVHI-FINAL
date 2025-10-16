@@ -30,6 +30,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AddMedicalDiagnoses from '../patient/AddMedicalDiagnoses';
 
 interface DiagnosisItem {
   id: string;
@@ -187,6 +188,7 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isDiagnosisOpen, setIsDiagnosisOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [customDiagnosis, setCustomDiagnosis] = useState({ code: '', description: '' });
@@ -569,7 +571,9 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
             <TabsTrigger value="selected">Selected ({selectedDiagnoses.length})</TabsTrigger>
             <TabsTrigger value="history">Patient History</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="custom">Add Custom</TabsTrigger>
+            {/* <TabsTrigger value="custom">Add Custom</TabsTrigger> */}
+            <TabsTrigger value="Diagnosis" onClick={()=>setIsDiagnosisOpen(!isDiagnosisOpen)} >Add Custom</TabsTrigger>
+
           </TabsList>
 
           <TabsContent value="selected" className="space-y-4">
@@ -725,8 +729,8 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
             </div>
           </TabsContent>
 
-          <TabsContent value="custom" className="space-y-4">
-            <Card className="p-4">
+          <TabsContent value="Diagnosis" className="space-y-4">
+            {/* <Card className="p-4">
               <h4 className="font-medium mb-4">Add Custom Diagnosis</h4>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -766,7 +770,8 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
                   Add Custom Diagnosis
                 </Button>
               </div>
-            </Card>
+            </Card> */}
+            <AddMedicalDiagnoses fetchPatient={()=> console.log("upload")} onOpenChange={setIsDiagnosisOpen} open={isDiagnosisOpen} />
           </TabsContent>
         </Tabs>
       </CardContent>

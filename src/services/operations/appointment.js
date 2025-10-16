@@ -15,13 +15,13 @@ export async function createAppointment(formData, token) {
     const response = await apiConnector("POST", APPOINTMENT_API.CREATE, formData, {
       Authorization: `Bearer ${token}`,
     });
-
+    console.log("Create appointment response:", response);
     closeAlert();
 
     if (!response.data.success) throw new Error(response.data.message);
 
-    showSuccess("Success", "Appointment created successfully!");
-    return response.data.data;
+    showSuccess("Success", "Appointment created successfully!",response);
+    return response.data;
   } catch (error) {
     closeAlert();
     showError(
@@ -32,6 +32,34 @@ export async function createAppointment(formData, token) {
   }
 }
 
+//resechdule appointment
+export async function rescheduleAppointment(appointmentId, formData, token) {
+  showLoadingToast("Rescheduling appointment...");
+  try {
+    const response = await apiConnector(
+      "PUT", 
+      APPOINTMENT_API.RESCHEDULE(appointmentId),
+      formData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+    console.log("Reschedule appointment response:", response);
+    closeAlert();
+
+    if (!response.data.success) throw new Error(response.data.message);
+
+    showSuccess("Success", "Appointment rescheduled successfully!",response);
+    return response.data;
+  } catch (error) {
+    closeAlert();
+    showError(
+      "Error",
+      error?.response?.data?.message || "Failed to reschedule appointment."
+    );
+    throw error; // optional if you want to catch in frontend
+  }
+}
 
 
 export async function getAppointmentsByProviderId(providerId, token, date = "") {

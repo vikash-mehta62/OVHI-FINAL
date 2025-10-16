@@ -194,12 +194,20 @@ const fetchPractish = async () => {
   try {
     setLoading(true);
     const response = await getPractishSettingApi(token, user?.id);
-    const data = response?.data;
-    console.log(data);
+    let data = response?.data;
+
+    // Parse JSON strings in the response
+    if (data) {
+      data = {
+        ...data,
+        operatingHours: typeof data.operatingHours === 'string' ? JSON.parse(data.operatingHours) : data.operatingHours,
+        servicesOffered: typeof data.servicesOffered === 'string' ? JSON.parse(data.servicesOffered) : data.servicesOffered,
+        insuranceNetworks: typeof data.insuranceNetworks === 'string' ? JSON.parse(data.insuranceNetworks) : data.insuranceNetworks
+      };
+    }
 
     // === INSURANCE HANDLING ===
-    const selectedInsurances = data.insuranceNetworks || [];
-
+    const selectedInsurances = data?.insuranceNetworks || [];
     const defaultInsurances = selectedInsurances.filter((ins) =>
       INSURANCE_NETWORKS.includes(ins)
     );
@@ -216,8 +224,7 @@ const fetchPractish = async () => {
     setInsuranceNetworks(mergedInsurances as string[]);
 
     // === SERVICES HANDLING ===
-    const selectedServices = data.servicesOffered || [];
-
+    const selectedServices = data?.servicesOffered || [];
     const defaultServices = selectedServices.filter((srv) =>
       SERVICES.includes(srv)
     );
@@ -257,17 +264,12 @@ useEffect(() => {
   fetchPractish();
 }, []);
 
-
   const handleInputChange = (field: string, value: string) => {
     setPracticeData(prev => ({
       ...prev,
       [field]: value
     }));
   };
-
-  useEffect(() =>{
-fetchPractish();
-  },[])
 
   const handleOperatingHoursChange = (day: string, field: string, value: string | boolean) => {
     setPracticeData(prev => ({
@@ -365,7 +367,7 @@ fetchPractish();
               <Label htmlFor="practiceName">Practice Name *</Label>
               <Input
                 id="practiceName"
-                value={practiceData.practiceName}
+                value={practiceData?.practiceName}
                 onChange={(e) => handleInputChange('practiceName', e.target.value)}
                 placeholder="Enter practice name"
               />

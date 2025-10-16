@@ -279,4 +279,20 @@
     
   }
 }
+
+body[data-scroll-locked="1"] * {
+  pointer-events: auto !important;
+}
+
+/* Keep background blocked, but re-enable dialog interactivity */
+[data-state="open"][data-component-name="DialogOverlay"] {
+  pointer-events: none !important;
+}
+
+[data-component-name="DialogContent"],
+[data-component-name="PopoverContent"],
+[data-component-name="SelectContent"] {
+  pointer-events: auto !important;
+  z-index: 999999 !important; /* ensure above overlay */
+}
   

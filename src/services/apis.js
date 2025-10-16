@@ -135,10 +135,10 @@ export const LOCATION_API = {
 
 export const APPOINTMENT_API = {
   CREATE: BASE_URL + "/appointment/create",
+  RESCHEDULE: (appointmentId) => BASE_URL + `/appointment/reschedule/${appointmentId}`,
   GET_BY_PROVIDER: (providerId) => BASE_URL + `/appointment/provider/${providerId}`,
   UPCOMING_APPOINTMENT: BASE_URL + `/appointment/upcoming`,
   SINGLE_PATINET_APPOINTMENT: BASE_URL + `/appointment/patient`,
-
 };
 
 
