@@ -8,7 +8,9 @@ const {
       getPatientMonitoringData,
       getPatientByPhoneNumber,
       getPatientTaskDetails, addPatientTask, getAllPatientTasks, editPatientTask, getPcmByPatientId, getCcmByPatientId, addPatientDiagnosis, getPatientDiagnosis, addPatientNotes, getPatientNotes, getUpcomingAndOverdueTasks, addPatientAllergy, addPatientInsurance, addPatientMedication, getPatientTimings, 
-      addPatientVitals, fetchDataByPatientId, fetchDataByPatientIdForccm,searchPatient,getAllTasks,getAllBeds,unassignBedFromPatient,assignBedToPatient,getAllConsents,getMedicalHistoryByPatientId} = require("./patientCtrl");
+      addPatientVitals, fetchDataByPatientId, fetchDataByPatientIdForccm,searchPatient,getAllTasks,getAllBeds,unassignBedFromPatient,assignBedToPatient,getAllConsents,getMedicalHistoryByPatientId,
+      removePatientDiagnosis,
+      updatePatientDiagnosis} = require("./patientCtrl");
 
 const { sendConsentEmail } = require("./patientCtrl2");
 
@@ -28,6 +30,8 @@ router.get("/getUpcomingAndOverdueTasks", getUpcomingAndOverdueTasks);
 router.get('/pcm-reports/:patientId', getPcmByPatientId);
 router.get('/ccm-reports/:patientId', getCcmByPatientId);
 router.post("/addPatientDiagnosis", addPatientDiagnosis);
+router.delete("/removePatientDiagnosis/:diagnosisId", removePatientDiagnosis);
+router.patch("/updatePatientDiagnosis/:diagnosisId", updatePatientDiagnosis);
 router.get("/getPatientDiagnosis", getPatientDiagnosis);
 router.post("/addPatientNotes", addPatientNotes);
 router.get("/getPatientNotes", getPatientNotes);

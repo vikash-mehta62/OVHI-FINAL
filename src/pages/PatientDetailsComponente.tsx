@@ -71,6 +71,7 @@ import generatePatientPdf from "./GenratePatientPdf";
 import { getPdfAPI } from "@/services/operations/settings";
 import GetSinglePatientAppointment from "./GetSinglePatientAppointment";
 import PatientAccountManager from "@/components/patient/PatientAccountManager";
+import type { DiagnosisItem } from "@/components/provider/UnifiedDiagnosisManager";
 
 // Define the patient type based on the API response
 interface PatientData {
@@ -180,6 +181,34 @@ const PatientDetailsPage: React.FC = () => {
   const [paymentsData, setPaymentsData] = useState<any[]>([]);
   const [statementsData, setStatementsData] = useState<any[]>([]);
   const [accountLoading, setAccountLoading] = useState(false);
+
+  //Diagnoses Management States
+  const [diagnoses, setDiagnoses] = useState<DiagnosisItem[]>([]);
+
+// then in useEffect when patient is loaded:
+useEffect(() => {
+  if (patient?.diagnosis && diagnoses.length === 0) {
+    setDiagnoses(
+      patient.diagnosis.map(d => ({
+        id: d.id.toString(),
+        code: d.icd10,
+        description: d.diagnosis,
+        category: "General",
+        status: (d.status?.toLowerCase() === "active"
+          ? "active"
+          : d.status?.toLowerCase() === "chronic"
+          ? "chronic"
+          : d.status?.toLowerCase() === "resolved"
+          ? "resolved"
+          : "active") as "active" | "resolved" | "rule-out" | "chronic",
+        dateAdded: d.date,
+        isActive: d.status === "Active",
+        isFavorite: false,
+        confidence: 95,
+      }))
+    );
+  }
+}, [patient]);
 
   const serviceTypeMap: Record<number, string> = {
     1: "RPM",
@@ -958,27 +987,15 @@ const PatientDetailsPage: React.FC = () => {
               <TabsContent value="diagnosis" className="space-y-6">
                 <div className="min-h-[600px]">
                   <UnifiedDiagnosisManager
-                    selectedDiagnoses={patient.diagnosis.map(d => ({
-                      id: d.id.toString(),
-                      code: d.icd10,
-                      description: d.diagnosis,
-                      category: 'General',
-                      status: (d.status?.toLowerCase() === 'active' ? 'active' :
-                        d.status?.toLowerCase() === 'chronic' ? 'chronic' :
-                          d.status?.toLowerCase() === 'resolved' ? 'resolved' : 'active') as 'active' | 'resolved' | 'rule-out' | 'chronic',
-                      dateAdded: d.date,
-                      isActive: d.status === 'Active',
-                      isFavorite: false,
-                      confidence: 95
-                    }))}
-                    patientId={id}
-                    encounterId=""
-                    mode="profile"
-                    specialty="General"
-                    onDiagnosisChange={(diagnoses) => {
-                      console.log('Diagnoses updated:', diagnoses);
-                      // Handle diagnosis updates
-                    }}
+                     selectedDiagnoses={diagnoses}
+                      patientId={id}
+                      encounterId=""
+                      mode="profile"
+                      specialty="General"
+                      onDiagnosisChange={(updatedDiagnoses) => {
+                        console.log('Diagnoses updated:', updatedDiagnoses);
+                        setDiagnoses(updatedDiagnoses); // ✅ Now UI updates
+                      }}
                   />
                 </div>
               </TabsContent>

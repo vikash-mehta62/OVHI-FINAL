@@ -19,6 +19,9 @@ const {
   ADD_PATIENT_NOTES,
   GET_PATIENT_NOTES,
   ADD_PATIENT_DIAGNOSIS,
+  REMOVE_PATIENT_DIAGNOSIS,
+  UPDATE_PATIENT_DIAGNOSIS_STATUS,
+
   SUBMITE_TIMER,
   ADD_MEDICATION,
   ADD_INSURANCE,
@@ -141,6 +144,73 @@ export const addPatinetDiagnosis = async (notes, token, patientId) => {
     toast.dismiss(); // Dismiss any loading toast
     toast.error(error?.response?.data?.message || "Failed to create Diagnosis.");
     console.error("Diagnosis create ERROR:", error);
+    return null;
+  }
+};
+
+export const removePatientDiagnosis = async (diagnosisId, token) => {
+  try {
+    const loadingToastId = toast.loading("Removing diagnosis...");
+
+   const response = await apiConnector(
+    "DELETE",
+    REMOVE_PATIENT_DIAGNOSIS(diagnosisId),
+    {
+      Authorization: `Bearer ${token}`,
+    }
+  );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+    toast.update(loadingToastId, {
+      render: "Diagnosis Removed!",
+      type: "success",
+      isLoading: false,
+      autoClose: 2500,
+      closeButton: true,
+    });
+
+    return response.data;
+
+  } catch (error) {
+    toast.dismiss(); // Dismiss any loading toast
+    toast.error(error?.response?.data?.message || "Failed to remove diagnosis.");
+    console.error("Remove Diagnosis ERROR:", error);
+    return null;
+  }
+};
+
+export const updatePatientDiagnosis = async (data, token, diagnosisId) => {
+  try {
+    const loadingToastId = toast.loading("Updating diagnosis...");
+
+    const response = await apiConnector(
+      "PATCH", // ✅ use PATCH
+      UPDATE_PATIENT_DIAGNOSIS_STATUS(diagnosisId),
+      data,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || "Something went wrong!");
+    }
+
+    toast.update(loadingToastId, {
+      render: "Diagnosis Updated!",
+      type: "success",
+      isLoading: false,
+      autoClose: 2500,
+      closeButton: true,
+    });
+
+    return response.data;
+  } catch (error) {
+    toast.dismiss();
+    toast.error(error?.response?.data?.message || "Failed to update diagnosis.");
+    console.error("Update Diagnosis ERROR:", error);
     return null;
   }
 };

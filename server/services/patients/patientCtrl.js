@@ -1364,6 +1364,62 @@ const addPatientDiagnosis = async (req, res) => {
     });
   }
 };
+
+const removePatientDiagnosis = async (req, res) => {
+  const { diagnosisId } = req.params;
+  try {
+    const [result] = await connection.query(
+      `DELETE FROM patient_diagnoses WHERE id = ?`,
+      [diagnosisId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Diagnosis not found'
+      });
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Patient diagnosis removed successfully'
+    });
+  } catch (err) {
+    console.error('Error removing diagnosis:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Database error',
+      error: err.message || err
+    });
+  }
+};
+
+const updatePatientDiagnosis = async (req, res) => {
+  const { diagnosisId } = req.params;
+  const { status, isFavorite } = req.body;
+  try {
+    const [result] = await connection.query(
+      `UPDATE patient_diagnoses SET status = ?, is_favorite = ? WHERE id = ?`,
+      [status, isFavorite ? true : false, diagnosisId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Diagnosis not found'
+      });
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Patient diagnosis status updated successfully'
+    });
+  } catch (err) {
+    console.error('Error updating diagnosis status:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Database error',
+      error: err.message || err
+    });
+  }
+};  
+
 const getPatientDiagnosis = async (req, res) => {
   const { patientId } = req.query;
   const { diagnosisId } = req.query;
@@ -2714,6 +2770,8 @@ module.exports = {
   getPcmByPatientId,
   getCcmByPatientId,
   addPatientDiagnosis,
+  removePatientDiagnosis,
+  updatePatientDiagnosis,
   getPatientDiagnosis,
   addPatientNotes,
   getPatientNotes,

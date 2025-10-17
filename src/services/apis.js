@@ -37,6 +37,8 @@ export const patientEndpoints = {
   GET_CCM_REPORTS: BASE_URL + "/patient/ccm-reports",
   ADD_PATIENT_NOTES: BASE_URL + "/patient/addPatientNotes",
   ADD_PATIENT_DIAGNOSIS: BASE_URL + "/patient/addPatientDiagnosis",
+  REMOVE_PATIENT_DIAGNOSIS: (diagnosisId) => BASE_URL + `/patient/removePatientDiagnosis/${diagnosisId}`,
+  UPDATE_PATIENT_DIAGNOSIS_STATUS: (diagnosisId) => BASE_URL + `/patient/updatePatientDiagnosis/${diagnosisId}`,
 
   // CCM Endpoints
   START_CCM_TIME_TRACKING: BASE_URL + "/patient/ccm/start-time-tracking",

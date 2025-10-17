@@ -31,8 +31,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AddMedicalDiagnoses from '../patient/AddMedicalDiagnoses';
+import { RootState } from "@/redux/store";
+import { useSelector } from "react-redux";
+import { removePatientDiagnosis } from '@/services/operations/patient';
+import { updatePatientDiagnosis } from '@/services/operations/patient';
 
-interface DiagnosisItem {
+export interface DiagnosisItem {
   id: string;
   code: string;
   description: string;
@@ -45,6 +49,7 @@ interface DiagnosisItem {
   addedBy?: string;
   notes?: string;
   billable?: boolean;
+  isActive?: boolean;
 }
 
 interface DiagnosisTemplate {
@@ -195,6 +200,9 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
   const [chiefComplaint, setChiefComplaint] = useState('');
 
+  const { token } = useSelector((state: RootState) => state.auth); // Assuming token is available here
+  console.log("UnifiedDiagnosisManager token:", token);
+
   // Auto-save functionality
   useEffect(() => {
     if (autoSave && onAutoSave && selectedDiagnoses.length > 0) {
@@ -272,27 +280,123 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
     setIsSearchOpen(false);
   }, [selectedDiagnoses, onDiagnosisChange]);
 
-  const removeDiagnosis = useCallback((id: string) => {
-    const newDiagnoses = selectedDiagnoses.filter(d => d.id !== id);
-    onDiagnosisChange(newDiagnoses);
-    toast.success('Diagnosis removed');
-  }, [selectedDiagnoses, onDiagnosisChange]);
+const removeDiagnosis = useCallback(
+  async (id: string) => {
+    try {
+      console.log("Removing diagnosis with id:", id);
 
-  const updateDiagnosisStatus = useCallback((id: string, status: DiagnosisItem['status']) => {
-    const newDiagnoses = selectedDiagnoses.map(d => 
-      d.id === id ? { ...d, status } : d
-    );
-    onDiagnosisChange(newDiagnoses);
-    toast.success('Diagnosis status updated');
-  }, [selectedDiagnoses, onDiagnosisChange]);
+      // Call backend API
+      const response = await removePatientDiagnosis(id, token);
 
-  const toggleFavorite = useCallback((code: string) => {
-    setFavorites(prev => 
-      prev.includes(code) 
-        ? prev.filter(c => c !== code)
-        : [...prev, code]
-    );
-  }, []);
+      if (!response) {
+        console.warn("Failed to remove diagnosis from backend");
+        return;
+      }
+
+      // Update local state after successful backend removal
+      const newDiagnoses = selectedDiagnoses.filter(d => d.id !== id);
+
+      const formattedDiagnoses = newDiagnoses.map(d => ({
+        ...d,
+        isActive: d.isActive ?? (d.status === "active"),
+      }));
+
+      onDiagnosisChange(formattedDiagnoses);
+      toast.success("Diagnosis removed locally & backend updated!");
+    } catch (err) {
+      console.error("Error removing diagnosis:", err);
+      toast.error("Failed to remove diagnosis.");
+    }
+  },
+  [selectedDiagnoses, onDiagnosisChange, token, patientId]
+);
+
+
+ const updateDiagnosisStatus = useCallback(
+  async (id: string, status: DiagnosisItem['status'], token: string) => {
+    try {
+      console.log('Updating diagnosis status for id:', id, 'to status:', status);
+
+      const loadingToastId = toast.loading('Updating diagnosis...');
+
+      // Call backend API
+      const response = await updatePatientDiagnosis({ status }, token, id);
+
+      // Remove loading toast
+      toast.dismiss(loadingToastId);
+
+      if (!response) {
+        toast.error('Failed to update diagnosis');
+        return;
+      }
+
+      // Update local state
+      const newDiagnoses = selectedDiagnoses.map(d =>
+        d.id === id ? { ...d, status } : d
+      );
+      onDiagnosisChange(newDiagnoses);
+
+      // Show success toast
+      toast.success('Diagnosis status updated!');
+    } catch (err) {
+      console.error('Error updating diagnosis status:', err);
+      toast.error('Failed to update diagnosis.');
+    }
+  },
+  [selectedDiagnoses, onDiagnosisChange]
+);
+
+
+
+  const toggleFavorite = useCallback(
+  async (id: string, currentFavorite: boolean, token: string) => {
+    try {
+      // Optimistically show loading toast
+      const loadingToastId = toast.loading(
+        currentFavorite ? "Removing from favorites..." : "Adding to favorites..."
+      );
+
+      // Call backend API
+      const response = await updatePatientDiagnosis(
+        { isFavorite: !currentFavorite },
+        token,
+        id,
+      );
+
+      // Remove loading toast
+      toast.dismiss(loadingToastId);
+
+      if (!response) {
+        // Backend returned an error or success false
+        toast.error("Failed to update favorite status.");
+        return;
+      }
+
+      // Update local state only after successful backend update
+      setFavorites(prev =>
+        prev.includes(id)
+          ? prev.filter(f => f !== id)
+          : [...prev, id]
+      );
+
+      toast.success(
+        currentFavorite
+          ? "Removed from favorites!"
+          : "Added to favorites!"
+      );
+    } catch (error: any) {
+      // Catch unexpected network or runtime errors
+      console.error("Toggle Favorite ERROR:", error);
+      toast.error(
+        error?.response?.data?.message ||
+        error?.message ||
+        "Something went wrong while updating favorite status."
+      );
+    }
+  },
+  []
+);
+
 
   const applyTemplate = useCallback((template: DiagnosisTemplate) => {
     const newDiagnoses = [...selectedDiagnoses];
@@ -463,7 +567,7 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
                                 <div className="font-medium">{diagnosis.code}</div>
                                 <div className="text-sm text-muted-foreground">{diagnosis.description}</div>
                               </div>
-                              <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                              <Star className={`h-4 w-4 ${favorites.includes(diagnosis.code) ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
                             </CommandItem>
                           ))}
                       </CommandGroup>
@@ -534,10 +638,21 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleFavorite(diagnosis.code);
+
+                              toggleFavorite(
+                                diagnosis.id,                    
+                                diagnosis.isFavorite,            
+                                token                            
+                              );
                             }}
-                          >
-                            <Star className={`h-4 w-4 ${diagnosis.isFavorite ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
+                          > 
+                            <Star
+                              className={`h-4 w-4 ${
+                                diagnosis.isFavorite
+                                  ? 'text-yellow-500 fill-current'
+                                  : 'text-muted-foreground'
+                              }`}
+                            />
                           </Button>
                         </CommandItem>
                       ))}
@@ -605,7 +720,7 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
                       <div className="flex items-center gap-2">
                         <Select
                           value={diagnosis.status}
-                          onValueChange={(value) => updateDiagnosisStatus(diagnosis.id, value as DiagnosisItem['status'])}
+                          onValueChange={(value) => updateDiagnosisStatus(diagnosis.id, value as DiagnosisItem['status'], token)}
                         >
                           <SelectTrigger className="w-24">
                             <SelectValue />
@@ -620,9 +735,21 @@ export const UnifiedDiagnosisManager: React.FC<UnifiedDiagnosisManagerProps> = (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => toggleFavorite(diagnosis.code)}
+                          onClick={() =>
+                            toggleFavorite(
+                              diagnosis.id,                         // 1️⃣ id
+                              favorites.includes(diagnosis.code),   // 2️⃣ currentFavorite
+                              token                                 // 3️⃣ auth token
+                            )
+                          }
                         >
-                          <Star className={`h-4 w-4 ${diagnosis.isFavorite ? 'text-yellow-500 fill-current' : ''}`} />
+                          <Star
+                            className={`h-4 w-4 ${
+                              favorites.includes(diagnosis.code)
+                                ? "text-yellow-500 fill-current"
+                                : ""
+                            }`}
+                          />
                         </Button>
                         <Button
                           variant="outline"
