@@ -19,31 +19,53 @@ const DoctorSettings: React.FC = () => {
       </div>
       
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-6 mb-4">
-          <TabsTrigger value="profile">
+        <TabsList className="grid w-full grid-cols-6 mb-4 overflow-visible relative z-10">
+          <TabsTrigger value="profile" className="relative overflow-visible">
             <User className="h-4 w-4 mr-2" />
             Profile
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[9999] pointer-events-none shadow-md">
+              Not Activated
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="preferences">
+
+          <TabsTrigger value="preferences" className="relative overflow-visible">
             <Settings className="h-4 w-4 mr-2" />
             Preferences
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[9999] pointer-events-none shadow-md">
+              Not Activated
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="compliance">
+
+          <TabsTrigger value="compliance" className="relative overflow-visible">
             <ShieldAlert className="h-4 w-4 mr-2" />
             Compliance
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[9999] pointer-events-none shadow-md">
+              Not Activated
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="practice">
+
+          <TabsTrigger value="practice" className="relative overflow-visible">
             <ClipboardList className="h-4 w-4 mr-2" />
             Practice
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[9999] pointer-events-none shadow-md">
+              Not Activated
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="system">
+
+          <TabsTrigger value="system" className="relative overflow-visible">
             <Server className="h-4 w-4 mr-2" />
             System
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[9999] pointer-events-none shadow-md">
+              Not Activated
+            </span>
           </TabsTrigger>
-                    <TabsTrigger value="location"><MapPin className="h-4 w-4 mr-2" /> Location</TabsTrigger>
 
-        </TabsList>
-        
+          {/* 🚫 No badge here */}
+          <TabsTrigger value="location">
+            <MapPin className="h-4 w-4 mr-2" />
+            Location
+          </TabsTrigger>
+        </TabsList>       
         <TabsContent value="profile">
           <DoctorProfileSettings />
         </TabsContent>

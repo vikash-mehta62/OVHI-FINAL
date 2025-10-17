@@ -520,10 +520,10 @@ useEffect(() => {
                   <Pill className="h-4 w-4" />
                   Medications
                 </TabsTrigger>
-                <TabsTrigger value="diagnosis" className="flex items-center gap-1">
+                {/* <TabsTrigger value="diagnosis" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
                   Diagnosis
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger value="account" className="flex items-center gap-1">
                   <DollarSign className="h-4 w-4" />
                   Account
@@ -532,10 +532,10 @@ useEffect(() => {
                   <FileText className="h-4 w-4" />
                   Summary
                 </TabsTrigger>
-                <TabsTrigger value="encounters" className="flex items-center gap-1">
+                {/* <TabsTrigger value="encounters" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
                   Encounters
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger value="appointments" className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
                   Appointments

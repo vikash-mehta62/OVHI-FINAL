@@ -58,8 +58,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
     { name: "Dashboard", path: "/provider/dashboard", icon: LayoutDashboard },
     { name: "Patients", path: "/provider/patients", icon: Users },
     { name: "Appointments", path: "/provider/appointments", icon: Calendar },
-    { name: "Encounters", path: "/provider/encounters", icon: Stethoscope },
-    { name: "Telehealth", path: "/provider/telehealth", icon: Video },
+    // { name: "Encounters", path: "/provider/encounters", icon: Stethoscope },
+    // { name: "Telehealth", path: "/provider/telehealth", icon: Video },
     {
       name: "Patient Monitoring",
       path: "/provider/patient-monitoring",
@@ -74,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
       name: "RCM Management", 
       path: "/provider/rcm", 
       icon: CreditCard,
-      badge: "Enhanced"
+      badge: "Not Activated"
     },
   ];
 
@@ -288,7 +288,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                   <div className="flex items-center justify-between w-full">
                     <span className="text-base">{item.name}</span>
                     {item.badge && (
-                      <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
+                      <span  className={cn(
+                            "text-xs px-3 py-0.5 rounded-full text-center",
+                            item.badge === "Not Activated" ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
+                          )}>
                         {item.badge}
                       </span>
                     )}
@@ -320,11 +323,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
               </div>
             )}
           </nav>
-
-          {open && <Separator className="my-4 mx-2" />}
+{/* 
+          {open && <Separator className="my-4 mx-2" />} */}
 
           {/* Analytics Section */}
-          <nav className="grid gap-1 px-2">
+          {/* <nav className="grid gap-1 px-2">
             {open && (
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Analytics
@@ -348,12 +351,12 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                 {open && <span className="text-base">{item.name}</span>}
               </Link>
             ))}
-          </nav>
+          </nav> */}
 
-          {open && <Separator className="my-4 mx-2" />}
+          {/* {open && <Separator className="my-4 mx-2" />} */}
 
           {/* Care Management Section */}
-          <nav className="grid gap-1 px-2">
+          {/* <nav className="grid gap-1 px-2">
             {open && (
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Care Management
@@ -377,7 +380,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                 {open && <span className="text-base">{item.name}</span>}
               </Link>
             ))}
-          </nav>
+          </nav> */}
 
           {open && <Separator className="my-4 mx-2" />}
 
@@ -408,10 +411,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
             ))}
           </nav>
 
-          {open && <Separator className="my-4 mx-2" />}
+          {/* {open && <Separator className="my-4 mx-2" />} */}
 
           {/* Patient Communication Section */}
-          <nav className="grid gap-1 px-2">
+          {/* <nav className="grid gap-1 px-2">
             {open && (
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Patient Communication
@@ -444,7 +447,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                 )}
               </Link>
             ))}
-          </nav>
+          </nav> */}
 
           {open && <Separator className="my-4 mx-2" />}
 
