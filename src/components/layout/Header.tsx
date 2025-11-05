@@ -38,6 +38,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
 import { Link, useNavigate } from "react-router-dom";
 import { logout } from "@/services/operations/auth";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 interface HeaderProps {
   sidebarOpen?: boolean;
@@ -182,7 +183,7 @@ console.log("User in header:", user);
         <div className="flex items-center gap-1 sm:gap-2">
           {/* RingCentral Connection Status */}
           <div className="flex items-center gap-2">
-            <Badge
+            {/* <Badge
               variant={
                 isConnected
                   ? "default"
@@ -202,7 +203,7 @@ console.log("User in header:", user);
                 : isLoggedIn
                 ? "Logged In"
                 : "Disconnected"}
-            </Badge>
+            </Badge> */}
 
             {/* Connect/Disconnect Button */}
             {isLoggedIn ? (
@@ -228,22 +229,23 @@ console.log("User in header:", user);
                 </Button>
               )
             ) : (
-              <Button
-                size="sm"
-                onClick={handleConnect}
-                disabled={isConnecting}
-                className="hidden sm:flex items-center gap-1"
-              >
-                <Phone className="h-4 w-4" />
-                {isConnecting
-                  ? "Connecting..."
-                  : !isMobile && "Login & Connect"}
-              </Button>
+              // <Button
+              //   size="sm"
+              //   onClick={handleConnect}
+              //   disabled={isConnecting}
+              //   className="hidden sm:flex items-center gap-1"
+              // >
+              //   <Phone className="h-4 w-4" />
+              //   {isConnecting
+              //     ? "Connecting..."
+              //     : !isMobile && "Login & Connect"}
+              // </Button>
+              <></>
             )}
           </div>
 
           {/* Theme Toggle */}
-          <Button
+          {/* <Button
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
@@ -255,20 +257,10 @@ console.log("User in header:", user);
               <Sun className="h-5 w-5" />
             )}
             <span className="sr-only">Toggle theme</span>
-          </Button>
+          </Button> */}
 
           {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "text-muted-foreground hover:text-foreground relative h-8 w-8 sm:h-9 sm:w-9",
-              "after:absolute after:top-2 after:right-2 after:w-2 after:h-2 after:rounded-full after:bg-red-500"
-            )}
-          >
-            <Bell className="h-5 w-5" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          <NotificationBell />
 
           {/* User Menu */}
           <DropdownMenu>

@@ -198,12 +198,15 @@ const Billing = () => {
 
   const getTotalsByStatus = () => {
     if (activeTab === 'bills') {
-      const draftTotal = bills.filter(b => b.status === 'draft').reduce((sum, b) => sum + b.total_amount, 0);
-      const paidTotal = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + b.total_amount, 0);
-      const overdueTotal = bills.filter(b => b.status === 'overdue').reduce((sum, b) => sum + b.total_amount, 0);
+      const draftTotal = bills.filter(b => b.status === 'pending').reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+      const partiallyPaidTotal = bills.filter(b => b.status === 'partially_paid').reduce((sum, b) => sum + (Number(b.amount_due) || 0), 0);
+      const paidTotal = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+      const overdueTotal = bills.filter(b => b.status === 'overdue').reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+
+      const pendingBillsTotal = draftTotal + partiallyPaidTotal; // Combine 'pending' and 'partially_paid' as 'pending'
 
       return {
-        pending: draftTotal,
+        pending: pendingBillsTotal, // Combined total for 'pending' bills
         completed: paidTotal, // Map 'paid' to 'completed' for consistency
         failed: overdueTotal, // Map 'overdue' to 'failed' for consistency
         refunded: 0
@@ -218,7 +221,7 @@ const Billing = () => {
 
       payments.forEach(payment => {
         if (totals.hasOwnProperty(payment.status)) {
-          totals[payment.status as keyof typeof totals] += payment.amount;
+          totals[payment.status as keyof typeof totals] += (Number(payment.amount) || 0);
         }
       });
 
@@ -235,7 +238,7 @@ const Billing = () => {
       </div>
     );
   }
-
+  
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -295,7 +298,7 @@ const Billing = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Ready to Invoice</p>
-                    <p className="text-2xl font-bold text-blue-600">{bills.filter(b => b.status === 'draft').length}</p>
+                    <p className="text-2xl font-bold text-blue-600">{bills.filter(b => b.status === 'pending').length}</p>
                   </div>
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Receipt className="h-6 w-6 text-blue-600" />
@@ -324,7 +327,7 @@ const Billing = () => {
                   <div>
                     <p className="text-sm text-gray-600">Avg Bill Amount</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      {bills.length > 0 ? formatCurrency(bills.reduce((sum, b) => sum + b.total_amount, 0) / bills.length) : '$0.00'}
+                      {bills.length > 0 ? formatCurrency(bills.reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0) / bills.length) : '$0.00'}
                     </p>
                   </div>
                   <div className="p-2 bg-purple-100 rounded-lg">
@@ -472,7 +475,7 @@ const Billing = () => {
                       </td>
                       <td className="py-4 px-4 text-gray-600 text-sm">{formatDate(bill.created_at)}</td>
                       <td className="py-4 px-4">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             size="sm"
                             variant="outline"
@@ -497,15 +500,19 @@ const Billing = () => {
                             <span className="text-xs font-medium">Invoice</span>
                           </Button> */}
 
-                          <Button
-                            size="sm"
-                            onClick={() => handleCreatePayment(bill.id)}
-                            className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white border-0 shadow-sm"
-                            title="Create Payment"
-                          >
-                            <DollarSign className="h-3 w-3 mr-1" />
-                            <span className="text-xs font-medium">Add Payment</span>
-                          </Button>
+                          <div className="w-[130px] flex justify-center">
+                            {bill.status?.toLowerCase() !== 'paid' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleCreatePayment(bill.id)}
+                                className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white border-0 shadow-sm"
+                                title="Create Payment"
+                              >
+                                <DollarSign className="h-3 w-3 mr-1" />
+                                <span className="text-xs font-medium">Add Payment</span>
+                              </Button>
+                            )}
+                          </div>
 
                           <Button
                             size="sm"

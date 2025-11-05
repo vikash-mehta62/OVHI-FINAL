@@ -110,7 +110,8 @@ const BillingConfigurationSettings: React.FC = () => {
   const handleSaveConfiguration = async () => {
     setIsLoading(true);
     try {
-      await updateSettingsApi(billingConfig);
+      // await updateSettingsApi(billingConfig);
+      // Save to localStorage (backend endpoint for billing config not yet implemented)
       localStorage.setItem('billingConfiguration', JSON.stringify(billingConfig));
       toast({
         title: "Success",

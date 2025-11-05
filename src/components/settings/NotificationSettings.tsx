@@ -123,7 +123,7 @@ const NotificationSettings: React.FC = () => {
                 />
                 <Label htmlFor="email-appt">Appointment reminders</Label>
               </div>
-              <Select defaultValue="24h">
+              {/* <Select defaultValue="24h">
                 <SelectTrigger className="w-[120px]">
                   <SelectValue placeholder="Select time" />
                 </SelectTrigger>
@@ -133,7 +133,7 @@ const NotificationSettings: React.FC = () => {
                   <SelectItem value="24h">24 hours before</SelectItem>
                   <SelectItem value="48h">48 hours before</SelectItem>
                 </SelectContent>
-              </Select>
+              </Select> */}
             </div>
             
             <div className="flex items-center space-x-2">
@@ -230,7 +230,7 @@ const NotificationSettings: React.FC = () => {
                     onValueChange={(value) => updateQuietHours('startTime', value)}
                   >
                     <SelectTrigger id="quiet-start">
-                      <SelectValue placeholder="Select time" />
+                      <SelectValue placeholder="Select time" >{settings.quietHours.startTime}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="20:00">8:00 PM</SelectItem>
@@ -247,7 +247,7 @@ const NotificationSettings: React.FC = () => {
                     onValueChange={(value) => updateQuietHours('endTime', value)}
                   >
                     <SelectTrigger id="quiet-end">
-                      <SelectValue placeholder="Select time" />
+                      <SelectValue placeholder="Select time">{settings.quietHours.endTime}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="06:00">6:00 AM</SelectItem>

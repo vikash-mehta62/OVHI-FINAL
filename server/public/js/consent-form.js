@@ -100,6 +100,14 @@ function submitConsentForm() {
     return;
   }
 
+  // Get submit button and add spinner
+  const submitButton = document.querySelector('#consentForm button[type="submit"]');
+  const originalButtonText = submitButton.textContent;
+  
+  // Show spinner on the left of button text
+  submitButton.innerHTML = '<span class="spinner"></span> Submitting...';
+  submitButton.disabled = true;
+
   // ✅ Update "Electronically Generated on" timestamp
   const generatedEl = document.getElementById('generated-timestamp');
   if (generatedEl) {
@@ -133,19 +141,22 @@ function submitConsentForm() {
     body: JSON.stringify(data),
   })
     .then(response => {
-      const submitButton = document.querySelector('#consentForm button[type="submit"]');
       if (response.ok) {
+        // Remove spinner and show success
+        submitButton.innerHTML = '✅ Submitted';
         alert('Consent Form Submitted Successfully!');
-        if (submitButton) {
-          submitButton.textContent = 'Submitted';
-          submitButton.disabled = true;
-        }
       } else {
+        // Remove spinner and restore button
+        submitButton.innerHTML = originalButtonText;
+        submitButton.disabled = false;
         alert('There was an error submitting the form.');
       }
     })
     .catch(error => {
       console.error('Error:', error);
+      // Remove spinner and restore button
+      submitButton.innerHTML = originalButtonText;
+      submitButton.disabled = false;
       alert('Submission failed. Please try again.');
     });
 }

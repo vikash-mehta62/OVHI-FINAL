@@ -89,6 +89,7 @@ export const image = {
 
 export const settings = {
   UPDATE_SETTING_API: BASE_URL + "/physician/updatePhysicianMappings",
+  GET_USER_MAPPINGS_API: BASE_URL + "/physician/getUserMappings",
   PRACTISH_SETTING_API: BASE_URL + "/physician/editPractice",
   GET_PRACTISH_SETTING_API: BASE_URL + "/physician/getProviderDetails",
   DASHBOARD_DATA: BASE_URL + "/physician/providerDashboardCount",
@@ -130,7 +131,7 @@ export const LOCATION_API = {
   CREATE: BASE_URL + "/location/create",
   GET_ALL: BASE_URL + "/location/all",
   GET_BY_PROVIDER: (providerId) => BASE_URL + `/location/provider/${providerId}`,
-  UPDATE: "/location/update",
+  UPDATE: BASE_URL + "/location/update",
   DELETE: (locationId) => BASE_URL + `/location/delete/${locationId}`,
 };
 
@@ -138,6 +139,7 @@ export const LOCATION_API = {
 export const APPOINTMENT_API = {
   CREATE: BASE_URL + "/appointment/create",
   RESCHEDULE: (appointmentId) => BASE_URL + `/appointment/reschedule/${appointmentId}`,
+  DELETE: (appointmentId) => BASE_URL + `/appointment/delete/${appointmentId}`,
   GET_BY_PROVIDER: (providerId) => BASE_URL + `/appointment/provider/${providerId}`,
   UPCOMING_APPOINTMENT: BASE_URL + `/appointment/upcoming`,
   SINGLE_PATINET_APPOINTMENT: BASE_URL + `/appointment/patient`,

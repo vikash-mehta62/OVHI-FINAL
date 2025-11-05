@@ -76,9 +76,12 @@ const Index = () => {
               <Stethoscope className="h-4 w-4 mr-2" />
               For Physicians
             </TabsTrigger>
-            <TabsTrigger value="patient">
+            <TabsTrigger value="patient" className="relative">
               <Users className="h-4 w-4 mr-2" />
               For Patients
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[99999] pointer-events-none shadow-md">
+                Not Activated
+              </span>
             </TabsTrigger>
           </TabsList>
         </div>

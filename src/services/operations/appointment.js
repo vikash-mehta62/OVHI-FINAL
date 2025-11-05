@@ -150,3 +150,33 @@ export async function getSinglePatientAppintmentApi(patientId, token) {
     return [];
   }
 }
+
+// Cancel appointment
+export async function cancelAppointment(appointmentId, token) {
+  showLoadingToast("Cancelling appointment...");
+
+  try {
+    const response = await apiConnector(
+      "DELETE",
+      APPOINTMENT_API.DELETE(appointmentId),
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+
+    closeAlert();
+
+    if (!response.data.success) throw new Error(response.data.message);
+
+    showSuccess("Success", "Appointment cancelled successfully!", response);
+    return response.data;
+  } catch (error) {
+    closeAlert();
+    showError(
+      "Error",
+      error?.response?.data?.message || "Failed to cancel appointment."
+    );
+    throw error;
+  }
+}

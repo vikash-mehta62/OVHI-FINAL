@@ -163,17 +163,29 @@ const updateProviderLocation = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'Location not found' });
     }
+    
     await logAudit(
       req,
       'UPDATE_LOCATION',
       'location',
       req.user.user_id,
-      `Updated location ${updatedLocation[0]?.location_name || location_id}`
+      `Updated location ${location_name} (ID: ${location_id})`
     );
 
     return res.status(200).json({
       success: true,
       message: 'Location updated successfully',
+      data: {
+        location_id,
+        provider_id,
+        location_name,
+        location_address_line1,
+        location_address_line2,
+        location_state,
+        location_country,
+        location_phone,
+        location_zip_code,
+      }
     });
   } catch (error) {
     console.error('Error updating location:', error.message);

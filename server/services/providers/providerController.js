@@ -41,6 +41,7 @@ const getAllPractices = async (req, res) => {
 };
 const updateUserMapping = async (req, res) => {
   const { providerId, organizationId, practiceId } = req.body;
+  console.log(req.body,"REQ BODY")
 
   if (!providerId || !organizationId || !practiceId) {
     return res.status(400).json({
@@ -103,6 +104,52 @@ const updateUserMapping = async (req, res) => {
     });
   }
 };
+
+const getUserMappings = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+
+    if (!user_id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const query = `
+      SELECT user_id, organizations_id, practice_id, fk_role_id 
+      FROM users_mappings 
+      WHERE user_id = ? 
+      LIMIT 1
+    `;
+    const [rows] = await connection.query(query, [user_id]);
+
+    if (rows.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: null,
+        message: "No mappings found for this user"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        providerId: rows[0].user_id,
+        organizationId: rows[0].organizations_id,
+        practiceId: rows[0].practice_id,
+        roleId: rows[0].fk_role_id
+      },
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+
 const getProviders = async (req, res) => {
   try {
     const query =
@@ -125,11 +172,25 @@ const getProviders = async (req, res) => {
 const updateProviderInformation = async (req, res) => {
   try {
     const { user_id } = req.user;
+    console.log( user_id ,"USE UPDATE")
     const { npi, taxonomy, taxId, faxId,firstName,lastName } = req.body;
 console.log(req.body)
 console.log( req.user ,"USE")
     if (!user_id) {
       return res.status(400).json({success:false, message: 'Missing userId in request params.' });
+    }
+
+    // First check if user profile exists
+    const checkSql = `SELECT * FROM user_profiles WHERE fk_userid = ? LIMIT 1`;
+    const [existingProfile] = await connection.query(checkSql, [user_id]);
+
+    if (existingProfile.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User profile not found. Please create a user profile first.',
+        error_code: 'PROFILE_NOT_FOUND',
+        user_id: user_id
+      });
     }
 
     const sql = `
@@ -151,7 +212,11 @@ console.log( req.user ,"USE")
     const [result] = await connection.query(sql, values);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success:false,message: 'User not found.' });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to update user profile. No changes were made.',
+        error_code: 'UPDATE_FAILED'
+      });
     }
 
     // Log audit for provider information update
@@ -171,6 +236,7 @@ const getProviderInformation = async (req, res) => {
   try {
 
     const { user_id } = req.user;
+    console.log( user_id ,"USE")
 
 
     if (!user_id) {
@@ -199,6 +265,7 @@ LIMIT 1
 
     // Return the provider information
     const providerInfo = rows[0];
+    console.log(providerInfo,"PROVIDER INFO")
     return res.status(200).json({
       success: true,
       data: {
@@ -745,6 +812,7 @@ module.exports = {
   getAllOrganizations,
   getAllPractices,
   updateUserMapping,
+  getUserMappings,
   getProviders,
   updateProviderInformation,
   getProviderInformation,

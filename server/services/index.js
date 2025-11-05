@@ -34,6 +34,7 @@ const userRoutes = require("./user/userRoutes");
 const claimsRoutes = require("./billings/claimsRoutes");
 const newBillingRoutes = require("./billing/billingRoutes");
 const servicesRoutes = require("../routes/servicesRoutes");
+const notificationRoutes = require("../routes/notifications");
 
 // Public routes (no auth required)
 router.use('/auth', authRoutes);
@@ -89,6 +90,9 @@ router.use("/encounters/smart-templates", verifyToken, require("./encounters/sma
 
 // MIPS Routes
 router.use("/mips", verifyToken, mipsRoutes);
+
+// In-App Notifications Routes
+router.use("/notifications", verifyToken, notificationRoutes);
 
 // RCM Critical Features Routes (integrated into unified routes)
 // router.use("/rcm", verifyToken, require("../routes/rcmCriticalRoutes"));

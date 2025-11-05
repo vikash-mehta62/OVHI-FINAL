@@ -572,6 +572,9 @@ const EncounterTemplateSettings: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { token } = useSelector((state: RootState) => state.auth)
+  
+  // Add URL state management for preview persistence
+  const [urlParams, setUrlParams] = useState<URLSearchParams>(new URLSearchParams(window.location.search))
 
   // Create template form state
   const [newTemplate, setNewTemplate] = useState<Partial<EncounterTemplate>>({
@@ -609,27 +612,59 @@ const EncounterTemplateSettings: React.FC = () => {
   const fetchTemplatePractish = async () => {
     try {
       const response = await getAllEncounterTemplatePraticeAPI(token)
-      console.log(response?.data)
       if (response?.success && Array.isArray(response.data)) {
         // Transform API response into required format
-        const formattedTemplates = response.data.map((item, index) => ({
-          name: item.encounter_name,
-          specialty: item.encounter_type,
-          visitType: item.visit_type,
-          isActive: item.is_active === 1,
-          isDefault: item.is_default === 1,
-          soapStructure: {
-            ...item.soap_structure,
-            subjectiveQuestions: item.soap_structure.subjectiveQuestions || [],
-            objectiveQuestions: item.soap_structure.objectiveQuestions || [],
-            assessmentQuestions: item.soap_structure.assessmentQuestions || [],
-            planQuestions: item.soap_structure.planQuestions || [],
-          },
-          billingCodes: item.billing_codes,
-          createdAt: item.created,
-          updatedAt: item.created,
-          id: item?.template_id,
-        }))
+        const formattedTemplates = response.data.map((item, index) => {
+          // Parse JSON fields if they are strings
+          let soapStructure = item.soap_structure;
+          let billingCodes = item.billing_codes;
+          
+          if (typeof soapStructure === 'string') {
+            try {
+              soapStructure = JSON.parse(soapStructure);
+            } catch (e) {
+              console.error('Error parsing soap_structure:', e);
+              soapStructure = {};
+            }
+          }
+          
+          if (typeof billingCodes === 'string') {
+            try {
+              billingCodes = JSON.parse(billingCodes);
+            } catch (e) {
+              console.error('Error parsing billing_codes:', e);
+              billingCodes = {};
+            }
+          }
+
+          const formattedTemplate = {
+            name: item.encounter_name,
+            specialty: item.encounter_type,
+            visitType: item.visit_type,
+            isActive: item.is_active === 1,
+            isDefault: item.is_default === 1,
+            soapStructure: {
+              subjective: soapStructure?.subjective || '',
+              objective: soapStructure?.objective || '',
+              assessment: soapStructure?.assessment || '',
+              plan: soapStructure?.plan || '',
+              subjectiveQuestions: soapStructure?.subjectiveQuestions || [],
+              objectiveQuestions: soapStructure?.objectiveQuestions || [],
+              assessmentQuestions: soapStructure?.assessmentQuestions || [],
+              planQuestions: soapStructure?.planQuestions || [],
+            },
+            billingCodes: {
+              primaryCpt: billingCodes?.primaryCpt || '',
+              secondaryCpts: billingCodes?.secondaryCpts || [], 
+              icd10Codes: billingCodes?.icd10Codes || []
+            },
+            createdAt: item.created,
+            updatedAt: item.created,
+            id: item?.template_id,
+          }
+          
+          return formattedTemplate
+        })
         setTemplates(formattedTemplates)
       } else {
         setTemplates([])
@@ -644,19 +679,44 @@ const EncounterTemplateSettings: React.FC = () => {
     fetchTemplatePractish()
   }, [])
 
+  // Effect to handle URL-based preview restoration
+  useEffect(() => {
+    const previewId = urlParams.get('preview')
+    if (previewId && templates.length > 0) {
+      const templateToPreview = templates.find(t => t.id === previewId)
+      if (templateToPreview) {
+        setSelectedTemplate(templateToPreview)
+        setIsPreviewOpen(true)
+      }
+    }
+  }, [templates, urlParams])
+
   const filteredTemplates =
     selectedSpecialty === "all" ? templates : templates.filter((t) => t.specialty === selectedSpecialty)
 
   const handlePreviewTemplate = (template: EncounterTemplate) => {
     setSelectedTemplate(template)
     setIsPreviewOpen(true)
+    
+    // Update URL to persist preview state
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('preview', template.id)
+    window.history.pushState({}, '', newUrl)
+    setUrlParams(new URLSearchParams(newUrl.search))
   }
 
   const handleEditTemplate = (template: EncounterTemplate) => {
-    setEditTemplate({ ...template })
-    setSelectedTemplate(template)
+    const templateToEdit = { 
+      ...template,
+      billingCodes: {
+        ...template.billingCodes,
+        secondaryCpts: template.billingCodes?.secondaryCpts || [],
+        icd10Codes: template.billingCodes?.icd10Codes || []
+      }
+    }
+    setEditTemplate(templateToEdit)
+    setSelectedTemplate(templateToEdit)
     setIsEditOpen(true)
-    console.log(template, "edit")
   }
 
   const handleSaveTemplate = async () => {
@@ -685,17 +745,33 @@ const EncounterTemplateSettings: React.FC = () => {
 
     setIsLoading(true)
     try {
+      const updatedTemplate = { ...editTemplate, updatedAt: new Date().toISOString() }
+      
+      // Update local state first
       setTemplates((prev) =>
         prev.map((template) =>
-          template.id === editTemplate.id ? { ...editTemplate, updatedAt: new Date().toISOString() } : template,
+          template.id === editTemplate.id ? updatedTemplate : template,
         ),
       )
+      
+      // Update selectedTemplate if it's the same template being edited
+      if (selectedTemplate && selectedTemplate.id === editTemplate.id) {
+        setSelectedTemplate(updatedTemplate)
+      }
+      
+      // Call API to update in backend
       await updateEncounterTemplatePraticeAPI(editTemplate, token)
+      
       setIsEditOpen(false)
       setEditTemplate(null)
       toast.success("Template updated successfully")
+      
+      // Refresh templates from server to ensure consistency
+      await fetchTemplatePractish()
     } catch (error) {
       toast.error("Failed to update template")
+      // Revert local state changes on error
+      await fetchTemplatePractish()
     } finally {
       setIsLoading(false)
     }
@@ -833,7 +909,7 @@ const EncounterTemplateSettings: React.FC = () => {
               ...prev,
               billingCodes: {
                 ...prev.billingCodes,
-                secondaryCpts: [...prev.billingCodes.secondaryCpts, editSecondaryCptInput.trim()],
+                secondaryCpts: [...(prev.billingCodes.secondaryCpts || []), editSecondaryCptInput.trim()],
               },
             }
           : null,
@@ -850,7 +926,7 @@ const EncounterTemplateSettings: React.FC = () => {
               ...prev,
               billingCodes: {
                 ...prev.billingCodes,
-                secondaryCpts: prev.billingCodes.secondaryCpts.filter((_, i) => i !== index),
+                secondaryCpts: (prev.billingCodes.secondaryCpts || []).filter((_, i) => i !== index),
               },
             }
           : null,
@@ -866,7 +942,7 @@ const EncounterTemplateSettings: React.FC = () => {
               ...prev,
               billingCodes: {
                 ...prev.billingCodes,
-                icd10Codes: [...prev.billingCodes.icd10Codes, editIcd10Input.trim()],
+                icd10Codes: [...(prev.billingCodes.icd10Codes || []), editIcd10Input.trim()],
               },
             }
           : null,
@@ -883,7 +959,7 @@ const EncounterTemplateSettings: React.FC = () => {
               ...prev,
               billingCodes: {
                 ...prev.billingCodes,
-                icd10Codes: prev.billingCodes.icd10Codes.filter((_, i) => i !== index),
+                icd10Codes: (prev.billingCodes.icd10Codes || []).filter((_, i) => i !== index),
               },
             }
           : null,
@@ -1440,7 +1516,17 @@ const EncounterTemplateSettings: React.FC = () => {
         </Dialog>
 
         {/* Template Preview Dialog - Enhanced */}
-        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <Dialog open={isPreviewOpen} onOpenChange={(open) => {
+          setIsPreviewOpen(open)
+          if (!open) {
+            // Remove preview parameter from URL when closing dialog
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.delete('preview')
+            window.history.pushState({}, '', newUrl)
+            setUrlParams(new URLSearchParams(newUrl.search))
+            setSelectedTemplate(null)
+          }
+        }}>
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-white">
             <DialogHeader className="pb-6 border-b border-gray-200">
               <DialogTitle className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -1474,7 +1560,11 @@ const EncounterTemplateSettings: React.FC = () => {
                       Subjective
                     </h4>
                     <div className="bg-white p-4 rounded-lg border border-emerald-200 whitespace-pre-wrap text-sm">
-                      <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.subjective }} />
+                      {selectedTemplate.soapStructure?.subjective ? (
+                        <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.subjective }} />
+                      ) : (
+                        <div className="text-gray-500 italic">No subjective data available</div>
+                      )}
                     </div>
                     {selectedTemplate.soapStructure.subjectiveQuestions &&
                       selectedTemplate.soapStructure.subjectiveQuestions.length > 0 && (
@@ -1500,7 +1590,11 @@ const EncounterTemplateSettings: React.FC = () => {
                       Objective
                     </h4>
                     <div className="bg-white p-4 rounded-lg border border-blue-200 whitespace-pre-wrap text-sm">
-                      <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.objective }} />
+                      {selectedTemplate.soapStructure?.objective ? (
+                        <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.objective }} />
+                      ) : (
+                        <div className="text-gray-500 italic">No objective data available</div>
+                      )}
                     </div>
                     {selectedTemplate.soapStructure.objectiveQuestions &&
                       selectedTemplate.soapStructure.objectiveQuestions.length > 0 && (
@@ -1526,7 +1620,11 @@ const EncounterTemplateSettings: React.FC = () => {
                       Assessment
                     </h4>
                     <div className="bg-white p-4 rounded-lg border border-amber-200 whitespace-pre-wrap text-sm">
-                      <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.assessment }} />
+                      {selectedTemplate.soapStructure?.assessment ? (
+                        <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.assessment }} />
+                      ) : (
+                        <div className="text-gray-500 italic">No assessment data available</div>
+                      )}
                     </div>
                     {selectedTemplate.soapStructure.assessmentQuestions &&
                       selectedTemplate.soapStructure.assessmentQuestions.length > 0 && (
@@ -1552,7 +1650,11 @@ const EncounterTemplateSettings: React.FC = () => {
                       Plan
                     </h4>
                     <div className="bg-white p-4 rounded-lg border border-purple-200 whitespace-pre-wrap text-sm">
-                      <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.plan }} />
+                      {selectedTemplate.soapStructure?.plan ? (
+                        <div dangerouslySetInnerHTML={{ __html: selectedTemplate.soapStructure.plan }} />
+                      ) : (
+                        <div className="text-gray-500 italic">No plan data available</div>
+                      )}
                     </div>
                     {selectedTemplate.soapStructure.planQuestions &&
                       selectedTemplate.soapStructure.planQuestions.length > 0 && (
@@ -1909,7 +2011,7 @@ const EncounterTemplateSettings: React.FC = () => {
                       </Label>
                       <Input
                         id="edit-primary-cpt"
-                        value={editTemplate.billingCodes.primaryCpt}
+                        value={editTemplate.billingCodes?.primaryCpt || ''}
                         onChange={(e) =>
                           setEditTemplate((prev) =>
                             prev
@@ -1947,7 +2049,7 @@ const EncounterTemplateSettings: React.FC = () => {
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {editTemplate.billingCodes.secondaryCpts.map((code, index) => (
+                        {editTemplate.billingCodes.secondaryCpts?.map((code, index) => (
                           <Badge
                             key={index}
                             variant="secondary"
@@ -1956,7 +2058,7 @@ const EncounterTemplateSettings: React.FC = () => {
                             {code}
                             <X className="h-3 w-3 cursor-pointer" onClick={() => removeEditSecondaryCpt(index)} />
                           </Badge>
-                        ))}
+                        )) || []}
                       </div>
                     </div>
                   </div>
@@ -1980,7 +2082,7 @@ const EncounterTemplateSettings: React.FC = () => {
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {editTemplate.billingCodes.icd10Codes.map((code, index) => (
+                      {editTemplate.billingCodes.icd10Codes?.map((code, index) => (
                         <Badge
                           key={index}
                           variant="outline"
@@ -1989,7 +2091,7 @@ const EncounterTemplateSettings: React.FC = () => {
                           {code}
                           <X className="h-3 w-3 cursor-pointer" onClick={() => removeEditIcd10Code(index)} />
                         </Badge>
-                      ))}
+                      )) || []}
                     </div>
                   </div>
                 </div>

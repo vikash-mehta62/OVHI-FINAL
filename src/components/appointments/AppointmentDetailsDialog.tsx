@@ -15,7 +15,7 @@ interface AppointmentDetailsDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onReschedule: (appointment: any) => void;
-  onCancel: (appointmentId: string) => void;
+  onCancel: (appointmentId: string) => Promise<void>;
 }
 
 const AppointmentDetailsDialog: React.FC<AppointmentDetailsDialogProps> = ({
@@ -36,11 +36,16 @@ const AppointmentDetailsDialog: React.FC<AppointmentDetailsDialogProps> = ({
     onOpenChange(false);
   };
 
-  const handleCancel = () => {
-    onCancel(appointment.id);
-    setShowCancelDialog(false);
-    onOpenChange(false);
-    toast.success('Appointment cancelled successfully');
+  const handleCancel = async () => {
+    try {
+      await onCancel(appointment.id);
+      setShowCancelDialog(false);
+      onOpenChange(false);
+      toast.success('Appointment cancelled successfully');
+    } catch (error) {
+      console.error('Failed to cancel appointment:', error);
+      toast.error('Failed to cancel appointment. Please try again.');
+    }
   };
 
   const getStatusColor = (status: string) => {

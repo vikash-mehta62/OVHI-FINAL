@@ -268,7 +268,9 @@ const SmartSpecialtyManager: React.FC = () => {
   const handleSaveConfiguration = async () => {
     setIsLoading(true);
     try {
-      await updateSettingsApi(specialtyConfig);
+      // await updateSettingsApi(specialtyConfig);
+      // Save to localStorage (backend endpoint for specialty config not yet implemented)
+      localStorage.setItem('specialtyConfig', JSON.stringify(specialtyConfig));
       toast({
         title: "Success",
         description: "Specialty configuration saved successfully!",

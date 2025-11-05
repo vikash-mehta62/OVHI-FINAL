@@ -520,13 +520,16 @@ useEffect(() => {
                   <Pill className="h-4 w-4" />
                   Medications
                 </TabsTrigger>
-                {/* <TabsTrigger value="diagnosis" className="flex items-center gap-1">
+                <TabsTrigger value="diagnosis" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
                   Diagnosis
-                </TabsTrigger> */}
-                <TabsTrigger value="account" className="flex items-center gap-1">
+                </TabsTrigger>
+                <TabsTrigger value="account" className="flex items-center gap-1 relative">
                   <DollarSign className="h-4 w-4" />
                   Account
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[9px] px-1 py-0.5 rounded-full z-50 pointer-events-none shadow-md">
+                    Not Activated
+                  </span>
                 </TabsTrigger>
                 <TabsTrigger value="summary" className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />

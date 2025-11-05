@@ -1,5 +1,6 @@
 const db = require("../../config/db");
 const logAudit = require("../../utils/logAudit");
+const { notifyAppointmentScheduled, notifyAppointmentRescheduled, notifyAppointmentCancelled } = require("../notifications/inAppNotificationService");
 
 exports.createAppointment = async (req, res) => {
   try {
@@ -84,6 +85,24 @@ const rawDateTime = date.replace("T", " ") + ":00"; // "2025-08-28 13:30:00"
 
     await logAudit(req, 'CREATE', 'APPOINTMENT', patient.id, 'Appointment created successfully');
 
+    // Create in-app notification for the provider
+    try {
+      const dateObj = new Date(date);
+      const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const formattedTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      
+      await notifyAppointmentScheduled(providerId, {
+        appointmentId: id,
+        patientName: patient.name,
+        date: formattedDate,
+        time: formattedTime,
+        providerName: req.user?.name || 'Provider'
+      });
+    } catch (notifError) {
+      console.error('Error creating appointment notification:', notifError);
+      // Don't fail the appointment creation if notification fails
+    }
+
     return res.status(201).json({ success: true, message: "Appointment created successfully" });
   } catch (err) {
     console.error("Error creating appointment:", err);
@@ -110,6 +129,12 @@ exports.rescheduleAppointment = async (req, res) => {
     if (!appointmentId || !providerId || !patient?.id || !date || !duration || !template_id) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
+
+    // Get old appointment details for notification
+    const [oldAppointment] = await db.execute(
+      "SELECT date FROM appointment WHERE id = ?",
+      [appointmentId]
+    );
 
     const durationMinutes = parseInt(duration);
     if (isNaN(durationMinutes)) {
@@ -179,6 +204,31 @@ exports.rescheduleAppointment = async (req, res) => {
       return res.status(404).json({ success: false, message: "Appointment not found" });
     }
     await logAudit(req, 'UPDATE', 'APPOINTMENT', patient.id, 'Appointment rescheduled successfully');
+
+    // Create in-app notification for the provider
+    try {
+      if (oldAppointment.length > 0) {
+        const oldDate = new Date(oldAppointment[0].date);
+        const newDate = new Date(date);
+        
+        const oldFormattedDate = oldDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const oldFormattedTime = oldDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const newFormattedDate = newDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const newFormattedTime = newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        await notifyAppointmentRescheduled(providerId, {
+          appointmentId,
+          patientName: patient.name,
+          oldDate: oldFormattedDate,
+          oldTime: oldFormattedTime,
+          newDate: newFormattedDate,
+          newTime: newFormattedTime
+        });
+      }
+    } catch (notifError) {
+      console.error('Error creating reschedule notification:', notifError);
+      // Don't fail the reschedule if notification fails
+    }
 
     return res.status(200).json({ success: true, message: "Appointment rescheduled successfully" });
   } catch (err) {
@@ -452,6 +502,63 @@ exports.saveAppointmentQA = async (req, res) => {
     res.status(200).json({ success: true, message: "Appointment QA updated successfully" });
   } catch (err) {
     console.error("Update appointment QA error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+exports.cancelAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, message: "Appointment ID is required" });
+    }
+
+    // First check if appointment exists and get details for audit and notification
+    const [existingAppointment] = await db.execute(
+      "SELECT * FROM appointment WHERE id = ?",
+      [appointmentId]
+    );
+
+    if (existingAppointment.length === 0) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+
+    const appointment = existingAppointment[0];
+
+    // Delete the appointment
+    const [result] = await db.execute(
+      "DELETE FROM appointment WHERE id = ?",
+      [appointmentId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Failed to cancel appointment" });
+    }
+
+    await logAudit(req, 'DELETE', 'APPOINTMENT', appointmentId, `Appointment cancelled`);
+
+    // Create in-app notification for cancelled appointment
+    try {
+      const dateObj = new Date(appointment.date);
+      const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const formattedTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      
+      await notifyAppointmentCancelled(appointment.provider_id, {
+        appointmentId,
+        patientName: appointment.patient_name,
+        date: formattedDate,
+        time: formattedTime,
+        reason: req.body.cancellationReason || 'Appointment cancelled'
+      });
+    } catch (notifError) {
+      console.error('Error creating cancellation notification:', notifError);
+      // Don't fail the deletion if notification fails
+    }
+
+    res.status(200).json({ success: true, message: "Appointment cancelled successfully" });
+  } catch (err) {
+    console.error("Cancel appointment error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

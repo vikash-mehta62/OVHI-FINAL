@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const connection = require("../../config/db");
 const moment = require('moment');
 const logAudit = require("../../utils/logAudit");
+const { sendPatientRegistrationEmail } = require("../email/emailNotificationService");
 
 
 // Create patient
@@ -239,6 +240,29 @@ const values1 = [
     );
 
     await logAudit(req, 'CREATE', 'PATIENT', insertedId, `Patient created with patientId: ${insertedId} - ${firstName} ${lastName}`);
+    
+    // Send registration welcome email
+    try {
+      const fullName = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`;
+      const providerName = req.user?.firstname && req.user?.lastname 
+        ? `Dr. ${req.user.firstname} ${req.user.lastname}`
+        : 'Your Healthcare Provider';
+
+      await sendPatientRegistrationEmail({
+        patientId: insertedId,
+        patientEmail: email,
+        patientName: fullName,
+        password: password,
+        providerName: providerName,
+        practicePhone: process.env.PRACTICE_PHONE || '(555) 123-4567'
+      });
+      
+      console.log(`✓ Registration email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Error sending registration email:', emailError);
+      // Don't fail patient creation if email fails
+    }
+
     return res.status(200).json({
       success: true,
       message: "User registered successfully",

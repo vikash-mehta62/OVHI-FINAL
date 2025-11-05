@@ -106,24 +106,26 @@ const sendConsentEmail = async (req, res) => {
 };
 const getConsentDetails = async (req, res) => {
   try {
-  const { token } = req.query;
+    const { token } = req.query;
+    console.log('Consent form request received with token:', token);
 
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing token",
-    });
-  }
-  const sql1 = `SELECT * FROM patient_consent_tokens WHERE consent_token = ? and status = 0`;
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing token",
+      });
+    }
+    const sql1 = `SELECT * FROM patient_consent_tokens WHERE consent_token = ? and status = 0`;
 
-  const [rows1] = await connection.query(sql1, [token]);
+    const [rows1] = await connection.query(sql1, [token]);
+    console.log('Token lookup result:', rows1.length > 0 ? 'Found' : 'Not found');
 
-  if (rows1.length === 0) {
-    return res.status(404).json({
-      success: false,
-      message: "Link is expired or invalid",
-    });
-  }
+    if (rows1.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Link is expired or invalid",
+      });
+    }
 
   const sql = `
         SELECT pc.patient_id,up.phone,up.dob,up.address_line,up.address_line_2,up.city,up.state,up.country,up.zip, pc.created_at, up.firstname, up.lastname,up.service_type,up.work_email, CONCAT(up2.firstname, " ", up2.lastname) AS doctorname,
@@ -158,14 +160,30 @@ const getConsentDetails = async (req, res) => {
     });
   }
 
-  const consent = rows[0]
-  const services = consent.service_type;
+  const consent = rows[0];
+  console.log('Consent data retrieved for patient:', consent.patient_id);
+  
+  // Parse service_type safely - it might be a JSON string or array
+  let services = consent.service_type;
+  if (typeof services === 'string') {
+    try {
+      services = JSON.parse(services);
+    } catch (e) {
+      console.log('service_type is not JSON, treating as single value');
+      services = [services];
+    }
+  }
+  if (!Array.isArray(services)) {
+    services = services ? [services] : [];
+  }
+  
   const servicesNamed = services
-    ?.filter((service) => service)
+    .filter((service) => service)
     .map((service) => {
-      if (service == 1) return "RPM";
-      if (service == 2) return "CCM";
-      if (service == 3) return "PCM";
+      const serviceNum = parseInt(service);
+      if (serviceNum === 1) return "RPM";
+      if (serviceNum === 2) return "CCM";
+      if (serviceNum === 3) return "PCM";
       return null;
     })
     .filter(Boolean);
@@ -204,7 +222,7 @@ const getConsentDetails = async (req, res) => {
     // Selected Services
     services: servicesNamed,
   };
-  const createdTime = new Date(consent.created);
+  const createdTime = new Date(consent.created_at);
   const now = new Date();
   const timeDiff = (now - createdTime) / (1000 * 60 * 60); // hours
 
@@ -212,15 +230,20 @@ const getConsentDetails = async (req, res) => {
     return res.status(410).send("<h3>Consent link has expired.</h3>");
   }
 
-  return res.status(200).json({
-    success: true,
-    data: emailvalues,
-  });
+  // Add token to emailvalues for the form
+  emailvalues.token = token;
+  
+  // Return HTML form instead of JSON
+  const htmlContent = getHTMLConsent(emailvalues);
+  return res.status(200).send(htmlContent);
+  
 } catch (error) {
-  console.error("Error in consent form submission:", error);
+  console.error("Error in getConsentDetails:", error);
+  console.error("Error stack:", error.stack);
   return res.status(500).json({
     success: false,
     message: "Internal server error",
+    error: process.env.NODE_ENV === 'development' ? error.message : undefined
   });
 }
 };
@@ -229,7 +252,7 @@ const submitConsentForm = async (req, res) => {
   try {
     const values = { ...req.body, ...req.query };
     const { token, htmlContent } = values;
-    // console.log(values)
+    console.log('Consent form submission received with token:', token);
 
     if (!token || !htmlContent) {
       return res.status(400).json({
@@ -238,11 +261,13 @@ const submitConsentForm = async (req, res) => {
       });
     }
 
-    // Check token validity
+    // Check token validity - FIXED: use patient_consent_tokens table
     const [rows] = await connection.query(
-      `SELECT * FROM patient_consent WHERE consent_token = ?`,
+      `SELECT * FROM patient_consent_tokens WHERE consent_token = ? AND status = 0`,
       [token]
     );
+
+    console.log('Token validation result:', rows.length > 0 ? 'Valid token found' : 'Token not found or already used');
 
     if (rows.length === 0) {
       return res.status(404).json({
@@ -304,11 +329,25 @@ const submitConsentForm = async (req, res) => {
     }
     // console.log(s3Url)
     // Update status
+    // Update status in patient_consent_tokens table to mark as used
     await connection.query(
-      `UPDATE patient_consent SET status = 1, received = CURRENT_TIMESTAMP,s3_bucket_url_rpm = ? WHERE consent_token = ?`,
-      [s3Url, token]
+      `UPDATE patient_consent_tokens SET status = 1 WHERE consent_token = ?`,
+      [token]
     );
-    await logAudit(req, 'PDF_GENERATED', 'PATIENT_CONSENT', values.patientId, `SUBMITTED CONSENT FORM Token/PatientID: ${rows[0].patient_id || values.token}`);
+    
+    // Store the consent record in patient_consent table (if exists) or create new record
+    const patient_id = rows[0].patient_id;
+    await connection.query(
+      `INSERT INTO patient_consent (patient_id, consent_token, status, received, s3_bucket_url_rpm) 
+       VALUES (?, ?, 1, CURRENT_TIMESTAMP, ?)
+       ON DUPLICATE KEY UPDATE 
+       status = 1, 
+       received = CURRENT_TIMESTAMP, 
+       s3_bucket_url_rpm = ?`,
+      [patient_id, token, s3Url, s3Url]
+    );
+    
+    await logAudit(req, 'PDF_GENERATED', 'PATIENT_CONSENT', patient_id, `SUBMITTED CONSENT FORM Token/PatientID: ${patient_id}`);
     return res.status(200).json({
       success: true,
       message: "Consent form submitted and PDF saved successfully",
@@ -369,8 +408,8 @@ const uploadConsentForms = async (req, res) => {
 
     // Save to DB
     const [result] = await connection.execute(
-      `INSERT INTO patient_consent (patient_id, s3_bucket_url_rpm,consent_type) VALUES (?, ?,?)`,
-      [user_id, aws_url,consentType]
+      `INSERT INTO patient_consent (patient_id, s3_bucket_url_rpm, consent_type) VALUES (?, ?, ?)`,
+      [user_id, aws_url, consentType]
     );
 
     // Remove temp file
@@ -403,12 +442,6 @@ const uploadConsentForms = async (req, res) => {
       error: err.message,
     });
   }
-};
-module.exports = {
-  sendConsentEmail,
-  getConsentDetails,
-  submitConsentForm,
-  uploadConsentForms
 };
 const getHTMLConsent = (values) => {
   const htmlContent = `
@@ -605,6 +638,23 @@ const getHTMLConsent = (values) => {
     margin-left: auto;
     margin-right: auto;
     text-align: center;
+  }
+
+  /* Spinner for submit button */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #ffffff;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   @media (max-width: 768px) {
@@ -807,4 +857,12 @@ const getHTMLConsent = (values) => {
   </html>
   `;
   return htmlContent;
+};
+
+
+module.exports = {
+  sendConsentEmail,
+  getConsentDetails,
+  submitConsentForm,
+  uploadConsentForms
 };

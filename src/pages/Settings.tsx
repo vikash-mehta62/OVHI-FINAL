@@ -56,10 +56,13 @@ const Settings: React.FC = () => {
                 Practice
               </TabsTrigger>
 
-              <TabsTrigger value="specialty">
+                <TabsTrigger value="specialty" className="relative overflow-visible">
                 <Stethoscope className="h-4 w-4 mr-2" />
                 Specialty
-              </TabsTrigger>
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full z-[99999] pointer-events-none shadow-md">
+                  Not Activated
+                </span>
+                </TabsTrigger>
 
               <TabsTrigger value="templates">
                 <FileText className="h-4 w-4 mr-2" />

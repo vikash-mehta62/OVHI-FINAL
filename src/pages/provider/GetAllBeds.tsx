@@ -61,7 +61,7 @@ const GetAllBeds = ({
             <TableHead>Room Type</TableHead>
             <TableHead>Assigned At</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead className="pl-20">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -84,14 +84,16 @@ const GetAllBeds = ({
                   {bed.bedStatus}
                 </span>
               </TableCell>
-              <TableCell className="flex gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleUnassignClick(bed.patientId)}
-                >
-                  Unassign
-                </Button>
+              <TableCell className="flex justify-center items-center gap-2">
+                {bed.bedStatus !== "Unassigned" ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleUnassignClick(bed.patientId)}
+                  >
+                    Unassign
+                  </Button>
+                ) : null}
                 <Button
                   variant="secondary"
                   size="sm"

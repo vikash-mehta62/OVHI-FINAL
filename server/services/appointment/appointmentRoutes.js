@@ -2,6 +2,7 @@ const express = require("express");
 const {
   createAppointment,
   rescheduleAppointment,
+  cancelAppointment,
   getAppointmentsByProviderId,
   upcomingAppointments,
   updateAppointmentStatus,
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.post("/create", createAppointment);
 router.put("/reschedule/:appointmentId", rescheduleAppointment);
+router.delete("/delete/:appointmentId", cancelAppointment);
 router.get("/provider/:providerId", getAppointmentsByProviderId);
 router.get("/upcoming/:providerId", upcomingAppointments);
 router.post("/update-status/:providerId", updateAppointmentStatus);

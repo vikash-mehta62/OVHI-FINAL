@@ -288,6 +288,42 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
 
   const { token } = useSelector((state: RootState) => state.auth);
 
+  // Initialize form first before using it in any function
+  const form = useForm<PatientFormValues>({
+    resolver: zodResolver(patientSchema),
+    defaultValues: {
+      firstName: "",
+      middleName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      gender: "",
+      status: "",
+      patientService: [],
+      addressLine1: "",
+      addressLine2: "",
+      city: "",
+      state: "",
+      country: "USA",
+      zipCode: "",
+      birthDate: "",
+      lastVisit: "",
+      emergencyContactName: "",
+      emergencyContactPhone: "",
+      maritalStatus: "",
+      preferredLanguage: "English",
+      ethnicity: "",
+      height: "",
+      weight: "",
+      bmi: "",
+      allergies: "",
+      bloodPressure: "",
+      heartRate: "",
+      temperature: "",
+      insurance: [],
+    },
+  });
+
   // Progress persistence functionality
   const saveProgress = () => {
     if (!id) return;
@@ -363,7 +399,8 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
     }, 30000); // 30 seconds
 
     return () => clearInterval(autoSaveInterval);
-  }, [open, form.watch(), allergyList, insuranceList, medicationsList, diagnosisList, notesList]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, allergyList, insuranceList, medicationsList, diagnosisList, notesList]);
 
   // Load progress on component mount
   useEffect(() => {
@@ -398,41 +435,6 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
     const timeout = setTimeout(fetchICDCodes, 300);
     return () => clearTimeout(timeout);
   }, [searchTerm]);
-
-  const form = useForm<PatientFormValues>({
-    resolver: zodResolver(patientSchema),
-    defaultValues: {
-      firstName: "",
-      middleName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      gender: "",
-      status: "",
-      patientService: [],
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      state: "",
-      country: "USA",
-      zipCode: "",
-      birthDate: "",
-      lastVisit: "",
-      emergencyContactName: "",
-      emergencyContactPhone: "",
-      maritalStatus: "",
-      preferredLanguage: "English",
-      ethnicity: "",
-      height: "",
-      weight: "",
-      bmi: "",
-      allergies: "",
-      bloodPressure: "",
-      heartRate: "",
-      temperature: "",
-      insurance: [],
-    },
-  });
 
   // Calculate BMI when height or weight changes
   const calculateBMI = (heightCm: number, weightLbs: number) => {
@@ -967,6 +969,7 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                 </Select>
               </div>
 
+              {/* Basic Information Tab  */}
               <TabsContent value="basic" className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
@@ -1353,7 +1356,8 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                     )}
                   />
                 </div>
-
+                
+                {/* Insurance Tab */}
                 <TabsContent value="basic" className="space-y-4">
                   <h3 className="text-lg font-medium flex items-center gap-2">
                     <Shield className="h-4 w-4" /> Insurance Information
@@ -2440,6 +2444,8 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                   ))}
                 </div>
               </TabsContent>
+
+              {/* Documents Tab */}
               <TabsContent value="documents" className="space-y-6">
                 <div className="space-y-6">
                   <div className="text-center mb-6">
@@ -2470,7 +2476,7 @@ const SubmiteIntake: React.FC<AddPatientDialogProps> = ({ onAddPatient }) => {
                       </h4>
                       <FileUploadZone
                         category="identificationDocs"
-                        title="Upload ID Documents"
+                        title="Upload ID Documents" 
                         description="Driver's license, passport, or state ID"
                         icon={UserPlus}
                       />

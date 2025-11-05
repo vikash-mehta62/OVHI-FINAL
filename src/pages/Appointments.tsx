@@ -20,7 +20,7 @@ import { useAppointments } from "@/hooks/useAppointments"
 import { useSelector } from "react-redux"
 import type { RootState } from "@/redux/store"
 import { getLocationsByProviderId } from "@/services/operations/location"
-import { getAppointmentsByProviderId } from "@/services/operations/appointment"
+import { getAppointmentsByProviderId, cancelAppointment as cancelAppointmentAPI } from "@/services/operations/appointment"
 import { SmartEncounterWorkflow } from "@/components/encounter/SmartEncounterWorkflow"
 
 const Appointments: React.FC = () => {
@@ -278,13 +278,24 @@ const Appointments: React.FC = () => {
     setIsBookingDialogOpen(true)
   }
 
-  const handleCancelAppointment = async (appointmentId: string) => {
-    const success = await deleteAppointment(appointmentId)
-    if (success) {
+  const handleCancelAppointment = async (appointmentId: string): Promise<void> => {
+    if (!user?.id || !token) {
+      console.error("No user or token available")
+      return
+    }
+    
+    try {
+      await cancelAppointmentAPI(appointmentId, token)
+      
+      // Close dialogs
       setIsDetailsDialogOpen(false)
       setSelectedAppointment(null)
-      // Refresh appointments after deletion
+      
+      // Refresh appointments from backend
       fetchAppoinment()
+    } catch (error) {
+      console.error("Error cancelling appointment:", error)
+      // Error message will be shown by the API function
     }
   }
 

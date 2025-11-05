@@ -15,6 +15,9 @@ const path = require("path");
 const swaggerUi = require("swagger-ui-express");
 dotenv.config()
 
+// Import cron jobs
+const appointmentEmailReminderCron = require("./crons/appointmentEmailReminderCron");
+
 const PORT = process.env.PORT || 3000
 
 app.use(helmet())
@@ -69,7 +72,11 @@ app.use("/api/v1/client/api-documentation", swaggerUi.serve, swaggerUi.setup(swa
 
 // Routes
 const apiRoutes = require("./services/index")
+const locationRoutes = require("./services/locations/location");
+const { verifyToken } = require("./middleware/auth");
+
 app.use("/api/v1", apiRoutes)
+app.use("/location", verifyToken, locationRoutes);
 app.use("/api/v1/tenovi", require("./routes/tenoviRoutes"));
 app.use("/api/v1/patient-outreach", require("./routes/patientOutreachRoutes"));
 app.use("/api/v1/image", require("./routes/imageProxyRoutes"));
@@ -100,6 +107,11 @@ app.get("/", (req, res) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}...`)
   console.log(`📡 Socket.IO server ready for connections`)
+  
+  // Start cron jobs
+  console.log('\n⏰ Initializing Cron Jobs...');
+  appointmentEmailReminderCron.start();
+  console.log('✅ All cron jobs initialized\n');
 })
 
 module.exports = { app, server, io }

@@ -29,6 +29,7 @@ import {
   getAllPractisAPI,
   updateSettingsApi,
   updatePdfSettingsApi,
+  getUserMappingsAPI,
 } from "../../services/operations/settings";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
@@ -175,10 +176,25 @@ const AccountSettings: React.FC = () => {
     }
   };
 
+  const fetchUserMappings = async () => {
+    const response = await getUserMappingsAPI(token);
+    if (response?.success && response?.data) {
+      setFormData((prev) => ({
+        ...prev,
+        organizationId: String(response.data.organizationId || ""),
+        practiceId: String(response.data.practiceId || ""),
+        providerId: String(response.data.providerId || prev.providerId),
+      }));
+    }
+  };
+
   useEffect(() => {
     fetchOrganization();
     fetchPractis();
-  }, []);
+    if (token) {
+      fetchUserMappings();
+    }
+  }, [token]);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({
@@ -262,12 +278,19 @@ const AccountSettings: React.FC = () => {
 
   // Separate function for Organization & Practice settings
   const handleOrganizationSubmit = async () => {
+    console.log("Form Data:", formData); // Debug log
+    
     if (
       !formData.organizationId ||
       !formData.practiceId ||
       !formData.providerId
     ) {
-      console.error("Please fill all fields.");
+      alert("Please select Organization and Practice before saving.");
+      console.error("Missing fields:", {
+        organizationId: formData.organizationId,
+        practiceId: formData.practiceId,
+        providerId: formData.providerId
+      });
       return;
     }
 
@@ -277,9 +300,9 @@ const AccountSettings: React.FC = () => {
       providerId: formData.providerId,
     };
 
-    // console.log("Submitting Organization & Practice data:", orgData);
+    console.log("Submitting Organization & Practice data:", orgData);
     const response = await updateSettingsApi(orgData, token);
-    // console.log(response);
+    console.log("Response:", response);
   };
 
   // Separate function for PDF Header Configuration
@@ -402,7 +425,7 @@ const AccountSettings: React.FC = () => {
               <Label htmlFor="organization">Organization</Label>
               <Select
                 onValueChange={(value) => handleChange("organizationId", value)}
-                defaultValue={formData.organizationId}
+                value={formData.organizationId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Organization" />
@@ -423,7 +446,7 @@ const AccountSettings: React.FC = () => {
               <Label htmlFor="practice">Practice</Label>
               <Select
                 onValueChange={(value) => handleChange("practiceId", value)}
-                defaultValue={formData.practiceId}
+                value={formData.practiceId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Practice" />

@@ -1,4 +1,10 @@
 const connection = require("../config/db");
+const { v4: uuidv4 } = require("uuid");
+
+// Generate UUID and take first 5 characters (e.g., "a1b2c")
+function generateAuditId() {
+  return uuidv4().replace(/-/g, '').substring(0, 5);
+}
 
 const logAudit = async (req, actionType, entityType, entityId, description = '') => {
   // Ensure entityId is a valid number or string
@@ -8,6 +14,9 @@ const logAudit = async (req, actionType, entityType, entityId, description = '')
     const userId = req.user?.user_id || 0;
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || 'unknown';
     const userAgent = req.headers['user-agent'] || '';
+    
+    // Generate unique audit ID
+    const auditId = generateAuditId();
 
 
     // Log the values we're about to insert for debugging
@@ -22,11 +31,21 @@ const logAudit = async (req, actionType, entityType, entityId, description = '')
     // });
 
     // Execute the query with proper error handling
-    await connection.execute(
+    // await connection.execute(
+    //   `INSERT INTO audit_logs 
+    //    (user_id, action_type, entity_type, entity_id, description, ip_address, user_agent)
+    //    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    //   [userId, actionType, entityType, entityIdToLog, description, ipAddress, userAgent]
+    // );
+    
+    /*
+    Need to update above sql query to match audit_logs schema
+    */
+     await connection.execute(
       `INSERT INTO audit_logs 
-       (user_id, action_type, entity_type, entity_id, description, ip_address, user_agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, actionType, entityType, entityIdToLog, description, ipAddress, userAgent]
+       (id, user_id, action, resource, resource_id, error_message, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [auditId, userId, actionType, entityType, entityIdToLog, description, ipAddress, userAgent]
     );
     
   } catch (err) {

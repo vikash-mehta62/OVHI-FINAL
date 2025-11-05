@@ -41,8 +41,20 @@ const registerCtrl = async (req, res) => {
     const [result] = await connection.query(insertQuery, values);
     const insertedId = result.insertId;
 
-    const insertUserProfileQuery = "INSERT INTO user_profiles (firstname,lastname,work_email,fk_userid) VALUES (?,?,?,?)";
-    const userValues = [firstName, lastName, email, insertedId];
+    const insertUserProfileQuery = `INSERT INTO user_profiles (
+      firstname, lastname, work_email, fk_userid, 
+      service_type, taxonomy, ccm_status, ccm_scheduling_status, 
+      moveup_id, is_non_compliance, aws_link, emergency_contact, 
+      bmi, bp, heart_rate, temp, patient_condition
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const userValues = [
+      firstName, lastName, email, insertedId,
+      '[]', '', 0, 0, 
+      '', 0, '', '', 
+      0, 0, 0, 0, ''
+    ];
+
+    
     const [userResult] = await connection.query(insertUserProfileQuery, userValues);
 
     // Log user registration
@@ -427,8 +439,18 @@ const registerProvider = async (req, res) => {
     const userId = insertUserResult.insertId;
 
     await connection.query(
-      "INSERT INTO user_profiles (firstname, lastname, work_email, phone, fk_userid) VALUES (?, ?, ?, ?, ?)",
-      [firstName, lastName, email, phone, userId]
+      `INSERT INTO user_profiles (
+        firstname, lastname, work_email, phone, fk_userid,
+        service_type, taxonomy, ccm_status, ccm_scheduling_status,
+        moveup_id, is_non_compliance, aws_link, emergency_contact,
+        bmi, bp, heart_rate, temp, patient_condition
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        firstName, lastName, email, phone, userId,
+        '[]', '', 0, 0,
+        '', 0, '', '',
+        0, 0, 0, 0, ''
+      ]
     );
 
     const token = jwt.sign(

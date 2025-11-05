@@ -224,9 +224,8 @@ INSERT INTO user_profiles (
   gender, ethnicity, last_visit, emergency_contact, emergency_contact_name,
   address_line, address_line_2, city, state, country, zip, 
   service_type, status, preferred_language, marital_status,
-  height_cm, weight_lbs, bmi, blood_pressure, heart_rate, temperature,
   intake_completed_at, intake_completion_percentage, fk_userid
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 `;
     const values1 = [
       firstName,        // 1. firstname
@@ -250,45 +249,54 @@ INSERT INTO user_profiles (
       status,           // 19. status
       req.body.preferredLanguage || 'English', // 20. preferred_language
       req.body.maritalStatus, // 21. marital_status
-      height,           // 22. height_cm
-      weight,           // 23. weight_lbs
-      bmi,              // 24. bmi
-      bloodPressure,    // 25. blood_pressure
-      heartRate,        // 26. heart_rate
-      temperature,      // 27. temperature
-      new Date(),       // 28. intake_completed_at
-      100.00,           // 29. intake_completion_percentage
-      insertedId        // 30. fk_userid
+      new Date(),       // 22. intake_completed_at
+      100.00,           // 23. intake_completion_percentage
+      insertedId        // 24. fk_userid
     ];
 
     const [userResult] = await connection.query(sql1, values1);
 
-    // Insert enhanced allergy data
+    // Insert vitals data into patient_vitals table
+    const vitalsSql = `
+      INSERT INTO patient_vitals 
+      (patient_id, height, weight, bmi, blood_pressure, heart_rate, temperature) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    await connection.query(vitalsSql, [
+      insertedId,
+      height || 0,
+      weight || 0,
+      bmi || 0,
+      bloodPressure || '0/0',
+      heartRate || 0,
+      temperature || 0,
+    ]);
+
+    // Insert allergy data
     if (allergies && Array.isArray(allergies)) {
       const allergyQuery = `
-        INSERT INTO patient_allergies (
-          patient_id, allergen_name, allergy_category, reaction_description, severity
-        ) VALUES (?, ?, ?, ?, ?)
+        INSERT INTO allergies (
+          patient_id, allergen, category, reaction
+        ) VALUES (?, ?, ?, ?)
       `;
-      
+        
       for (const allergy of allergies) {
         await connection.query(allergyQuery, [
           insertedId,
           allergy.allergen,
           allergy.category,
-          allergy.reaction,
-          allergy.severity || 'mild'
+          allergy.reaction
         ]);
       }
     }
 
-    // Insert enhanced medication data
+    // Insert medication data
     if (currentMedications && Array.isArray(currentMedications)) {
       const medicationQuery = `
-        INSERT INTO patient_medications (
-          patient_id, medication_name, dosage, frequency, start_date, 
-          end_date, refills_remaining, prescribing_provider, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO patient_medication (
+          patient_id, name, dosage, frequency, startDate, 
+          endDate, refills, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       for (const medication of currentMedications) {
@@ -300,8 +308,7 @@ INSERT INTO user_profiles (
           medication.startDate,
           medication.endDate,
           medication.refills || 0,
-          medication.prescriber || 'Unknown',
-          medication.status || 'active'
+          medication.status || 'Active'
         ]);
       }
     }
@@ -310,8 +317,8 @@ INSERT INTO user_profiles (
     if (diagnosis && Array.isArray(diagnosis)) {
       const diagnosisQuery = `
         INSERT INTO patient_diagnoses (
-          patient_id, diagnosis_date, icd10_code, diagnosis_description, 
-          diagnosis_type, status
+          patient_id, date, icd10, diagnosis_description, 
+          type, status
         ) VALUES (?, ?, ?, ?, ?, ?)
       `;
       

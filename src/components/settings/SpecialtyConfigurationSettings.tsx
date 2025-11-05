@@ -244,12 +244,16 @@ const SpecialtyConfigurationSettings: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const result = await updateSettingsApi(specialtyConfig);
-      if (result) {
-        toast.success("Specialty configuration updated successfully!");
-      } else {
-        toast.error("Failed to update specialty configuration");
-      }
+      // const result = await updateSettingsApi(specialtyConfig);
+      // if (result) {
+      //   toast.success("Specialty configuration updated successfully!");
+      // } else {
+      //   toast.error("Failed to update specialty configuration");
+      // }
+
+      // Save to localStorage (backend endpoint for specialty config not yet implemented)
+      localStorage.setItem('specialtyConfiguration', JSON.stringify(specialtyConfig));
+      toast.success("Specialty configuration updated successfully!");
     } catch (error) {
       toast.error("Error updating specialty configuration");
     } finally {

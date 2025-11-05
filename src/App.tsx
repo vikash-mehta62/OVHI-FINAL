@@ -92,6 +92,9 @@ import NotificationSettings from "./components/settings/NotificationSettings";
 import RegulatoryComplianceSettings from "./components/settings/RegulatoryComplianceSettings";
 import DocumentNumberingSettings from "./components/settings/DocumentNumberingSettings";
 
+// Notifications Components
+import NotificationsPage from "./components/notifications/NotificationsPage";
+
 // Analytics Components
 import FinancialAnalytics from "./components/analytics/FinancialAnalytics";
 import OperationalAnalytics from "./components/analytics/OperationalAnalytics";
@@ -267,6 +270,7 @@ const App = () => {
                     <Route path="telehealth" element={<Telehealth />} />
                     <Route path="portal" element={<PatientPortal />} />
                     <Route path="messages" element={<Messages />} />
+                    <Route path="notifications" element={<NotificationsPage />} />
                     {/* <Route path="monitoring" element={<Monitoring />} /> */}
                     <Route
                       path="patient-monitoring"

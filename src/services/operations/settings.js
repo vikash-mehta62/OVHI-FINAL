@@ -6,6 +6,7 @@ const {
   GET_ALL_ORG,
   GET_ALL_PRACTIS,
   UPDATE_SETTING_API,
+  GET_USER_MAPPINGS_API,
   PDF_HEADER_API,
   GET_PDF_HEADER_API,
   UPDATE_PROVIDER_API,
@@ -19,11 +20,18 @@ const {
   GET_PRACTISH_SETTING_API
 } = settings
 
-export const updateSettingsApi = async (patientData) => {
+export const updateSettingsApi = async (patientData, token) => {
   try {
     const loadingToastId = toast.loading("Creating patient...");
 
-    const response = await apiConnector("POST", UPDATE_SETTING_API, patientData);
+    const response = await apiConnector(
+      "POST", 
+      UPDATE_SETTING_API, 
+      patientData,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
 
     if (!response?.data?.success) {
       throw new Error(response?.data?.message || "Something went wrong!");
@@ -94,6 +102,23 @@ export const getPractishSettingApi = async (token, providerId) => {
     return null;
   }
 };
+export const getUserMappingsAPI = async (token) => {
+  try {
+    const response = await apiConnector(
+      "GET",
+      `${GET_USER_MAPPINGS_API}`,
+      null,
+      {
+        Authorization: `Bearer ${token}`,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("get user mappings ERROR:", error);
+    return null;
+  }
+};
+
 export const getAllOrgAPI = async (token) => {
   try {
     const response = await apiConnector(

@@ -155,6 +155,7 @@ export const removePatientDiagnosis = async (diagnosisId, token) => {
    const response = await apiConnector(
     "DELETE",
     REMOVE_PATIENT_DIAGNOSIS(diagnosisId),
+    null,
     {
       Authorization: `Bearer ${token}`,
     }
